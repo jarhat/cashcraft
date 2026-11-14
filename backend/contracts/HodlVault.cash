@@ -1,0 +1,8 @@
+pragma cashscript ^0.14.0;
+
+contract HodlVault(pubkey ownerPk, int unlockTime) {
+    function withdraw(sig ownerSig) {
+        require(checkSig(ownerSig, ownerPk));
+        require(tx.time >= unlockTime);
+    }
+}

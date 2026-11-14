@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#05070b">
+  <title>CTF | CashTokens</title>
+</head>
+<body>
+  <div class="snow snow-one" aria-hidden="true"></div>
+  <div class="snow snow-two" aria-hidden="true"></div>
+  <div class="snow snow-three" aria-hidden="true"></div>
+
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="#">
+        <span class="flake">❄</span> CTF
+        <span class="brand-dim">/ CASH</span>
+      </a>
+      <span class="network"><i></i><span id="network">CHIPNET</span></span>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">BITCOIN CASH · CASHTOKENS</p>
+      <h1>Send<br><span>CashTokens</span></h1>
+      <p class="intro">
+        Connect a compatible wallet to participate.
+      </p>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <div class="heading">
+          <div>
+            <p class="eyebrow">WALLET SESSION</p>
+            <h2>Connection</h2>
+          </div>
+          <span id="dot" class="dot"></span>
+        </div>
+
+        <p id="status" class="status">Not connected</p>
+
+        <div id="pairing" class="pairing hidden">
+          <canvas id="qr"></canvas>
+          <p class="pair-title">Scan with your WizardConnect wallet</p>
+          <p class="muted">
+            Open the wallet’s WizardConnect scanner, scan the code, then approve
+            the connection in the wallet.
+          </p>
+          <details>
+            <summary>Show pairing URI</summary>
+            <div class="uri-line">
+              <code id="pair-uri"></code>
+              <button id="copy-uri" class="small-button">Copy</button>
+            </div>
+          </details>
+        </div>
+
+        <button id="connect" class="button primary">
+          Connect / reconnect wallet <span>↗</span>
+        </button>
+        <button id="forget" class="button secondary">
+          Forget saved session and pair again
+        </button>
+        <button id="refresh" class="button secondary" disabled>
+          Refresh balances
+        </button>
+      </article>
+
+      <article class="panel">
+        <div class="heading">
+          <div>
+            <p class="eyebrow">NATIVE BALANCE</p>
+            <h2>Bitcoin Cash</h2>
+          </div>
+          <span class="coin">₿</span>
+        </div>
+
+        <p id="bch" class="balance">— <small>BCH</small></p>
+        <p id="usd" class="muted">USD value —</p>
+
+        <div class="divider"></div>
+
+        <p class="eyebrow">FIRST RECEIVE ADDRESS</p>
+        <div class="address-line">
+          <code id="address">Connect wallet to derive address</code>
+          <button id="copy-address" class="small-button" disabled>Copy</button>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel section">
+      <div class="heading">
+        <div>
+          <p class="eyebrow">PORTFOLIO</p>
+          <h2>Tokens</h2>
+        </div>
+        <span id="token-count" class="muted">—</span>
+      </div>
+
+      <div id="tokens" class="token-list">
+        <div class="empty">Connect your wallet to load balances.</div>
+      </div>
+
+      <p class="fine">
+        Scans the first 50 receive and 50 change addresses. NFT balances are not included.
+      </p>
+    </section>
+
+    <section class="panel section">
+      <div class="heading">
+        <div>
+          <p class="eyebrow">TRANSFER</p>
+          <h2>Send tokens</h2>
+        </div>
+        <span class="arrow">↗</span>
+      </div>
+
+      <div class="form">
+        <label>
+          Token category ID
+          <input
+            id="category"
+            placeholder="64-character category ID"
+            autocomplete="off"
+          >
+        </label>
+
+        <label>
+          Amount
+          <input id="amount" inputmode="numeric" placeholder="Whole token units">
+        </label>
+
+        <label class="full">
+          Recipient token-aware CashAddr
+          <input
+            id="recipient"
+            placeholder="bchtest:z… or bitcoincash:z…"
+            autocomplete="off"
+          >
+        </label>
+      </div>
+
+      <button id="send" class="button primary send" disabled>
+        Review and approve in wallet <span>→</span>
+      </button>
+
+      <p class="fine">
+        This demo sends whole token base units only. The wallet displays the
+        transaction for approval; review all details before approving.
+      </p>
+    </section>
+
+    <footer>
+      <span>PRIVATE KEYS REMAIN IN YOUR WALLET</span>
+      <span>CTF · CASH</span>
+    </footer>
+
+    <pre id="log" role="status"></pre>
+  </main>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
