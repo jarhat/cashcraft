@@ -1,0 +1,5 @@
+cashscript-py==1.0.3
+fastapi
+uvicorn[standard]
+cashaddress
+httpx

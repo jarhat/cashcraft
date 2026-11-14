@@ -1,0 +1,131 @@
+services:
+  # Keep your existing bchn service unchanged.
+  bchn:
+    image: uphold/bitcoin-cash-node
+    command:
+      - -printtoconsole
+      - -server=1
+      - -disablewallet=1
+      - -prune=${BCH_PRUNE_MIB:-10000}
+      - -rpcbind=0.0.0.0
+      - -rpcallowip=172.30.0.0/24
+      - -rpcport=8332
+      - -rpcuser=${BCH_RPC_USER:?Set BCH_RPC_USER in .env}
+      - -rpcpassword=${BCH_RPC_PASSWORD:?Set BCH_RPC_PASSWORD in .env}
+      - -testnet=0
+    volumes:
+      - bchn-data:/home/bitcoin/.bitcoin
+    restart: unless-stopped
+    networks:
+      app-network:
+        ipv4_address: 172.30.0.10
+    healthcheck:
+      test: ["CMD-SHELL", "bitcoin-cli -rpcuser=$${BCH_RPC_USER} -rpcpassword=$${BCH_RPC_PASSWORD} getblockchaininfo >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    environment:
+      BCH_RPC_USER: ${BCH_RPC_USER:?Set BCH_RPC_USER in .env}
+      BCH_RPC_PASSWORD: ${BCH_RPC_PASSWORD:?Set BCH_RPC_PASSWORD in .env}
+
+  auth:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      VIRTUAL_HOST: ${AUTH_DOMAIN:?Set AUTH_DOMAIN in .env}
+      VIRTUAL_PORT: "3000"
+      LETSENCRYPT_HOST: ${AUTH_DOMAIN:?Set AUTH_DOMAIN in .env}
+      LETSENCRYPT_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+
+      PORT: "3000"
+      BCH_NETWORK: ${BCH_NETWORK:-mainnet}
+      UNLOCK_TIME: "${UNLOCK_TIME:-1893456000}"
+      CASHADDR_DB_PATH: /data/cash-addresses.sqlite3
+
+      BCH_RPC_URL: http://bchn:8332/
+      BCH_RPC_USER: ${BCH_RPC_USER:?Set BCH_RPC_USER in .env}
+      BCH_RPC_PASSWORD: ${BCH_RPC_PASSWORD:?Set BCH_RPC_PASSWORD in .env}
+
+      # Required: exact prefixed CashAddr expected as the source of every input.
+      #BCH_ALLOWED_SENDER: ${BCH_ALLOWED_SENDER:?Set BCH_ALLOWED_SENDER in .env}
+
+      # Comma-separated 64-character hexadecimal CashToken category IDs.
+      BCH_ALLOWED_TOKEN_CATEGORIES: ${BCH_ALLOWED_TOKEN_CATEGORIES:?Set BCH_ALLOWED_TOKEN_CATEGORIES in .env}
+
+      # Require this many confirmations before recording the address.
+      BCH_REQUIRED_CONFIRMATIONS: ${BCH_REQUIRED_CONFIRMATIONS:-1}
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    depends_on:
+      bchn:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  cashtoken-wallet:
+    build:
+      context: .
+    expose:
+      - "8080"
+    environment:
+      VIRTUAL_HOST: ${WALLET_DOMAIN:?Set WALLET_DOMAIN in .env}
+      VIRTUAL_PORT: "8080"
+      LETSENCRYPT_HOST: ${WALLET_DOMAIN:?Set WALLET_DOMAIN in .env}
+      LETSENCRYPT_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # Keep your existing auth service unchanged.
+
+  nginx-proxy:
+    image: nginxproxy/nginx-proxy:latest
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - nginx-certs:/etc/nginx/certs:ro
+      - nginx-vhost:/etc/nginx/vhost.d
+      - nginx-html:/usr/share/nginx/html
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  acme-companion:
+    image: nginxproxy/acme-companion:latest
+    container_name: acme-companion
+    environment:
+      DEFAULT_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+      NGINX_PROXY_CONTAINER: nginx-proxy
+    volumes:
+      - nginx-certs:/etc/nginx/certs:rw
+      - nginx-vhost:/etc/nginx/vhost.d
+      - nginx-html:/usr/share/nginx/html
+      - acme-data:/etc/acme.sh
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - nginx-proxy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  bchn-data:
+  nginx-certs:
+  nginx-vhost:
+  nginx-html:
+  acme-data:
+
