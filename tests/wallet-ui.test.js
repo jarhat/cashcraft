@@ -6,8 +6,8 @@ import { runInNewContext } from 'node:vm';
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
 test('theme preferences migrate and select the correct palette', () => {
-  for (const [saved, expected] of [['bch', 'green'], ['bch-sunrise', 'green'], ['blue', 'blue'], ['unknown', 'dark']]) {
-    const buttons = ['dark', 'blue', 'green'].map((themeOption) => ({
+  for (const [saved, expected] of [['bch', 'aurora'], ['bch-sunrise', 'aurora'], ['green', 'aurora'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'aurora'], ['frost', 'frost'], ['unknown', 'frost']]) {
+    const buttons = ['frost', 'aurora'].map((themeOption) => ({
       dataset: { themeOption },
       setAttribute(name, value) { this[name] = value; },
     }));
@@ -26,12 +26,12 @@ test('theme preferences migrate and select the correct palette', () => {
     runInNewContext(source.slice(start, end), { document, localStorage });
     assert.equal(document.documentElement.dataset.theme, expected);
     assert.equal(localStorage['ctf-theme'], expected);
-    assert.ok(document.meta.content);
+    assert.equal(document.meta.content, '#080a10');
     assert.equal(buttons.find((button) => button.dataset.themeOption === expected)['aria-pressed'], 'true');
   }
 });
 
-test('wizard follows each tutorial panel without covering it and returns home when closed', () => {
+test('wizard follows tutorial panels without entering or reflowing the panel grid', () => {
   const elements = new Map();
   const highlighted = new Set();
   let guidePosition = 'hero';
@@ -40,7 +40,7 @@ test('wizard follows each tutorial panel without covering it and returns home wh
     assert.equal(node, guide);
     guidePosition = position;
   } });
-  const grid = target('connection');
+  const grid = target('grid');
   const hero = { after(node) {
     assert.equal(node, guide);
     guidePosition = 'hero';
@@ -48,7 +48,10 @@ test('wizard follows each tutorial panel without covering it and returns home wh
   for (const id of ['connection-section', 'balance-section', 'earn-section', 'transfer-section']) {
     const panel = {
       ...target(id),
-      parentElement: grid,
+      closest(selector) {
+        assert.equal(selector, '.grid');
+        return id === 'connection-section' || id === 'balance-section' ? grid : null;
+      },
       classList: {
         add() { highlighted.add(panel); },
         remove() { highlighted.delete(panel); },
@@ -72,10 +75,10 @@ test('wizard follows each tutorial panel without covering it and returns home wh
   runInNewContext(source.slice(start, end), { document, $: (id) => elements.get(id) });
 
   elements.get('wizard-toggle').click();
-  assert.equal(guidePosition, 'connection');
+  assert.equal(guidePosition, 'grid');
   assert.equal(elements.get('wizard-progress').textContent, '1 / 4');
   elements.get('wizard-next').click();
-  assert.equal(guidePosition, 'balance-section');
+  assert.equal(guidePosition, 'grid');
   elements.get('wizard-next').click();
   assert.equal(guidePosition, 'transfer-section');
   elements.get('wizard-next').click();
@@ -302,6 +305,10 @@ test('wizard follows the panels in reading order and resets when closed', () => 
       scrollIntoView() {},
       contains() { return false; },
       before() { guidePosition = id; },
+      closest(selector) {
+        assert.equal(selector, '.grid');
+        return id === 'connection-section' || id === 'balance-section' ? element('grid') : null;
+      },
     });
     return nodes.get(id);
   };
@@ -324,7 +331,7 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   assert.equal(walking, true);
   element('wizard-next').listeners.click();
   assert.deepEqual([...highlighted], ['balance-section']);
-  assert.equal(guidePosition, 'balance-section');
+  assert.equal(guidePosition, 'grid');
   element('wizard-next').listeners.click();
   assert.deepEqual([...highlighted], ['transfer-section']);
   assert.equal(guidePosition, 'transfer-section');

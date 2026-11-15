@@ -1,5 +1,6 @@
 import './style.css';
 import { setLanguage, translate } from './i18n.js';
+import { createPaymentQrImage } from './payment-qr-image.js';
 import { submitCashAddress, API_BASE_URL } from './api.js';
 import {
   SATOSHIS_PER_BCH,
@@ -130,15 +131,13 @@ const savedTheme = localStorage.getItem('ctf-theme');
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem('ctf-theme', theme);
-  document.querySelector('meta[name="theme-color"]').content = {
-    dark: '#080a10', blue: '#071528', green: '#071b15',
-  }[theme];
+  document.querySelector('meta[name="theme-color"]').content = '#080a10';
   document.querySelectorAll('[data-theme-option]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.themeOption === theme));
   });
 }
-const migratedTheme = { bch: 'green', 'bch-sunrise': 'green' }[savedTheme] || savedTheme;
-setTheme(['dark', 'blue', 'green'].includes(migratedTheme) ? migratedTheme : 'dark');
+const migratedTheme = { dark: 'frost', blue: 'frost', green: 'aurora', bch: 'aurora', 'bch-sunrise': 'aurora' }[savedTheme] || savedTheme;
+setTheme(['frost', 'aurora'].includes(migratedTheme) ? migratedTheme : 'frost');
 
 for (const name of ['theme', 'language']) {
   const toggle = $(`${name}-toggle`);
@@ -1301,11 +1300,21 @@ $('copy-payment-url').addEventListener('click', async () => {
   }
 });
 
+function paymentQrImage() {
+  const url = new URL($('payment-url').textContent);
+  return createPaymentQrImage(
+    $('payment-qr'),
+    url.searchParams.get('amount'),
+    url.searchParams.get('category'),
+    translate,
+  );
+}
+
 $('download-payment-qr').addEventListener('click', () => {
   try {
     const link = document.createElement('a');
     link.download = 'cashtoken-payment-qr.png';
-    link.href = $('payment-qr').toDataURL('image/png');
+    link.href = paymentQrImage().toDataURL('image/png');
     link.click();
   } catch (error) {
     report(error);
@@ -1321,7 +1330,7 @@ $('share-payment-qr').addEventListener('click', async () => {
       setTimeout(() => { $('share-payment-qr').querySelector('span').textContent = 'Share QR'; }, 1200);
       return;
     }
-    const encoded = $('payment-qr').toDataURL('image/png').split(',')[1];
+    const encoded = paymentQrImage().toDataURL('image/png').split(',')[1];
     const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
     const file = new File([bytes], 'cashtoken-payment-qr.png', { type: 'image/png' });
     const data = { title: 'CTF Cash', url };
@@ -1362,7 +1371,7 @@ function showTutorialStep() {
   const panel = $(step.id);
   const guide = document.querySelector('.wizard-guide');
   const focused = guide.contains(document.activeElement) ? document.activeElement : null;
-  (step.id === 'connection-section' ? panel.parentElement : panel).before(guide);
+  (panel.closest('.grid') || panel).before(guide);
   focused?.focus({ preventScroll: true });
   panel.classList.add('tutorial-highlight');
   $('wizard-title').textContent = step.title;
