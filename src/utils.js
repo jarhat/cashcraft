@@ -1,5 +1,21 @@
 export const SATOSHIS_PER_BCH = 100_000_000n;
 
+export function paymentRequestUrl(location, address, category, amount) {
+  if (category && !/^[0-9a-f]{64}$/.test(category)) {
+    throw new Error('Category ID must be exactly 64 hexadecimal characters.');
+  }
+  if (amount && !/^[1-9][0-9]*$/.test(amount)) {
+    throw new Error('Amount must be a positive whole number.');
+  }
+  const url = new URL(location);
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('addr', address);
+  if (category) url.searchParams.set('category', category);
+  if (amount) url.searchParams.set('amount', amount);
+  return url.toString();
+}
+
 export function formatBch(satoshis) {
   const whole = satoshis / SATOSHIS_PER_BCH;
   const fraction = (satoshis % SATOSHIS_PER_BCH)
