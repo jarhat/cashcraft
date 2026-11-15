@@ -3,72 +3,71 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#05070b">
+  <meta name="theme-color" content="#071018">
+  <meta
+    name="description"
+    content="Connect a Bitcoin Cash wallet to view balances and send CashTokens."
+  >
   <title>CTF | CashTokens</title>
 </head>
 <body>
-  <div class="snow snow-one" aria-hidden="true"></div>
-  <div class="snow snow-two" aria-hidden="true"></div>
-  <div class="snow snow-three" aria-hidden="true"></div>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
+  <div class="ambient ambient-three" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
 
   <main class="shell">
     <header class="topbar">
-      <a class="brand" href="#">
-        <span class="flake">❄</span> CTF
-        <span class="brand-dim">/ CASH</span>
+      <a class="brand" href="#" aria-label="CTF Cash home">
+        <span class="brand-mark" aria-hidden="true">❄</span>
+        <span>CTF</span>
+        <span class="brand-divider">/</span>
+        <span class="brand-dim">CASH</span>
       </a>
-      <span class="network"><i></i><span id="network">CHIPNET</span></span>
+
+      <span class="network" aria-label="Selected network">
+        <i aria-hidden="true"></i>
+        <span id="network">CHIPNET</span>
+      </span>
     </header>
 
     <section class="hero">
-      <p class="eyebrow">BITCOIN CASH · CASHTOKENS</p>
-      <h1>Send<br><span>CashTokens</span></h1>
+      <p class="eyebrow"><span class="eyebrow-line"></span> BITCOIN CASH · CASHTOKENS</p>
+      <h1>Move tokens.<br><span>Keep it simple.</span></h1>
       <p class="intro">
-        Connect a compatible wallet to participate.
+        Connect a compatible wallet to view your balances and send CashTokens.
       </p>
     </section>
 
-    <section class="grid">
-      <article class="panel">
+    <section class="grid" aria-label="Wallet overview">
+      <article class="panel connection-panel">
         <div class="heading">
           <div>
             <p class="eyebrow">WALLET SESSION</p>
             <h2>Connection</h2>
           </div>
-          <span id="dot" class="dot"></span>
+          <span id="dot" class="dot" aria-label="Disconnected"></span>
         </div>
 
-        <p id="status" class="status">Not connected</p>
+        <p id="status" class="status" role="status" aria-live="polite">
+          Not connected
+        </p>
 
         <div id="pairing" class="pairing hidden">
-            <div id="pairing" class="pairing hidden">
+          <button id="open-wallet" class="button primary open-wallet" disabled>
+            Open in wallet <span aria-hidden="true">↗</span>
+          </button>
 
-            <button id="open-wallet" class="button primary" disabled>
-              Open in wallet <span>↗</span>
-            </button>
-
-            <canvas id="qr"></canvas>
-            <p class="pair-title">Scan with your WizardConnect wallet</p>
-            <p class="muted">
-              Open the wallet’s WizardConnect scanner, scan the code, then approve
-              the connection in the wallet. If the button doesn’t open your wallet,
-              scan the QR code or copy the pairing URI.
-            </p>
-            <details>
-              <summary>Show pairing URI</summary>
-              <div class="uri-line">
-                <code id="pair-uri"></code>
-                <button id="copy-uri" class="small-button">Copy</button>
-              </div>
-            </details>
+          <div class="qr-frame">
+            <canvas id="qr" aria-label="WizardConnect pairing QR code"></canvas>
           </div>
 
-          <canvas id="qr"></canvas>
-          <p class="pair-title">Scan with your WizardConnect wallet</p>
-          <p class="muted">
-            Open the wallet’s WizardConnect scanner, scan the code, then approve
-            the connection in the wallet.
+          <p class="pair-title">Connect with WizardConnect</p>
+          <p class="muted pairing-hint">
+            Open the pairing URI in your wallet, or scan the QR code.
+            Approve the connection in the wallet to continue.
           </p>
+
           <details>
             <summary>Show pairing URI</summary>
             <div class="uri-line">
@@ -78,28 +77,30 @@
           </details>
         </div>
 
-        <button id="connect" class="button primary">
-          Connect / reconnect wallet <span>↗</span>
-        </button>
-        <button id="forget" class="button secondary">
-          Forget saved session and pair again
-        </button>
-        <button id="refresh" class="button secondary" disabled>
-          Refresh balances
-        </button>
+        <div class="button-stack">
+          <button id="connect" class="button primary">
+            Connect / reconnect wallet <span aria-hidden="true">↗</span>
+          </button>
+          <button id="forget" class="button secondary">
+            Forget saved session and pair again
+          </button>
+          <button id="refresh" class="button secondary" disabled>
+            Refresh balances
+          </button>
+        </div>
       </article>
 
-      <article class="panel">
+      <article class="panel balance-panel">
         <div class="heading">
           <div>
             <p class="eyebrow">NATIVE BALANCE</p>
             <h2>Bitcoin Cash</h2>
           </div>
-          <span class="coin">₿</span>
+          <span class="coin" aria-hidden="true">₿</span>
         </div>
 
         <p id="bch" class="balance">— <small>BCH</small></p>
-        <p id="usd" class="muted">USD value —</p>
+        <p id="usd" class="muted">USD value unavailable</p>
 
         <div class="divider"></div>
 
@@ -117,7 +118,7 @@
           <p class="eyebrow">PORTFOLIO</p>
           <h2>Tokens</h2>
         </div>
-        <span id="token-count" class="muted">—</span>
+        <span id="token-count" class="count-pill">—</span>
       </div>
 
       <div id="tokens" class="token-list">
@@ -129,13 +130,13 @@
       </p>
     </section>
 
-    <section class="panel section">
+    <section class="panel section transfer-panel">
       <div class="heading">
         <div>
           <p class="eyebrow">TRANSFER</p>
           <h2>Send tokens</h2>
         </div>
-        <span class="arrow">↗</span>
+        <span class="arrow" aria-hidden="true">↗</span>
       </div>
 
       <div class="form">
@@ -145,12 +146,18 @@
             id="category"
             placeholder="64-character category ID"
             autocomplete="off"
+            spellcheck="false"
           >
         </label>
 
         <label>
           Amount
-          <input id="amount" inputmode="numeric" placeholder="Whole token units">
+          <input
+            id="amount"
+            inputmode="numeric"
+            placeholder="Whole token units"
+            autocomplete="off"
+          >
         </label>
 
         <label class="full">
@@ -159,17 +166,18 @@
             id="recipient"
             placeholder="bchtest:z… or bitcoincash:z…"
             autocomplete="off"
+            spellcheck="false"
           >
         </label>
       </div>
 
       <button id="send" class="button primary send" disabled>
-        Review and approve in wallet <span>→</span>
+        Review and approve in wallet <span aria-hidden="true">→</span>
       </button>
 
       <p class="fine">
-        This demo sends whole token base units only. The wallet displays the
-        transaction for approval; review all details before approving.
+        This demo sends whole token base units only. Review the transaction
+        details in your wallet before approving.
       </p>
     </section>
 
@@ -178,7 +186,7 @@
       <span>CTF · CASH</span>
     </footer>
 
-    <pre id="log" role="status"></pre>
+    <pre id="log" role="status" aria-live="polite"></pre>
   </main>
 
   <script type="module" src="/src/main.js"></script>
