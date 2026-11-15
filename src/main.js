@@ -51,22 +51,6 @@ $('open-wallet').addEventListener('click', () => {
 
   window.location.assign(pairingUri);
 });
-let pairingUri = '';
-
-function setPairingUri(uri) {
-  pairingUri = uri || '';
-  $('pair-uri').textContent = pairingUri;
-  $('open-wallet').disabled = !pairingUri;
-}
-
-$('open-wallet').addEventListener('click', () => {
-  if (!pairingUri) {
-    report(new Error('No pairing URI is available.'));
-    return;
-  }
-
-  window.location.assign(pairingUri);
-});
 
 function fillFromUrl() {
   const params = new URLSearchParams(window.location.search);
