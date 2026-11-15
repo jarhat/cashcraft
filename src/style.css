@@ -203,11 +203,38 @@ h1 {
   font-weight: 400;
 }
 
-h1 span {
+h1 .hero-slide span {
   color: #8395aa;
   background: linear-gradient(100deg, #8395aa 10%, #c1eaff 48%, #87d9d0 90%);
   background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.hero-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.hero-headline {
+  display: grid;
+  font-size: clamp(4.5rem, 8vw, 7rem);
+}
+
+.hero-slide {
+  grid-area: 1 / 1;
+  opacity: 0;
+  animation: hero-slide 24s ease-in-out infinite;
+}
+
+.hero-slide:nth-child(2) { animation-delay: -18s; }
+.hero-slide:nth-child(3) { animation-delay: -12s; }
+.hero-slide:nth-child(4) { animation-delay: -6s; }
+
+@keyframes hero-slide {
+  0%, 20% { opacity: 1; transform: translateY(0); }
+  25%, 95% { opacity: 0; transform: translateY(-12px); }
+  96% { transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 .intro {
@@ -245,13 +272,12 @@ h1 span {
 }
 
 .pixel-stars { fill: #b6e8f4; }
-.pixel-orbit { fill: #538da5; }
 .pixel-planet { fill: #a7deea; }
-.pixel-shadow { fill: #6ea7b8; }
-.pixel-craters { fill: #d3f4f4; }
-.pixel-ring { fill: #c4f1e0; }
+.pixel-shadow { fill: #304b60; }
+.pixel-craters { fill: #70aabc; }
 .pixel-ship { fill: #e0f6ff; }
 .pixel-flame { fill: #f0bf82; }
+.pixel-rocket-detail { fill: #6da9bb; }
 
 .grid {
   display: grid;
@@ -634,8 +660,8 @@ footer {
     width: 100%;
   }
 
-  h1 {
-    font-size: clamp(3.5rem, 13vw, 5.5rem);
+  .hero-headline {
+    font-size: clamp(3.1rem, 11vw, 5.5rem);
   }
 
   .space-art {
@@ -672,6 +698,15 @@ footer {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
+  }
+
+  .hero-slide {
+    animation: none;
+    opacity: 0;
+  }
+
+  .hero-slide:first-child {
+    opacity: 1;
   }
 }
 
@@ -819,25 +854,6 @@ input[readonly] {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   gap: 18px;
-}
-
-.topbar::before {
-  position: absolute;
-  top: -4px;
-  right: 8px;
-  left: 8px;
-  height: 7px;
-  pointer-events: none;
-  background:
-    radial-gradient(12px 6px at 7% 100%, #dff5ff 98%, transparent 100%),
-    radial-gradient(18px 7px at 24% 100%, #e8f8ff 98%, transparent 100%),
-    radial-gradient(14px 6px at 43% 100%, #dff5ff 98%, transparent 100%),
-    radial-gradient(20px 7px at 64% 100%, #e8f8ff 98%, transparent 100%),
-    radial-gradient(15px 6px at 83% 100%, #dff5ff 98%, transparent 100%),
-    radial-gradient(12px 5px at 97% 100%, #e8f8ff 98%, transparent 100%);
-  content: "";
-  filter: drop-shadow(0 2px 2px rgb(143 207 239 / 24%));
-  opacity: .76;
 }
 
 .quick-nav,
@@ -1048,7 +1064,7 @@ html[data-theme="light"] .eyebrow {
   color: #397c9e;
 }
 
-html[data-theme="light"] h1 span {
+html[data-theme="light"] h1 .hero-slide span {
   background-image: linear-gradient(100deg, #68849a 10%, #3987aa 48%, #318d7e 90%);
 }
 
@@ -1172,13 +1188,12 @@ html[data-theme="light"] .space-art-label {
 }
 
 html[data-theme="light"] .pixel-stars { fill: #4d899f; }
-html[data-theme="light"] .pixel-orbit { fill: #6394a5; }
 html[data-theme="light"] .pixel-planet { fill: #79b4c6; }
-html[data-theme="light"] .pixel-shadow { fill: #4f8d9f; }
-html[data-theme="light"] .pixel-craters { fill: #c5e8e8; }
-html[data-theme="light"] .pixel-ring { fill: #5b9e8d; }
+html[data-theme="light"] .pixel-shadow { fill: #416d80; }
+html[data-theme="light"] .pixel-craters { fill: #4f8d9f; }
 html[data-theme="light"] .pixel-ship { fill: #346d88; }
 html[data-theme="light"] .pixel-flame { fill: #cd8553; }
+html[data-theme="light"] .pixel-rocket-detail { fill: #a7deea; }
 
 @media (max-width: 760px) {
   .topbar {
