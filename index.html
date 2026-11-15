@@ -41,6 +41,28 @@
         <p id="status" class="status">Not connected</p>
 
         <div id="pairing" class="pairing hidden">
+            <div id="pairing" class="pairing hidden">
+
+            <button id="open-wallet" class="button primary" disabled>
+              Open in wallet <span>↗</span>
+            </button>
+
+            <canvas id="qr"></canvas>
+            <p class="pair-title">Scan with your WizardConnect wallet</p>
+            <p class="muted">
+              Open the wallet’s WizardConnect scanner, scan the code, then approve
+              the connection in the wallet. If the button doesn’t open your wallet,
+              scan the QR code or copy the pairing URI.
+            </p>
+            <details>
+              <summary>Show pairing URI</summary>
+              <div class="uri-line">
+                <code id="pair-uri"></code>
+                <button id="copy-uri" class="small-button">Copy</button>
+              </div>
+            </details>
+          </div>
+
           <canvas id="qr"></canvas>
           <p class="pair-title">Scan with your WizardConnect wallet</p>
           <p class="muted">

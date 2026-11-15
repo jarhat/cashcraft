@@ -35,6 +35,39 @@ console.log(value)
 console.log(allValues)
 console.log(hasParam)
 
+let pairingUri = '';
+
+function setPairingUri(uri) {
+  pairingUri = uri || '';
+  $('pair-uri').textContent = pairingUri;
+  $('open-wallet').disabled = !pairingUri;
+}
+
+$('open-wallet').addEventListener('click', () => {
+  if (!pairingUri) {
+    report(new Error('No pairing URI is available.'));
+    return;
+  }
+
+  window.location.assign(pairingUri);
+});
+let pairingUri = '';
+
+function setPairingUri(uri) {
+  pairingUri = uri || '';
+  $('pair-uri').textContent = pairingUri;
+  $('open-wallet').disabled = !pairingUri;
+}
+
+$('open-wallet').addEventListener('click', () => {
+  if (!pairingUri) {
+    report(new Error('No pairing URI is available.'));
+    return;
+  }
+
+  window.location.assign(pairingUri);
+});
+
 function fillFromUrl() {
   const params = new URLSearchParams(window.location.search);
 
@@ -298,6 +331,10 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
       }
       relay = null;
     }
+
+    setPairingUri(relay.uri);
+    await showPairingUri(relay.uri);
+
 
     const stored = fresh ? null : loadSession();
 
@@ -921,10 +958,15 @@ async function sendFungibleTokens() {
     });
 
     $('status').textContent =
-      'Transaction built · waiting for wallet review and approval…';
+      'Request sent · approve or reject it in your wallet';
+
+    const startedAt = Date.now();
+    const waitTimer = setInterval(() => {
+      const seconds = Math.floor((Date.now() - startedAt) / 1000);
+      $('status').textContent = `Waiting for wallet approval · ${seconds}s`;
+    }, 1000);
 
     let signed;
-
     try {
       signed = await manager.signTransaction(signingRequest);
     } catch (error) {
@@ -937,6 +979,8 @@ async function sendFungibleTokens() {
       });
 
       throw error;
+    } finally {
+      clearInterval(waitTimer);
     }
 
     if (
