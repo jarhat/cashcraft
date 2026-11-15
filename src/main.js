@@ -1,22 +1,5 @@
 import './style.css';
 import { setLanguage, translate } from './i18n.js';
-import QRCode from 'qrcode';
-import {
-  decodeCashAddress,
-  encodeCashAddress,
-} from '@bitauth/libauth';
-import { hash160 } from '@cashscript/utils';
-import { initiateDappRelay } from '@wizardconnect/core';
-import { DappConnectionManager, loadSession } from '@wizardconnect/dapp';
-import {
-  sourceOutputToRelay,
-  transactionToHex,
-} from '@wizardconnect/core/hdwalletv1-serialize';
-import {
-  ElectrumNetworkProvider,
-  TransactionBuilder,
-  placeholderP2PKHUnlocker,
-} from 'cashscript';
 import { submitCashAddress, API_BASE_URL } from './api.js';
 import {
   SATOSHIS_PER_BCH,
@@ -75,6 +58,9 @@ function fillFromUrl() {
     $('shared-link-address').textContent = sharedLink.address;
     $('shared-link-category').textContent = sharedLink.category;
     $('shared-link-preview').classList.remove('hidden');
+    $('notifications-empty').hidden = true;
+    $('notification-indicator').hidden = false;
+    $('notifications-dialog').showModal();
 
     const title = `${sharedLink.amount} CashToken base units requested`;
     const description =
@@ -93,8 +79,26 @@ function fillFromUrl() {
 
 const mainnet = network === 'mainnet';
 const prefix = mainnet ? 'bitcoincash' : 'bchtest';
-const provider = new ElectrumNetworkProvider(mainnet ? 'mainnet' : 'chipnet');
 const $ = (id) => document.getElementById(id);
+let QRCode, decodeCashAddress, encodeCashAddress, hash160, initiateDappRelay;
+let DappConnectionManager, loadSession, sourceOutputToRelay, transactionToHex;
+let TransactionBuilder, placeholderP2PKHUnlocker, provider;
+let dependenciesPromise;
+
+function loadWalletDependencies() {
+  if (!dependenciesPromise) {
+    dependenciesPromise = import('./wallet-deps.js').then((deps) => {
+      ({ QRCode, decodeCashAddress, encodeCashAddress, hash160, initiateDappRelay,
+        DappConnectionManager, loadSession, sourceOutputToRelay, transactionToHex,
+        TransactionBuilder, placeholderP2PKHUnlocker } = deps);
+      provider = new deps.ElectrumNetworkProvider(mainnet ? 'mainnet' : 'chipnet');
+    }).catch((error) => {
+      dependenciesPromise = null;
+      throw error;
+    });
+  }
+  return dependenciesPromise;
+}
 
 const ADDRESS_SCAN_COUNT = 50;
 const SCAN_CONCURRENCY = 8;
@@ -109,18 +113,13 @@ let manager = null;
 let relay = null;
 let walletReady = false;
 let pairingInProgress = false;
+let showPairingWhenReady = false;
 let sending = false;
 let refreshPromise = null;
 let addresses = [];
 let scanAddressRecords = [];
 let utxos = [];
 let bchUsd = null;
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', fillFromUrl);
-} else {
-  fillFromUrl();
-}
 
 function report(error) {
   console.error(error);
@@ -176,7 +175,7 @@ for (const name of ['theme', 'language']) {
 function setConnection(connected) {
   $('dot').classList.toggle('online', connected);
   $('refresh').disabled = !connected;
-  $('send').disabled = !connected || sending;
+  $('send').disabled = sending;
   $('copy-address').disabled = !connected;
   $('connect').disabled = connected || pairingInProgress;
 }
@@ -275,6 +274,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
   setConnection(false);
 
   try {
+    await loadWalletDependencies();
     if (relay) {
       try {
         relay.cleanup();
@@ -355,6 +355,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
       } catch {
         // Cleanup is best-effort.
       }
+      relay = null;
 
       $('connect').disabled = false;
     });
@@ -407,7 +408,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
 
     manager.attachRelay(relay);
 
-    if (!restoring) {
+    if ((!restoring || showPairingWhenReady) && !walletReady) {
       await showPairingUri(relay.uri);
 
       if (!walletReady) {
@@ -420,9 +421,18 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
   } catch (error) {
     $('status').textContent = 'Could not start WizardConnect';
     report(error);
+    if (relay) {
+      try {
+        relay.cleanup();
+      } catch (cleanupError) {
+        console.warn('Could not clean up the relay:', cleanupError);
+      }
+      relay = null;
+    }
     $('connect').disabled = false;
   } finally {
     pairingInProgress = false;
+    showPairingWhenReady = false;
   }
 }
 
@@ -582,18 +592,24 @@ function renderBalances(scannedUtxos) {
     title.textContent = 'Fungible token';
 
     const categoryElement = document.createElement('code');
-    categoryElement.textContent = category;
+    categoryElement.textContent = `${category.slice(0, 10)}…${category.slice(-8)}`;
+    categoryElement.title = category;
 
     const copyCategory = document.createElement('button');
     copyCategory.type = 'button';
-    copyCategory.className = 'small-button';
-    copyCategory.textContent = 'Copy';
+    copyCategory.className = 'small-button category-copy';
     copyCategory.setAttribute('aria-label', 'Copy category ID');
+    copyCategory.title = 'Copy category ID';
+    copyCategory.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="13" height="16" rx="2"/><path d="M9 5V3h7v2M9 10h7M9 14h7"/></svg>';
     copyCategory.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(category);
-        copyCategory.textContent = 'Copied';
-        setTimeout(() => { copyCategory.textContent = 'Copy'; }, 1200);
+        copyCategory.classList.add('copied');
+        copyCategory.setAttribute('aria-label', translate('Copied'));
+        setTimeout(() => {
+          copyCategory.classList.remove('copied');
+          copyCategory.setAttribute('aria-label', translate('Copy category ID'));
+        }, 1200);
       } catch (error) {
         report(error);
       }
@@ -1071,7 +1087,53 @@ $('refresh').addEventListener('click', () => {
   });
 });
 
-$('send').addEventListener('click', sendFungibleTokens);
+$('send').addEventListener('click', () => {
+  if (walletReady) {
+    sendFungibleTokens();
+    return;
+  }
+  $('connection-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('connect').focus({ preventScroll: true });
+  if ($('pairing').classList.contains('hidden')) {
+    if (relay?.uri) {
+      showPairingUri(relay.uri).catch(report);
+    } else if (pairingInProgress) {
+      showPairingWhenReady = true;
+    } else if (!pairingInProgress) {
+      startConnection();
+    }
+  }
+});
+
+const notificationsDialog = $('notifications-dialog');
+function markNotificationsRead() {
+  $('notification-indicator').hidden = true;
+}
+$('notifications-toggle').addEventListener('click', () => {
+  if (!notificationsDialog.open) notificationsDialog.showModal();
+  markNotificationsRead();
+});
+$('notifications-close').addEventListener('click', () => notificationsDialog.close());
+notificationsDialog.addEventListener('click', (event) => {
+  const rect = notificationsDialog.getBoundingClientRect();
+  if (event.clientX < rect.left || event.clientX > rect.right ||
+      event.clientY < rect.top || event.clientY > rect.bottom) notificationsDialog.close();
+});
+notificationsDialog.addEventListener('close', () => {
+  markNotificationsRead();
+  $('notifications-toggle').focus({ preventScroll: true });
+});
+$('view-payment-request').addEventListener('click', () => {
+  notificationsDialog.close();
+  setTransferTab('send');
+  $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', fillFromUrl);
+} else {
+  fillFromUrl();
+}
 $('category-select').addEventListener('change', () => {
   if (!$('category').readOnly) $('category').value = $('category-select').value;
 });
@@ -1335,10 +1397,26 @@ $('wizard-next').addEventListener('click', () => {
 
 fetchBchUsd();
 
-try {
-  if (loadSession()?.walletPublicKey) {
-    startConnection({ restoring: true }).catch(report);
+const restoreSession = async () => {
+  try {
+    await loadWalletDependencies();
+    if (!pairingInProgress && !walletReady && loadSession()?.walletPublicKey) {
+      await startConnection({ restoring: true });
+    }
+  } catch (error) {
+    console.warn('Could not restore previous WizardConnect session:', error);
   }
-} catch (error) {
-  console.warn('Could not restore previous WizardConnect session:', error);
+};
+if ('requestIdleCallback' in window) {
+  window.requestIdleCallback(restoreSession, { timeout: 3000 });
+} else {
+  setTimeout(restoreSession, 1000);
+}
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((error) => {
+      console.warn('Could not register the offline page:', error);
+    });
+  });
 }

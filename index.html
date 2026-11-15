@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#05070b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CTF Cash">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon-192.png">
   <meta name="description" content="Send and receive CashTokens with CTF Cash.">
   <meta property="og:type" content="website">
   <meta property="og:title" content="CTF | CashTokens">
@@ -21,6 +27,26 @@
   <div class="snow snow-one" aria-hidden="true"></div>
   <div class="snow snow-two" aria-hidden="true"></div>
   <div class="snow snow-three" aria-hidden="true"></div>
+  <div class="moon-background" aria-hidden="true">
+    <svg viewBox="0 0 128 128" shape-rendering="crispEdges">
+      <path fill="#142b3a" d="M40 0h60v4h12v8h8v12h8v80h-8v12h-8v8h-12v4H40v-4H28v-8h-8v-12h-8V24h8V12h8V4h12z"/>
+      <path fill="#395d6d" d="M48 4h48v4h12v8h8v12h8v68h-8v12h-8v8H96v4H48v-4H36v-8h-8V96h-8V28h8V16h8V8h12z"/>
+      <path fill="#6a9da7" d="M52 8h40v4h12v8h8v12h8v60h-8v12h-8v8H92v4H52v-4H40v-8h-8V92h-8V32h8V20h8v-8h12z"/>
+      <path fill="#83b8bd" d="M64 8h28v4h12v8h8v12h8v60h-8v12h-8v8H92v4H64v-8h-8V96h-8V80h-4V44h4V28h8V16h8z"/>
+      <path fill="#b0d6d0" d="M88 12h8v4h8v8h8v12h4v16h-4V40h-8V28h-8V20h-8zM104 72h8v12h-4v12h-8v8h-8v4H76v-4h12v-8h8V84h8z"/>
+      <path fill="#4a7b86" d="M52 28h16v4h8v8h-4v4H56v-4h-8v-8h4zM88 48h12v4h4v8h-4v4H88v-4h-4v-8h4zM60 76h20v4h4v8h-4v4H60v-4h-4v-8h4zM96 96h8v4h-8zM44 60h8v4h-8z"/>
+      <path fill="#a0c9c4" d="M56 32h12v4h4v4H56v-4h-4v-4zM88 52h12v4h-12zM64 80h16v4H64z"/>
+      <g class="rocket-smoke" fill="#d4e5db">
+        <path d="M84 91h5v4h-5zM91 96h7v4h-7zM78 99h6v4h-6zM86 104h8v4h-8z"/>
+      </g>
+      <g class="moon-rocket">
+        <path fill="#345865" d="M88 59h6v3h4v5h3v14h-3v6h-4v3h-6v-3h-4v-6h-3V67h3v-5h4z"/>
+        <path fill="#e1eee6" d="M89 59h4v4h3v5h2v13h-2v5H86v-5h-2V68h2v-5h3z"/>
+        <path fill="#5fbd84" d="M89 70h4v5h-4zM84 78h-3v8h5v-5h-2zM98 78h3v8h-5v-5h2zM87 86h8v3h-8z"/>
+        <path fill="#f3c779" d="M89 89h4v5h-4z"/>
+      </g>
+    </svg>
+  </div>
 
   <aside class="wizard-guide" aria-label="Wizard tutorial">
     <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
@@ -86,6 +112,10 @@
             <button type="button" data-language-option="es" lang="es">Español</button>
           </div>
         </div>
+        <button id="notifications-toggle" class="theme-toggle notification-toggle" type="button" aria-label="Notifications" aria-controls="notifications-dialog" aria-describedby="notification-indicator" aria-haspopup="dialog">
+          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9ZM10 20h4"/></svg>
+          <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread payment request</span></span>
+        </button>
       </div>
     </header>
 
@@ -101,24 +131,6 @@
         <p class="intro">
           Connect your wallet to send and receive tokens, create payment QR codes, and explore your balances.
         </p>
-      </div>
-      <div class="space-art" aria-hidden="true">
-        <div class="space-art-label"><span>LUNAR MISSION / 001</span><span>✦</span></div>
-        <svg viewBox="0 0 180 120" shape-rendering="crispEdges">
-          <g class="pixel-stars">
-            <path d="M21 19h3v3h-3zM28 52h2v2h-2zM52 12h2v2h-2zM153 27h3v3h-3zM159 79h2v2h-2zM37 99h3v3h-3zM137 101h3v3h-3zM113 12h2v2h-2z" />
-            <path d="M143 43h3v9h-3zM140 46h9v3h-9zM48 72h2v8h-2zM45 75h8v2h-8z" />
-          </g>
-          <path class="pixel-shadow" d="M76 22h28v4h8v4h8v8h4v8h4v28h-4v8h-4v8h-8v4h-8v4H76v-4h-8v-4h-8v-8h-4v-8h-4V46h4v-8h4v-8h8v-4h8z" />
-          <path class="pixel-planet" d="M90 22h14v4h8v4h8v8h4v8h4v28h-4v8h-4v8h-8v4h-8v4H90z" />
-          <path class="pixel-craters" d="M102 34h8v4h4v4h-8v-4h-4zM94 54h8v4h-8zM110 70h8v4h-4v4h-8v-4h4zM96 84h8v4h-8z" />
-          <g class="pixel-rocket">
-            <path class="pixel-flame" d="M145 63h10v5h-2v5h-3v-5h-5z" />
-            <path class="pixel-ship" d="M148 35h4v4h3v5h3v15h-3v4h-10v-4h-3V44h3v-5h3z" />
-            <path class="pixel-rocket-detail" d="M148 47h4v5h-4zM142 54h3v8h-5v-5h2zM155 54h3v3h2v5h-5z" />
-          </g>
-        </svg>
-        <div class="space-art-label"><span>◦ TO THE MOON</span><span>•••</span></div>
       </div>
     </section>
 
@@ -235,15 +247,6 @@
       </div>
 
       <div id="send-panel" class="tab-panel" role="tabpanel" aria-labelledby="send-tab">
-        <aside id="shared-link-preview" class="shared-link-preview hidden" aria-label="Shared payment link preview">
-          <p class="eyebrow">SHARED PAYMENT LINK</p>
-          <dl>
-            <div><dt>Amount</dt><dd id="shared-link-amount"></dd></div>
-            <div><dt>Recipient address</dt><dd id="shared-link-address"></dd></div>
-            <div><dt>CashToken category</dt><dd id="shared-link-category"></dd></div>
-          </dl>
-        </aside>
-
         <div class="form">
           <div>
             <div id="category-selector">
@@ -282,7 +285,7 @@
           </label>
         </div>
 
-        <button id="send" class="button primary send" disabled>
+        <button id="send" class="button primary send">
           Review and approve in wallet <span aria-hidden="true">→</span>
         </button>
 
@@ -380,6 +383,24 @@
 
     <pre id="log" role="status"></pre>
   </main>
+
+  <dialog id="notifications-dialog" class="notifications-dialog" aria-labelledby="notifications-title">
+    <div class="notifications-heading">
+      <h2 id="notifications-title">Notifications</h2>
+      <button id="notifications-close" class="small-button close-notifications" type="button" aria-label="Close notifications" autofocus>×</button>
+    </div>
+    <p id="notifications-empty" class="muted">No notifications yet.</p>
+    <div id="shared-link-preview" class="shared-link-preview hidden">
+      <p class="eyebrow">SHARED PAYMENT LINK</p>
+      <p class="notification-message">You received a payment request.</p>
+      <dl>
+        <div><dt>Amount</dt><dd id="shared-link-amount"></dd></div>
+        <div><dt>Recipient address</dt><dd id="shared-link-address"></dd></div>
+        <div><dt>CashToken category</dt><dd id="shared-link-category"></dd></div>
+      </dl>
+      <button id="view-payment-request" class="button primary" type="button">View payment request <span aria-hidden="true">→</span></button>
+    </div>
+  </dialog>
 
   <script type="module" src="/src/main.js"></script>
 </body>
