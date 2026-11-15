@@ -1,15 +1,12 @@
 import os
+import re
 import sqlite3
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-
-import re
-from decimal import Decimal, InvalidOperation
-
-import httpx
 
 NETWORK = os.getenv("BCH_NETWORK", "chipnet").strip().lower()
 
@@ -123,17 +120,26 @@ def init_db() -> None:
 def startup() -> None:
     init_db()
 
+def _insert_cash_address(
+    db: sqlite3.Connection,
+    address: str,
+    prefix: str,
+    address_type: int,
+) -> None:
+    db.execute(
+        """
+        INSERT INTO cash_addresses
+            (cash_address, network, prefix, address_type)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(cash_address) DO NOTHING
+        """,
+        (address, NETWORK, prefix, address_type),
+    )
+
+
 def save_cash_address(address: str, prefix: str, address_type: int) -> None:
     with sqlite3.connect(DB_PATH, timeout=10) as db:
-        db.execute(
-            """
-            INSERT INTO cash_addresses
-                (cash_address, network, prefix, address_type)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(cash_address) DO NOTHING
-            """,
-            (address, NETWORK, prefix, address_type),
-        )
+        _insert_cash_address(db, address, prefix, address_type)
 
 
 def save_cash_address_with_proof(
@@ -147,15 +153,7 @@ def save_cash_address_with_proof(
     with sqlite3.connect(DB_PATH, timeout=10) as db:
         db.execute("BEGIN IMMEDIATE")
 
-        db.execute(
-            """
-            INSERT INTO cash_addresses
-                (cash_address, network, prefix, address_type)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(cash_address) DO NOTHING
-            """,
-            (address, NETWORK, prefix, address_type),
-        )
+        _insert_cash_address(db, address, prefix, address_type)
 
         db.execute(
             """

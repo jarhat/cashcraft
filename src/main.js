@@ -16,6 +16,14 @@ import {
   TransactionBuilder,
   placeholderP2PKHUnlocker,
 } from 'cashscript';
+import { submitCashAddress, API_BASE_URL } from './api.js';
+import {
+  SATOSHIS_PER_BCH,
+  formatBch,
+  normalizeUtxo,
+  utxoKey,
+  wait,
+} from './utils.js';
 
 const network = (import.meta.env.VITE_BCH_NETWORK || 'chipnet').toLowerCase();
 
@@ -25,30 +33,20 @@ if (!['mainnet', 'chipnet'].includes(network)) {
   );
 }
 
-const params = new URLSearchParams(window.location.search);
-
-const value = params.get("category");     // first value, or null
-const allValues = params.getAll("addr"); // all values for repeated keys
-const hasParam = params.has("amount");
-
-console.log(value)
-console.log(allValues)
-console.log(hasParam)
-
 function fillFromUrl() {
   const params = new URLSearchParams(window.location.search);
 
   const fields = [
-    ["addr", "recipient"],
-    ["category", "category"],
-    ["amount", "amount"]
+    ['addr', 'recipient'],
+    ['category', 'category'],
+    ['amount', 'amount'],
   ];
 
   for (const [paramName, inputId] of fields) {
     const input = document.getElementById(inputId);
     const value = params.get(paramName);
 
-    if (value !== null && value.trim() !== "") {
+    if (value !== null && value.trim() !== '') {
       input.value = value;
       input.readOnly = true;
     } else {
@@ -71,7 +69,6 @@ const $ = (id) => document.getElementById(id);
 const ADDRESS_SCAN_COUNT = 50;
 const SCAN_CONCURRENCY = 8;
 const SCAN_RETRY_DELAYS_MS = [300, 700, 1500];
-const SATOSHIS_PER_BCH = 100_000_000n;
 const MAXIMUM_FEE_SATOSHIS = 10_000n;
 const FEE_RESERVE_SATOSHIS = 10_000n;
 const TOKEN_OUTPUT_SATOSHIS = 1_000n;
@@ -88,36 +85,6 @@ let addresses = [];
 let scanAddressRecords = [];
 let utxos = [];
 let bchUsd = null;
-
-const API_BASE_URL = "https://auth.ctf.cash";
-
-async function submitCashAddress(cashAddress) {
-  if (typeof cashAddress !== "string" || !cashAddress.trim()) {
-    throw new TypeError("A cash address is required.");
-  }
-
-  console.log(cashAddress.trim())
-
-  const response = await fetch(`${API_BASE_URL}/api/cash-address`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      cash_address: cashAddress.trim(),
-    }),
-  });
-
-  const result = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(
-      result.detail ?? `Address API error (${response.status})`,
-    );
-  }
-  return result.cash_address;
-}
-
 
 function report(error) {
   console.error(error);
@@ -187,80 +154,6 @@ function deriveScanAddresses() {
   }
 
   return records;
-}
-
-function formatBch(satoshis) {
-  const whole = satoshis / SATOSHIS_PER_BCH;
-  const fraction = (satoshis % SATOSHIS_PER_BCH)
-    .toString()
-    .padStart(8, '0');
-
-  return `${whole.toString()}.${fraction}`;
-}
-
-function utxoKey(utxo) {
-  const txid = utxo.txid ?? utxo.txHash;
-  const outputIndex = utxo.vout ?? utxo.outputIndex ?? utxo.index;
-
-  if (txid == null || outputIndex == null) return null;
-  return `${String(txid).toLowerCase()}:${outputIndex}`;
-}
-
-function normalizeUtxo(utxo, record) {
-  const txid = String(utxo.txid ?? utxo.txHash ?? '').toLowerCase();
-  const vout = Number(utxo.vout ?? utxo.outputIndex ?? utxo.index);
-
-  if (!/^[0-9a-f]{64}$/.test(txid)) {
-    throw new Error(
-      `Invalid transaction ID for ${record.pathName}/${record.index}.`,
-    );
-  }
-
-  if (!Number.isSafeInteger(vout) || vout < 0) {
-    throw new Error(
-      `Invalid output index for ${record.pathName}/${record.index}.`,
-    );
-  }
-
-  let satoshis;
-
-  try {
-    satoshis = BigInt(utxo.satoshis);
-  } catch {
-    throw new Error(`Invalid satoshi value for ${txid}:${vout}.`);
-  }
-
-  if (satoshis <= 0n) {
-    throw new Error(`Non-positive UTXO value for ${txid}:${vout}.`);
-  }
-
-  const normalized = {
-    ...utxo,
-    txid,
-    vout,
-    satoshis,
-    pathName: record.pathName,
-    pathIndex: record.pathIndex,
-    addressIndex: record.index,
-    spendAddress: record.spendAddress,
-  };
-
-  if (normalized.token?.amount != null) {
-    try {
-      normalized.token = {
-        ...normalized.token,
-        amount: BigInt(normalized.token.amount),
-      };
-    } catch {
-      throw new Error(`Invalid token amount for ${txid}:${vout}.`);
-    }
-  }
-
-  return normalized;
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function showPairingUri(uri) {
