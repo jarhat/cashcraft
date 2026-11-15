@@ -1354,19 +1354,27 @@ function showTutorialStep() {
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
   const step = tutorialSteps[tutorialStep];
   const panel = $(step.id);
+  const guide = document.querySelector('.wizard-guide');
+  const focused = guide.contains(document.activeElement) ? document.activeElement : null;
+  (step.id === 'connection-section' ? panel.parentElement : panel).before(guide);
+  focused?.focus({ preventScroll: true });
   panel.classList.add('tutorial-highlight');
   $('wizard-title').textContent = step.title;
   $('wizard-message').textContent = step.message;
   $('wizard-progress').textContent = `${tutorialStep + 1} / ${tutorialSteps.length}`;
   $('wizard-prev').disabled = tutorialStep === 0;
   $('wizard-next').textContent = tutorialStep === tutorialSteps.length - 1 ? 'Done' : 'Next';
-  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  guide.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function closeTutorial() {
+  const guide = document.querySelector('.wizard-guide');
+  const focused = guide.contains(document.activeElement);
   $('wizard-dialog').hidden = true;
   $('wizard-toggle').setAttribute('aria-expanded', 'false');
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
+  document.querySelector('.hero').after(guide);
+  if (focused) $('wizard-toggle').focus({ preventScroll: true });
 }
 
 $('wizard-toggle').addEventListener('click', () => {

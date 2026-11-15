@@ -5,6 +5,61 @@ import { runInNewContext } from 'node:vm';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
+test('wizard follows each tutorial panel without covering it and returns home when closed', () => {
+  const elements = new Map();
+  const highlighted = new Set();
+  let guidePosition = 'hero';
+  const guide = { scrollIntoView() {}, contains() { return false; } };
+  const target = (position) => ({ before(node) {
+    assert.equal(node, guide);
+    guidePosition = position;
+  } });
+  const grid = target('connection');
+  const hero = { after(node) {
+    assert.equal(node, guide);
+    guidePosition = 'hero';
+  } };
+  for (const id of ['connection-section', 'earn-section', 'transfer-section']) {
+    const panel = {
+      ...target(id),
+      parentElement: grid,
+      classList: {
+        add() { highlighted.add(panel); },
+        remove() { highlighted.delete(panel); },
+      },
+    };
+    elements.set(id, panel);
+  }
+  for (const id of ['wizard-toggle', 'wizard-dialog', 'wizard-title', 'wizard-message', 'wizard-progress', 'wizard-prev', 'wizard-next']) {
+    elements.set(id, {
+      hidden: id === 'wizard-dialog',
+      addEventListener(type, handler) { this[type] = handler; },
+      setAttribute() {},
+    });
+  }
+  const document = {
+    querySelector(selector) { return selector === '.hero' ? hero : guide; },
+    querySelectorAll() { return [...highlighted]; },
+  };
+  const start = source.indexOf('const tutorialSteps =');
+  const end = source.indexOf('\n\nfetchBchUsd();', start);
+  runInNewContext(source.slice(start, end), { document, $: (id) => elements.get(id) });
+
+  elements.get('wizard-toggle').click();
+  assert.equal(guidePosition, 'connection');
+  assert.equal(elements.get('wizard-progress').textContent, '1 / 3');
+  elements.get('wizard-next').click();
+  assert.equal(guidePosition, 'earn-section');
+  elements.get('wizard-next').click();
+  assert.equal(guidePosition, 'transfer-section');
+  elements.get('wizard-prev').click();
+  assert.equal(guidePosition, 'earn-section');
+  elements.get('wizard-toggle').click();
+  assert.equal(guidePosition, 'hero');
+  assert.equal(elements.get('wizard-dialog').hidden, true);
+  assert.equal(highlighted.size, 0);
+});
+
 function sharedLinkFixture(search) {
   const elements = new Map();
   function element(id) {

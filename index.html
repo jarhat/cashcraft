@@ -36,40 +36,9 @@
       <path fill="#b0d6d0" d="M88 12h8v4h8v8h8v12h4v16h-4V40h-8V28h-8V20h-8zM104 72h8v12h-4v12h-8v8h-8v4H76v-4h12v-8h8V84h8z"/>
       <path fill="#4a7b86" d="M52 28h16v4h8v8h-4v4H56v-4h-8v-8h4zM88 48h12v4h4v8h-4v4H88v-4h-4v-8h4zM60 76h20v4h4v8h-4v4H60v-4h-4v-8h4zM96 96h8v4h-8zM44 60h8v4h-8z"/>
       <path fill="#a0c9c4" d="M56 32h12v4h4v4H56v-4h-4v-4zM88 52h12v4h-12zM64 80h16v4H64z"/>
-      <g class="rocket-smoke" fill="#d4e5db">
-        <path d="M84 91h5v4h-5zM91 96h7v4h-7zM78 99h6v4h-6zM86 104h8v4h-8z"/>
-      </g>
-      <g class="moon-rocket">
-        <path fill="#345865" d="M88 59h6v3h4v5h3v14h-3v6h-4v3h-6v-3h-4v-6h-3V67h3v-5h4z"/>
-        <path fill="#e1eee6" d="M89 59h4v4h3v5h2v13h-2v5H86v-5h-2V68h2v-5h3z"/>
-        <path fill="#5fbd84" d="M89 70h4v5h-4zM84 78h-3v8h5v-5h-2zM98 78h3v8h-5v-5h2zM87 86h8v3h-8z"/>
-        <path fill="#f3c779" d="M89 89h4v5h-4z"/>
-      </g>
+      <path fill="#071420" opacity=".65" d="M40 0h24v128H40v-4H28v-8h-8v-12h-8V24h8V12h8V4h12z"/>
     </svg>
   </div>
-
-  <aside class="wizard-guide" aria-label="Wizard tutorial">
-    <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
-      <svg viewBox="0 0 64 72" shape-rendering="crispEdges" aria-hidden="true">
-        <path fill="#94d9f4" d="M30 2h8v8h4v8h4v8h8v6H10v-6h8v-8h4v-8h8z"/>
-        <path fill="#517caa" d="M10 28h44v8H10zM18 48h28v6h6v14H12V54h6z"/>
-        <path fill="#f3d9b8" d="M20 36h24v14H20z"/>
-        <path fill="#e8f7ff" d="M20 46h24v10H20zM24 56h16v6H24z"/>
-        <path fill="#26394f" d="M24 39h4v4h-4zM36 39h4v4h-4z"/>
-        <path fill="#a0f2cf" d="M29 16h6v6h-6zM26 19h12v2H26z"/>
-      </svg>
-      <span>Wizard help</span>
-    </button>
-    <div id="wizard-dialog" class="wizard-dialog" hidden>
-      <strong id="wizard-title"></strong>
-      <p id="wizard-message" aria-live="polite"></p>
-      <div class="wizard-controls">
-        <button id="wizard-prev" class="small-button" type="button">Back</button>
-        <span id="wizard-progress"></span>
-        <button id="wizard-next" class="small-button" type="button">Next</button>
-      </div>
-    </div>
-  </aside>
 
   <main class="shell">
     <header class="topbar">
@@ -133,6 +102,29 @@
         </p>
       </div>
     </section>
+
+    <aside class="wizard-guide" aria-label="Wizard tutorial">
+      <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
+        <svg viewBox="0 0 64 72" shape-rendering="crispEdges" aria-hidden="true">
+          <path fill="#94d9f4" d="M30 2h8v8h4v8h4v8h8v6H10v-6h8v-8h4v-8h8z"/>
+          <path fill="#517caa" d="M10 28h44v8H10zM18 48h28v6h6v14H12V54h6z"/>
+          <path fill="#f3d9b8" d="M20 36h24v14H20z"/>
+          <path fill="#e8f7ff" d="M20 46h24v10H20zM24 56h16v6H24z"/>
+          <path fill="#26394f" d="M24 39h4v4h-4zM36 39h4v4h-4z"/>
+          <path fill="#a0f2cf" d="M29 16h6v6h-6zM26 19h12v2H26z"/>
+        </svg>
+        <span>Wizard help</span>
+      </button>
+      <div id="wizard-dialog" class="wizard-dialog" hidden>
+        <strong id="wizard-title"></strong>
+        <p id="wizard-message" aria-live="polite"></p>
+        <div class="wizard-controls">
+          <button id="wizard-prev" class="small-button" type="button">Back</button>
+          <span id="wizard-progress"></span>
+          <button id="wizard-next" class="small-button" type="button">Next</button>
+        </div>
+      </div>
+    </aside>
 
     <section class="grid">
       <article id="connection-section" class="panel">

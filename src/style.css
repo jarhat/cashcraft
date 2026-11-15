@@ -69,7 +69,8 @@ button {
 .shell {
   position: relative;
   z-index: 1;
-  width: min(100% - 40px, 1040px);
+  width: calc(100% - 40px);
+  max-width: 1040px;
   margin-inline: auto;
   padding: 28px 0 34px;
 }
@@ -77,26 +78,16 @@ button {
 .moon-background {
   position: absolute;
   z-index: 0;
-  top: -150px;
-  right: max(-180px, calc((100vw - 1300px) / 2 - 180px));
-  width: clamp(440px, 68vw, 850px);
-  opacity: .38;
+  top: -70px;
+  right: max(20px, calc((100% - 1040px) / 2));
+  width: clamp(240px, 30vw, 400px);
+  opacity: .3;
   pointer-events: none;
 }
 
 .moon-background svg {
   display: block;
   width: 100%;
-}
-
-.rocket-smoke {
-  animation: rocket-smoke 2.8s ease-in-out infinite alternate;
-  transform-origin: 90px 90px;
-}
-
-@keyframes rocket-smoke {
-  from { opacity: .35; transform: translateY(0); }
-  to { opacity: .8; transform: translateY(3px); }
 }
 
 .snow {
@@ -671,7 +662,8 @@ footer {
 
 @media (max-width: 680px) {
   .shell {
-    width: min(100% - 26px, 520px);
+    width: calc(100% - 26px);
+    max-width: 520px;
     padding-top: 17px;
   }
 
@@ -1473,13 +1465,11 @@ html[data-theme="light"] select {
 }
 
 .wizard-guide {
-  position: fixed;
-  z-index: 5;
-  bottom: 20px;
-  left: 16px;
   display: flex;
-  align-items: flex-end;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  scroll-margin-top: 20px;
 }
 
 .notification-toggle {
@@ -1584,10 +1574,12 @@ html[data-theme="light"] select {
 }
 
 .wizard-toggle {
-  display: grid;
-  width: 82px;
-  justify-items: center;
-  padding: 7px;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 6px 12px;
   border: 1px solid rgb(168 228 255 / 35%);
   border-radius: 12px;
   background: #102333;
@@ -1597,15 +1589,16 @@ html[data-theme="light"] select {
 }
 
 .wizard-toggle svg {
-  width: 54px;
-  height: 61px;
+  width: 28px;
+  height: 32px;
 }
 
 .wizard-dialog {
-  width: min(270px, calc(100vw - 120px));
+  flex: 1;
+  min-width: 0;
   padding: 14px;
   border: 1px solid rgb(168 228 255 / 45%);
-  border-radius: 12px 12px 12px 2px;
+  border-radius: 12px;
   background: #102333;
   color: #e9f4ff;
   box-shadow: 0 12px 40px rgb(0 0 0 / 35%);
@@ -1619,7 +1612,7 @@ html[data-theme="light"] select {
 .wizard-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
   font: .65rem var(--mono);
 }
@@ -1632,10 +1625,10 @@ html[data-theme="light"] select {
 
 @media (max-width: 680px) {
   .moon-background {
-    top: -35px;
-    right: -210px;
-    width: 540px;
-    opacity: .28;
+    top: -30px;
+    right: 0;
+    width: 240px;
+    opacity: .22;
   }
 
   .topbar-tools {
@@ -1651,16 +1644,10 @@ html[data-theme="light"] select {
   }
 
   .wizard-guide {
-    bottom: 10px;
-    left: 8px;
+    flex-wrap: wrap;
   }
 
-  .wizard-toggle {
-    width: 64px;
-  }
-
-  .wizard-toggle svg {
-    width: 42px;
-    height: 47px;
+  .wizard-dialog {
+    flex-basis: 100%;
   }
 }
