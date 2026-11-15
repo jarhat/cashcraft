@@ -25,7 +25,7 @@ import {
   wait,
 } from './utils.js';
 
-const network = (import.meta.env.VITE_BCH_NETWORK || 'chipnet').toLowerCase();
+const network = (import.meta.env.VITE_BCH_NETWORK || 'mainnet').toLowerCase();
 
 if (!['mainnet', 'chipnet'].includes(network)) {
   throw new Error(
@@ -35,6 +35,11 @@ if (!['mainnet', 'chipnet'].includes(network)) {
 
 function fillFromUrl() {
   const params = new URLSearchParams(window.location.search);
+  const sharedLink = {
+    address: params.get('addr'),
+    category: params.get('category'),
+    amount: params.get('amount'),
+  };
 
   const fields = [
     ['addr', 'recipient'],
@@ -53,6 +58,28 @@ function fillFromUrl() {
       input.readOnly = false;
     }
   }
+
+  if (
+    Object.values(sharedLink).every(
+      (value) => value !== null && value.trim() !== '',
+    )
+  ) {
+    $('shared-link-amount').textContent = `${sharedLink.amount} token base units`;
+    $('shared-link-address').textContent = sharedLink.address;
+    $('shared-link-category').textContent = sharedLink.category;
+    $('shared-link-preview').classList.remove('hidden');
+
+    const title = `${sharedLink.amount} CashToken base units requested`;
+    const description =
+      `Send ${sharedLink.amount} token base units to ${sharedLink.address} ` +
+      `for CashToken category ${sharedLink.category}.`;
+    document.title = title;
+    document.querySelector('meta[name="description"]').content = description;
+    document.querySelector('meta[property="og:title"]').content = title;
+    document.querySelector('meta[property="og:description"]').content = description;
+    document.querySelector('meta[property="og:url"]').content = window.location.href;
+  }
+
   $('category-select').disabled =
     !walletReady || $('category').readOnly || $('category-select').options.length < 2;
 }

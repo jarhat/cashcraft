@@ -2,7 +2,7 @@ FROM node:22-alpine AS contract-build
 
 WORKDIR /build
 
-RUN npm install --global cashc@0.10.0
+RUN npm install --global cashc@0.14.0
 
 COPY contracts/HodlVault.cash ./contracts/HodlVault.cash
 
