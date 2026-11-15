@@ -41,6 +41,14 @@
         <span class="brand-dim">/ CASH</span>
       </a>
       <nav class="quick-nav" aria-label="Wallet actions">
+        <svg class="nav-snow" viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 16Q5 4 15 8Q22 1 32 6Q42 2 52 6Q63 0 75 5Q85 1 96 6Q108 0 120 5Q131 1 142 6Q152 0 164 5Q175 1 186 6Q198 0 210 5Q222 1 233 6Q244 0 256 5Q268 1 279 6Q294 1 300 16Z" fill="#f3fbff"/>
+        </svg>
+        <svg class="nav-santa-hat" viewBox="0 0 60 58" aria-hidden="true">
+          <path d="M10 40Q12 10 34 8Q48 7 51 24Q41 17 34 22Q29 28 31 39Z" fill="#d92e3f"/>
+          <path d="M10 40Q21 35 33 38L34 45Q22 43 9 48Z" fill="#fff"/>
+          <circle cx="51" cy="25" r="6" fill="#fff"/>
+        </svg>
         <button id="top-send" class="quick-action active" type="button" aria-controls="send-panel">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M12 5l7 7-7 7" /></svg>
           <span>Send</span>
@@ -50,12 +58,14 @@
           <span>Receive</span>
         </button>
         <button id="top-earn" class="quick-action" type="button" aria-controls="earn-section">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 7 3-3 15 15-3 3L3 7Zm8-4 3 3-7 7-3-3 7-7Zm4 7 3 3-7 7-3-3 7-7Z" /></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h18v4H3zM5 13v8h14v-8M12 9v12M12 9H8a2.5 2.5 0 1 1 2.3-3.5L12 9Zm0 0h4a2.5 2.5 0 1 0-2.3-3.5L12 9Z" /></svg>
           <span>Earn</span>
         </button>
       </nav>
       <div class="topbar-tools">
         <span class="network"><i></i><span id="network">CHIPNET</span></span>
+        <button id="session-toggle" class="small-button top-tool" type="button" aria-expanded="true" aria-controls="connection-section">Wizard Connect</button>
+        <button id="balance-toggle" class="small-button top-tool" type="button" aria-expanded="true" aria-controls="balance-section" aria-label="Toggle native balance">$</button>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to light theme">
           <svg class="theme-icon moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.4A8.5 8.5 0 0 1 8.6 3.8 8.5 8.5 0 1 0 20.2 15.4Z" /></svg>
           <svg class="theme-icon sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></svg>
@@ -66,7 +76,7 @@
     <section class="hero">
       <div class="hero-copy">
         <p class="eyebrow">BITCOIN CASH · CASHTOKENS</p>
-        <h1>Send<br><span>CashTokens</span></h1>
+        <h1>Move<br><span>Bitcoin Cash &amp; tokens</span></h1>
         <p class="intro">
           Connect a compatible wallet to participate.
         </p>
@@ -90,6 +100,11 @@
       </div>
     </section>
 
+    <aside id="request-preview" class="panel section request-preview" hidden aria-label="Payment request preview">
+      <p class="eyebrow">PAYMENT REQUEST</p>
+      <p id="request-preview-text"></p>
+    </aside>
+
     <section class="grid">
       <article id="connection-section" class="panel">
         <div class="heading">
@@ -97,7 +112,7 @@
             <p class="eyebrow">WALLET SESSION</p>
             <h2>Connection</h2>
           </div>
-          <span id="dot" class="dot"></span>
+          <div class="panel-controls"><span id="dot" class="dot" aria-label="Connection status"></span><button id="collapse-session" class="small-button" type="button">Collapse</button></div>
         </div>
 
         <p id="status" class="status">Not connected</p>
@@ -130,13 +145,13 @@
         </button>
       </article>
 
-      <article class="panel">
+      <article id="balance-section" class="panel">
         <div class="heading">
           <div>
             <p class="eyebrow">NATIVE BALANCE</p>
             <h2>Bitcoin Cash</h2>
           </div>
-          <span class="coin">₿</span>
+          <div class="panel-controls"><span class="coin">₿</span><button id="collapse-balance" class="small-button" type="button">Collapse</button></div>
         </div>
 
         <p id="bch" class="balance">— <small>BCH</small></p>
@@ -165,9 +180,22 @@
         <div class="empty">Connect your wallet to load balances.</div>
       </div>
 
-      <p class="fine">
-        Scans the first 50 receive and 50 change addresses. NFT balances are not included.
-      </p>
+      <details class="portfolio-settings">
+        <summary>Portfolio settings</summary>
+        <label for="scan-count">Addresses to scan per receive and change path (1–200)</label>
+        <input id="scan-count" type="number" min="1" max="200" step="1" value="50">
+        <button id="apply-scan" class="small-button" type="button">Save and rescan</button>
+        <label class="checkbox-label"><input id="show-nfts" type="checkbox"> Show NFTs</label>
+        <label class="checkbox-label"><input id="show-metadata" type="checkbox"> Look up token metadata from Paytaca</label>
+        <p class="fine">Metadata is a third-party identity claim, not proof of authenticity. Enabling this sends token category IDs to Paytaca.</p>
+        <label class="checkbox-label"><input id="show-prices" type="checkbox"> Show estimated mainnet CashToken prices</label>
+        <p class="fine">Uses Paytaca metadata, Cauldron pool reserves and the BCH/USD rate. Estimates ignore trade slippage and may be stale; category IDs are sent to both services.</p>
+        <p class="fine">A larger scan can take longer. Changes apply when balances are refreshed.</p>
+        <p class="fine">Fungible units attached to NFTs are shown with the NFT, not in the spendable token balance.</p>
+      </details>
+      <div id="market-prices" class="market-prices" hidden>
+        <div class="token-summary"><span class="token-icon pusd-icon" aria-hidden="true">$</span><div><strong>ParyonUSD (PUSD)</strong><code>Mainnet stablecoin</code></div><span id="pusd-price" class="token-amount">Loading…</span></div>
+      </div>
     </section>
 
     <section id="transfer-section" class="panel section transfer-panel">
@@ -270,6 +298,8 @@
           </div>
         </label>
 
+        <details class="receive-settings">
+          <summary>Advanced payment request</summary>
         <div class="form receive-form">
           <label>
             Token category ID
@@ -291,6 +321,8 @@
             >
           </label>
         </div>
+        <p class="fine">Optionally include a category and/or amount in the payment link. Amounts are token base units.</p>
+        </details>
 
         <button id="generate-payment" class="button primary send" type="button" disabled>
           Generate payment QR <span aria-hidden="true">⌁</span>
@@ -313,11 +345,14 @@
               Copy link
             </button>
           </div>
+          <div class="payment-actions">
+            <button id="share-payment" class="small-button" type="button">Share</button>
+            <button id="download-payment" class="small-button" type="button">Download QR</button>
+          </div>
         </div>
 
         <p class="fine">
-          The QR code contains a link to this site with the receive address,
-          category ID, and requested amount.
+          The QR code contains a link to this site with the receive address and any advanced request details.
         </p>
       </div>
     </section>

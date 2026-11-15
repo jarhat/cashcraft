@@ -17,10 +17,13 @@ import {
   placeholderP2PKHUnlocker,
 } from 'cashscript';
 import { submitCashAddress, API_BASE_URL } from './api.js';
+import { fetchTokenMetadata } from './metadata.js';
+import { fetchTokenPrice, PUSD_CATEGORY } from './market.js';
 import {
   SATOSHIS_PER_BCH,
   formatBch,
   normalizeUtxo,
+  paymentRequestUrl,
   utxoKey,
   wait,
 } from './utils.js';
@@ -55,6 +58,14 @@ function fillFromUrl() {
   }
   $('category-select').disabled =
     !walletReady || $('category').readOnly || $('category-select').options.length < 2;
+  const address = params.get('addr')?.trim();
+  if (address) {
+    const category = params.get('category')?.trim();
+    const amount = params.get('amount')?.trim();
+    $('request-preview-text').textContent =
+      `To: ${address}${category ? ` · Category: ${category}` : ''}${amount ? ` · Amount: ${amount} token base units` : ''}`;
+    $('request-preview').hidden = false;
+  }
 }
 
 const mainnet = network === 'mainnet';
@@ -62,7 +73,6 @@ const prefix = mainnet ? 'bitcoincash' : 'bchtest';
 const provider = new ElectrumNetworkProvider(mainnet ? 'mainnet' : 'chipnet');
 const $ = (id) => document.getElementById(id);
 
-const ADDRESS_SCAN_COUNT = 50;
 const SCAN_CONCURRENCY = 8;
 const SCAN_RETRY_DELAYS_MS = [300, 700, 1500];
 const MAXIMUM_FEE_SATOSHIS = 10_000n;
@@ -81,6 +91,47 @@ let addresses = [];
 let scanAddressRecords = [];
 let utxos = [];
 let bchUsd = null;
+const storedScanCount = Number(localStorage.getItem('ctf-scan-count'));
+let scanCount = Number.isInteger(storedScanCount) && storedScanCount >= 1 && storedScanCount <= 200
+  ? storedScanCount : 50;
+$('scan-count').value = String(scanCount);
+$('show-nfts').checked = localStorage.getItem('ctf-show-nfts') === 'true';
+$('show-metadata').checked = localStorage.getItem('ctf-show-metadata') === 'true';
+$('show-prices').checked = localStorage.getItem('ctf-show-prices') === 'true';
+const metadataCache = new Map();
+
+function getMetadata(category) {
+  if (!metadataCache.has(category)) {
+    const request = fetchTokenMetadata(category, network).catch((error) => {
+      metadataCache.delete(category);
+      throw error;
+    });
+    metadataCache.set(category, request);
+  }
+  return metadataCache.get(category);
+}
+
+function formatPrice(price) {
+  return `$${price.toLocaleString(undefined, { maximumFractionDigits: 6 })}`;
+}
+
+async function updateMarketPrices() {
+  $('market-prices').hidden = !$('show-prices').checked;
+  if (!$('show-prices').checked) return;
+  if (!mainnet) {
+    $('pusd-price').textContent = 'Mainnet only';
+    return;
+  }
+  $('pusd-price').textContent = 'Loading…';
+  try {
+    await bchPricePromise;
+    const price = await fetchTokenPrice(PUSD_CATEGORY, 2, bchUsd);
+    if ($('show-prices').checked) $('pusd-price').textContent = `${formatPrice(price)} / PUSD`;
+  } catch (error) {
+    console.warn('PUSD price unavailable:', error);
+    if ($('show-prices').checked) $('pusd-price').textContent = 'Price unavailable';
+  }
+}
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', fillFromUrl);
@@ -120,6 +171,8 @@ $('theme-toggle').addEventListener('click', () => {
 
 function setConnection(connected) {
   $('dot').classList.toggle('online', connected);
+  $('session-toggle').classList.toggle('connected', connected);
+  $('session-toggle').textContent = connected ? 'Wizard Connected' : 'Wizard Connect';
   $('refresh').disabled = !connected;
   $('send').disabled = !connected || sending;
   $('copy-address').disabled = !connected;
@@ -176,7 +229,7 @@ function deriveScanAddresses() {
     ['receive', 0],
     ['change', 1],
   ]) {
-    for (let index = 0; index < ADDRESS_SCAN_COUNT; index++) {
+    for (let index = 0; index < scanCount; index++) {
       records.push({
         pathName,
         pathIndex,
@@ -258,8 +311,6 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
       $('log').textContent = '';
 
       try {
-        scanAddressRecords = deriveScanAddresses();
-        addresses = scanAddressRecords;
         $('address').textContent = addressFor(0, 0);
         let addressSubmissionError;
         try {
@@ -503,11 +554,14 @@ function renderBalances(scannedUtxos) {
   const tokens = $('tokens');
   tokens.replaceChildren();
 
-  if (balances.size === 0) {
+  const nfts = $('show-nfts').checked
+    ? scannedUtxos.filter((utxo) => utxo.token?.nft)
+    : [];
+  if (balances.size === 0 && nfts.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty';
     empty.textContent =
-      'No fungible-token balances found in the scanned addresses.';
+      'No token balances found in the scanned addresses.';
     tokens.append(empty);
     return;
   }
@@ -530,12 +584,62 @@ function renderBalances(scannedUtxos) {
     categoryElement.textContent = category;
 
     details.append(title, categoryElement);
+    if ($('show-metadata').checked) {
+      const metadataStatus = document.createElement('span');
+      metadataStatus.className = 'fine metadata-status';
+      metadataStatus.textContent = 'Loading Paytaca metadata…';
+      details.append(metadataStatus);
+      getMetadata(category).then((metadata) => {
+        if (!row.isConnected) return;
+        title.textContent = [metadata.name, metadata.symbol && `(${metadata.symbol})`]
+          .filter(Boolean).join(' ') || 'Fungible token';
+        metadataStatus.textContent = metadata.description || 'Paytaca metadata';
+        if (metadata.decimals !== null) {
+          metadataStatus.textContent += ` · ${metadata.decimals} decimals`;
+        }
+      }).catch((error) => {
+        console.warn(`Metadata unavailable for ${category}:`, error);
+        metadataStatus.textContent = 'Paytaca metadata unavailable';
+      });
+    }
+    if ($('show-prices').checked && mainnet) {
+      const priceStatus = document.createElement('span');
+      priceStatus.className = 'fine metadata-status';
+      priceStatus.textContent = 'Loading price…';
+      details.append(priceStatus);
+      Promise.all([getMetadata(category), bchPricePromise])
+        .then(([metadata]) => fetchTokenPrice(category, metadata.decimals, bchUsd))
+        .then((price) => {
+          if (row.isConnected) priceStatus.textContent = `Estimated ${formatPrice(price)} / token`;
+        })
+        .catch((error) => {
+          console.warn(`Price unavailable for ${category}:`, error);
+          if (row.isConnected) priceStatus.textContent = 'Price unavailable';
+        });
+    }
 
     const amountElement = document.createElement('span');
     amountElement.className = 'token-amount';
     amountElement.textContent = `${amount} base units`;
     summary.append(icon, details, amountElement);
     row.append(summary);
+    tokens.append(row);
+  }
+
+  for (const utxo of nfts) {
+    const row = document.createElement('div');
+    row.className = 'token-row';
+    const title = document.createElement('strong');
+    title.textContent = `NFT · ${utxo.token.nft.capability || 'none'}`;
+    const category = document.createElement('code');
+    category.textContent = `Category: ${utxo.token.category}`;
+    const commitment = document.createElement('code');
+    commitment.textContent = `Commitment: ${utxo.token.nft.commitment || '(empty)'}`;
+    const outpoint = document.createElement('code');
+    outpoint.textContent = `Output: ${utxo.txid}:${utxo.vout}`;
+    const attachedAmount = document.createElement('code');
+    attachedAmount.textContent = `Attached fungible units: ${utxo.token.amount ?? 0}`;
+    row.append(title, category, commitment, attachedAmount, outpoint);
     tokens.append(row);
   }
 }
@@ -555,6 +659,7 @@ async function refreshBalances({ quiet = false } = {}) {
       $('status').textContent = 'Scanning wallet addresses…';
     }
 
+    scanAddressRecords = deriveScanAddresses();
     const scanned = await scanWallet();
 
     if (!walletReady || manager !== scanManager) {
@@ -957,6 +1062,74 @@ async function sendFungibleTokens() {
 
 $('connect').addEventListener('click', () => startConnection());
 
+$('session-toggle').addEventListener('click', () => {
+  const panel = $('connection-section');
+  if (panel.hidden || (!walletReady && $('pairing').classList.contains('hidden'))) {
+    panel.hidden = false;
+    $('session-toggle').setAttribute('aria-expanded', 'true');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!walletReady && !pairingInProgress && $('pairing').classList.contains('hidden')) {
+      startConnection();
+    }
+  } else {
+    panel.hidden = true;
+    $('session-toggle').setAttribute('aria-expanded', 'false');
+  }
+});
+
+$('balance-toggle').addEventListener('click', () => {
+  const panel = $('balance-section');
+  panel.hidden = !panel.hidden;
+  $('balance-toggle').setAttribute('aria-expanded', String(!panel.hidden));
+});
+
+for (const [button, panel, toggle] of [
+  ['collapse-session', 'connection-section', 'session-toggle'],
+  ['collapse-balance', 'balance-section', 'balance-toggle'],
+]) {
+  $(button).addEventListener('click', () => {
+    $(panel).hidden = true;
+    $(toggle).setAttribute('aria-expanded', 'false');
+    $(toggle).focus();
+  });
+}
+
+$('apply-scan').addEventListener('click', () => {
+  const value = Number($('scan-count').value);
+  if (!Number.isInteger(value) || value < 1 || value > 200) {
+    report(new Error('Choose between 1 and 200 addresses per path.'));
+    return;
+  }
+  scanCount = value;
+  localStorage.setItem('ctf-scan-count', String(value));
+  if (walletReady) {
+    if (refreshPromise) {
+      $('status').textContent = 'Scan setting saved · refresh again after the current scan';
+    } else {
+      refreshBalances().catch((error) => {
+        report(error);
+        $('status').textContent = 'Balance refresh failed · previous balances retained';
+      });
+    }
+  }
+});
+
+$('show-nfts').addEventListener('change', () => {
+  localStorage.setItem('ctf-show-nfts', String($('show-nfts').checked));
+  if (walletReady) renderBalances(utxos);
+});
+
+$('show-metadata').addEventListener('change', () => {
+  localStorage.setItem('ctf-show-metadata', String($('show-metadata').checked));
+  if (walletReady) renderBalances(utxos);
+});
+
+$('show-prices').addEventListener('change', () => {
+  localStorage.setItem('ctf-show-prices', String($('show-prices').checked));
+  updateMarketPrices();
+  if (walletReady) renderBalances(utxos);
+});
+
 $('forget').addEventListener('click', async () => {
   if (
     !window.confirm(
@@ -1090,27 +1263,13 @@ $('generate-payment').addEventListener('click', async () => {
     const category = $('receive-category').value.trim().toLowerCase();
     const amount = $('receive-amount').value.trim();
 
-    if (!/^[0-9a-f]{64}$/.test(category)) {
-      throw new Error('Category ID must be exactly 64 hexadecimal characters.');
-    }
-
-    if (!/^[1-9][0-9]*$/.test(amount)) {
-      throw new Error('Amount must be a positive whole number.');
-    }
-
-    // Keep the current site and path, replacing any existing query parameters.
-    const paymentUrl = new URL(window.location.href);
-    paymentUrl.search = '';
-    paymentUrl.hash = '';
-    paymentUrl.searchParams.set('addr', address);
-    paymentUrl.searchParams.set('amount', amount);
-    paymentUrl.searchParams.set('category', category);
+    const paymentUrl = paymentRequestUrl(window.location.href, address, category, amount);
 
     $('receive-address').textContent = address;
-    $('payment-url').textContent = paymentUrl.toString();
+    $('payment-url').textContent = paymentUrl;
 
     const qr = document.createElement('canvas');
-    await QRCode.toCanvas(qr, paymentUrl.toString(), {
+    await QRCode.toCanvas(qr, paymentUrl, {
       width: 190,
       margin: 1,
       errorCorrectionLevel: 'M',
@@ -1128,8 +1287,8 @@ $('generate-payment').addEventListener('click', async () => {
     canvas.width = qr.width;
     canvas.height = qr.height;
     canvas.getContext('2d').drawImage(qr, 0, 0);
-    $('payment-amount').textContent = `${amount} token base units`;
-    $('payment-category').textContent = category;
+    $('payment-amount').textContent = amount ? `${amount} token base units` : 'Any amount';
+    $('payment-category').textContent = category || 'Any CashToken';
     $('payment-result').classList.remove('hidden');
   } catch (error) {
     report(error);
@@ -1164,6 +1323,41 @@ $('copy-payment-url').addEventListener('click', async () => {
   } catch (error) {
     report(error);
   }
+});
+
+$('share-payment').addEventListener('click', async () => {
+  const url = $('payment-url').textContent;
+  try {
+    if (navigator.share) {
+      const base64 = $('payment-qr').toDataURL('image/png').split(',')[1];
+      const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+      const file = new File([bytes], 'cashtoken-payment-qr.png', { type: 'image/png' });
+      const data = { title: 'CashToken payment request', url };
+      if (navigator.canShare?.({ files: [file] })) data.files = [file];
+      await navigator.share(data);
+    } else {
+      await navigator.clipboard.writeText(url);
+      $('share-payment').textContent = 'Link copied';
+      setTimeout(() => { $('share-payment').textContent = 'Share'; }, 1200);
+    }
+  } catch (error) {
+    if (error.name !== 'AbortError') report(error);
+  }
+});
+
+$('download-payment').addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = 'cashtoken-payment-qr.png';
+  link.href = $('payment-qr').toDataURL('image/png');
+  link.click();
+});
+
+const hero = document.querySelector('.hero');
+let heroTimer = setTimeout(() => hero.classList.add('hero-collapsed'), 4500);
+document.querySelector('.brand').addEventListener('click', () => {
+  clearTimeout(heroTimer);
+  hero.classList.remove('hero-collapsed');
+  heroTimer = setTimeout(() => hero.classList.add('hero-collapsed'), 4500);
 });
 
 const tutorialSteps = [
@@ -1230,7 +1424,8 @@ $('wizard-next').addEventListener('click', () => {
 });
 
 
-fetchBchUsd();
+const bchPricePromise = fetchBchUsd();
+updateMarketPrices();
 
 try {
   if (loadSession()?.walletPublicKey) {
