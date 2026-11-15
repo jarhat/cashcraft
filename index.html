@@ -46,7 +46,6 @@
       <path fill="#b4f7d8" d="M6 9h3v3h3v3H9v3H6v-3H3v-3h3zM117 111h3v3h3v3h-3v3h-3v-3h-3v-3h3zM116 9h3v3h-3zM4 108h3v3H4z"/>
     </svg>
   </div>
-
   <main class="shell">
     <header class="topbar">
       <a class="brand" href="#">
@@ -112,13 +111,16 @@
 
     <aside class="wizard-guide" aria-label="Wizard tutorial">
       <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
-        <svg viewBox="0 0 64 72" shape-rendering="crispEdges" aria-hidden="true">
-          <path fill="#94d9f4" d="M30 2h8v8h4v8h4v8h8v6H10v-6h8v-8h4v-8h8z"/>
-          <path fill="#517caa" d="M10 28h44v8H10zM18 48h28v6h6v14H12V54h6z"/>
-          <path fill="#f3d9b8" d="M20 36h24v14H20z"/>
-          <path fill="#e8f7ff" d="M20 46h24v10H20zM24 56h16v6H24z"/>
-          <path fill="#26394f" d="M24 39h4v4h-4zM36 39h4v4h-4z"/>
-          <path fill="#a0f2cf" d="M29 16h6v6h-6zM26 19h12v2H26z"/>
+        <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true">
+          <path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/>
+          <path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/>
+          <path fill="#f0c7ae" d="M13 18h10v8H13z"/>
+          <path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/>
+          <path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/>
+          <path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/>
+          <path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/>
+          <path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/>
+          <path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/>
         </svg>
         <span>Wizard help</span>
       </button>
@@ -173,7 +175,7 @@
         </button>
       </article>
 
-      <article class="panel">
+      <article id="balance-section" class="panel">
         <div class="heading">
           <div>
             <p class="eyebrow">NATIVE BALANCE</p>
@@ -193,24 +195,6 @@
           <button id="copy-address" class="small-button" disabled>Copy</button>
         </div>
       </article>
-    </section>
-
-    <section id="earn-section" class="panel section">
-      <div class="heading">
-        <div>
-          <p class="eyebrow">PORTFOLIO</p>
-          <h2>Tokens</h2>
-        </div>
-        <span id="token-count" class="muted">—</span>
-      </div>
-
-      <div id="tokens" class="token-list">
-        <div class="empty">Connect your wallet to load balances.</div>
-      </div>
-
-      <p class="fine">
-        Scans the first 50 receive and 50 change addresses. NFT balances are not included.
-      </p>
     </section>
 
     <section id="transfer-section" class="panel section transfer-panel">
@@ -373,6 +357,22 @@
           category ID, and requested amount.
         </p>
       </div>
+    </section>
+
+    <section id="earn-section" class="panel section">
+      <div class="heading">
+        <div>
+          <p class="eyebrow">PORTFOLIO</p>
+          <h2>Tokens</h2>
+        </div>
+        <span id="token-count" class="muted">—</span>
+      </div>
+      <div id="tokens" class="token-list">
+        <div class="empty">Connect your wallet to load balances.</div>
+      </div>
+      <p class="fine">
+        Scans the first 50 receive and 50 change addresses. NFT balances are not included.
+      </p>
     </section>
 
     <footer>
