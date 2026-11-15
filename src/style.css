@@ -116,11 +116,22 @@ button {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: #edf5ff;
   font-size: .76rem;
   font-weight: 800;
   letter-spacing: .16em;
   text-decoration: none;
+}
+
+.brand-snowflake {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  background: var(--ice);
+  mask: url("/icon.svg") center / contain no-repeat;
 }
 
 .brand-dim {
@@ -831,7 +842,7 @@ input[readonly] {
   gap: 18px;
   padding: 8px;
   border-radius: 14px;
-  background: rgb(6 15 32 / 96%);
+  background: transparent;
 }
 
 .quick-nav,
@@ -874,18 +885,6 @@ input[readonly] {
   padding: 7px 12px;
   font-size: .76rem;
   font-weight: 700;
-}
-
-.quick-action::before {
-  position: absolute;
-  top: -3px;
-  left: 15%;
-  width: 70%;
-  height: 5px;
-  background: #e7f6ff;
-  clip-path: polygon(0 60%, 10% 60%, 10% 20%, 27% 20%, 27% 60%, 46% 60%, 46% 0, 62% 0, 62% 60%, 83% 60%, 83% 20%, 100% 20%, 100% 100%, 0 100%);
-  content: "";
-  pointer-events: none;
 }
 
 .quick-action svg,
@@ -1020,36 +1019,10 @@ input[readonly] {
   stroke-linejoin: round;
 }
 
-html[data-theme="blue"] {
-  background: #071528;
-  --ice: #9bd8ff;
-  --mint: #8be5ef;
-  --line: rgb(157 207 255 / 20%);
-  --glass-tint: rgb(12 42 73 / 76%);
-  --glass-border: rgb(161 215 255 / 24%);
-  --glass-glow: rgb(88 175 255 / 19%);
-  --accent-soft: #a4dfff;
-}
-
-html[data-theme="blue"] body {
-  background: radial-gradient(ellipse at 50% -15%, #174e80, transparent 58%),
-    radial-gradient(ellipse at 100% 60%, rgb(33 117 154 / 22%), transparent 48%), #071528;
-}
-
-html[data-theme="green"] {
-  background: #071b15;
+html[data-theme="aurora"] {
   --ice: #a1edc5;
   --mint: #69e2a1;
-  --line: rgb(154 235 194 / 20%);
-  --glass-tint: rgb(12 48 36 / 76%);
-  --glass-border: rgb(154 239 193 / 24%);
-  --glass-glow: rgb(78 225 153 / 17%);
   --accent-soft: #a5eec7;
-}
-
-html[data-theme="green"] body {
-  background: radial-gradient(ellipse at 50% -15%, #205c44, transparent 58%),
-    radial-gradient(ellipse at 100% 60%, rgb(29 126 86 / 20%), transparent 48%), #071b15;
 }
 
 .theme-icon {
@@ -1426,10 +1399,6 @@ html[data-theme="light"] select {
   scroll-margin-top: 140px;
 }
 
-.grid > .wizard-guide {
-  grid-column: 1 / -1;
-}
-
 .notification-toggle {
   position: relative;
   flex: none;
@@ -1716,13 +1685,6 @@ footer span:first-child {
 }
 
 @media (max-width: 680px) {
-  .moon-background {
-    top: 95px;
-    right: 0;
-    width: 180px;
-    opacity: .32;
-  }
-
   .topbar-tools {
     gap: 4px;
   }
