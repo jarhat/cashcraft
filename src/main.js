@@ -1,4 +1,5 @@
 import './style.css';
+import { setLanguage, translate } from './i18n.js';
 import QRCode from 'qrcode';
 import {
   decodeCashAddress,
@@ -30,6 +31,10 @@ import {
 
 const network = (import.meta.env.VITE_BCH_NETWORK || 'mainnet').toLowerCase();
 
+for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
+  document.querySelector(selector).content = new URL('/social-preview.png', window.location.origin).href;
+}
+
 if (!['mainnet', 'chipnet'].includes(network)) {
   throw new Error(
     `Unsupported VITE_BCH_NETWORK "${network}". Use "mainnet" or "chipnet".`,
@@ -38,6 +43,11 @@ if (!['mainnet', 'chipnet'].includes(network)) {
 
 function fillFromUrl() {
   const params = new URLSearchParams(window.location.search);
+  const sharedLink = {
+    address: params.get('addr'),
+    category: params.get('category'),
+    amount: params.get('amount'),
+  };
 
   const fields = [
     ['addr', 'recipient'],
@@ -56,6 +66,30 @@ function fillFromUrl() {
       input.readOnly = false;
     }
   }
+
+  $('category-selector').hidden = $('category').readOnly;
+
+  if (
+    Object.values(sharedLink).every(
+      (value) => value !== null && value.trim() !== '',
+    )
+  ) {
+    $('shared-link-amount').textContent = `${sharedLink.amount} token base units`;
+    $('shared-link-address').textContent = sharedLink.address;
+    $('shared-link-category').textContent = sharedLink.category;
+    $('shared-link-preview').classList.remove('hidden');
+
+    const title = `${sharedLink.amount} CashToken base units requested`;
+    const description =
+      `Send ${sharedLink.amount} token base units to ${sharedLink.address} ` +
+      `for CashToken category ${sharedLink.category}.`;
+    document.title = title;
+    document.querySelector('meta[name="description"]').content = description;
+    document.querySelector('meta[property="og:title"]').content = title;
+    document.querySelector('meta[property="og:description"]').content = description;
+    document.querySelector('meta[property="og:url"]').content = window.location.href;
+  }
+
   $('category-select').disabled =
     !walletReady || $('category').readOnly || $('category-select').options.length < 2;
   const address = params.get('addr')?.trim();
@@ -145,29 +179,50 @@ function report(error) {
 }
 
 const savedTheme = localStorage.getItem('ctf-theme');
-document.documentElement.dataset.theme =
-  savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark';
-document.querySelector('meta[name="theme-color"]').content =
-  document.documentElement.dataset.theme === 'dark' ? '#05070b' : '#eaf3fa';
-$('theme-toggle').setAttribute(
-  'aria-label',
-  `Switch to ${document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'} theme`,
-);
-
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem('ctf-theme', theme);
-  document.querySelector('meta[name="theme-color"]').content =
-    theme === 'dark' ? '#05070b' : '#eaf3fa';
-  $('theme-toggle').setAttribute(
-    'aria-label',
-    `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`,
-  );
+  document.querySelector('meta[name="theme-color"]').content = {
+    dark: '#05070b', bch: '#071a13', 'bch-sunrise': '#211912',
+  }[theme];
+  document.querySelectorAll('[data-theme-option]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.themeOption === theme));
+  });
 }
+setTheme(['dark', 'bch', 'bch-sunrise'].includes(savedTheme) ? savedTheme : 'dark');
 
-$('theme-toggle').addEventListener('click', () => {
-  setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
-});
+for (const name of ['theme', 'language']) {
+  const toggle = $(`${name}-toggle`);
+  const menu = $(`${name}-menu`);
+  const close = () => {
+    menu.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+  };
+  toggle.addEventListener('click', () => {
+    const opening = menu.hidden;
+    document.querySelectorAll('.tool-dropdown').forEach((other) => { other.hidden = true; });
+    document.querySelectorAll('.tool-menu > button').forEach((other) => other.setAttribute('aria-expanded', 'false'));
+    menu.hidden = !opening;
+    toggle.setAttribute('aria-expanded', String(opening));
+  });
+  menu.addEventListener('click', (event) => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    if (name === 'theme') setTheme(button.dataset.themeOption);
+    else setLanguage(button.dataset.languageOption);
+    close();
+    toggle.focus();
+  });
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.tool-menu') || !toggle.parentElement.contains(event.target)) close();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !menu.hidden) {
+      close();
+      toggle.focus();
+    }
+  });
+}
 
 function setConnection(connected) {
   $('dot').classList.toggle('online', connected);
@@ -583,7 +638,24 @@ function renderBalances(scannedUtxos) {
     const categoryElement = document.createElement('code');
     categoryElement.textContent = category;
 
-    details.append(title, categoryElement);
+    const copyCategory = document.createElement('button');
+    copyCategory.type = 'button';
+    copyCategory.className = 'small-button';
+    copyCategory.textContent = 'Copy';
+    copyCategory.setAttribute('aria-label', 'Copy category ID');
+    copyCategory.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(category);
+        copyCategory.textContent = 'Copied';
+        setTimeout(() => { copyCategory.textContent = 'Copy'; }, 1200);
+      } catch (error) {
+        report(error);
+      }
+    });
+    const categoryLine = document.createElement('div');
+    categoryLine.className = 'category-line';
+    categoryLine.append(categoryElement, copyCategory);
+    details.append(title, categoryLine);
     if ($('show-metadata').checked) {
       const metadataStatus = document.createElement('span');
       metadataStatus.className = 'fine metadata-status';
@@ -760,11 +832,11 @@ async function sendFungibleTokens() {
     if (
       mainnet &&
       !window.confirm(
-        `MAINNET transaction\n\n` +
-          `Send ${amount.toString()} token units\n` +
-          `Category: ${requestedCategory}\n` +
-          `To: ${recipient}\n\n` +
-          `The wallet will ask you to approve and sign this transaction.`,
+        `${translate('MAINNET transaction')}\n\n` +
+          `${translate(`Send ${amount.toString()} token units`)}\n` +
+          `${translate('Category')}: ${requestedCategory}\n` +
+          `${translate('To')}: ${recipient}\n\n` +
+          translate('The wallet will ask you to approve and sign this transaction.'),
       )
     ) {
       $('status').textContent = 'Mainnet transaction cancelled';
@@ -932,7 +1004,7 @@ async function sendFungibleTokens() {
 
     const transaction = builder.generateWcTransactionObject({
       broadcast: false,
-      userPrompt: `Send ${amount.toString()} fungible token units`,
+      userPrompt: translate(`Send ${amount.toString()} fungible token units`),
     });
 
     if (!Array.isArray(transaction?.sourceOutputs)) {
@@ -969,7 +1041,7 @@ async function sendFungibleTokens() {
       ),
       sourceOutputs: transaction.sourceOutputs.map(sourceOutputToRelay),
       broadcast: false,
-      userPrompt: `Send ${amount.toString()} fungible token units`,
+      userPrompt: translate(`Send ${amount.toString()} fungible token units`),
     };
 
     if (relayTransaction.sourceOutputs.length !== inputPaths.length) {
@@ -1133,7 +1205,7 @@ $('show-prices').addEventListener('change', () => {
 $('forget').addEventListener('click', async () => {
   if (
     !window.confirm(
-      'Forget this saved pairing and create a new WizardConnect session?',
+      translate('Forget this saved pairing and create a new WizardConnect session?'),
     )
   ) {
     return;
@@ -1325,31 +1397,35 @@ $('copy-payment-url').addEventListener('click', async () => {
   }
 });
 
-$('share-payment').addEventListener('click', async () => {
-  const url = $('payment-url').textContent;
+$('download-payment-qr').addEventListener('click', () => {
   try {
-    if (navigator.share) {
-      const base64 = $('payment-qr').toDataURL('image/png').split(',')[1];
-      const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
-      const file = new File([bytes], 'cashtoken-payment-qr.png', { type: 'image/png' });
-      const data = { title: 'CashToken payment request', url };
-      if (navigator.canShare?.({ files: [file] })) data.files = [file];
-      await navigator.share(data);
-    } else {
-      await navigator.clipboard.writeText(url);
-      $('share-payment').textContent = 'Link copied';
-      setTimeout(() => { $('share-payment').textContent = 'Share'; }, 1200);
-    }
+    const link = document.createElement('a');
+    link.download = 'cashtoken-payment-qr.png';
+    link.href = $('payment-qr').toDataURL('image/png');
+    link.click();
   } catch (error) {
-    if (error.name !== 'AbortError') report(error);
+    report(error);
   }
 });
 
-$('download-payment').addEventListener('click', () => {
-  const link = document.createElement('a');
-  link.download = 'cashtoken-payment-qr.png';
-  link.href = $('payment-qr').toDataURL('image/png');
-  link.click();
+$('share-payment-qr').addEventListener('click', async () => {
+  try {
+    const url = $('payment-url').textContent;
+    if (!navigator.share) {
+      await navigator.clipboard.writeText(url);
+      $('share-payment-qr').querySelector('span').textContent = 'Copied';
+      setTimeout(() => { $('share-payment-qr').querySelector('span').textContent = 'Share QR'; }, 1200);
+      return;
+    }
+    const encoded = $('payment-qr').toDataURL('image/png').split(',')[1];
+    const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+    const file = new File([bytes], 'cashtoken-payment-qr.png', { type: 'image/png' });
+    const data = { title: 'CTF Cash', url };
+    if (navigator.canShare?.({ files: [file] })) data.files = [file];
+    await navigator.share(data);
+  } catch (error) {
+    if (error.name !== 'AbortError') report(error);
+  }
 });
 
 const hero = document.querySelector('.hero');

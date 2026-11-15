@@ -1,6 +1,7 @@
 :8080 {
   root * /srv
   encode gzip
+  templates
   try_files {path} /index.html
   file_server
 }

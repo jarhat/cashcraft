@@ -59,7 +59,8 @@ body::after {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -203,11 +204,39 @@ h1 {
   font-weight: 400;
 }
 
-h1 span {
+h1 .hero-slide span {
   color: #8395aa;
   background: linear-gradient(100deg, #8395aa 10%, #c1eaff 48%, #87d9d0 90%);
+  -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.hero-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.hero-headline {
+  display: grid;
+  font-size: clamp(4.5rem, 8vw, 7rem);
+}
+
+.hero-slide {
+  grid-area: 1 / 1;
+  opacity: 0;
+  animation: hero-slide 24s ease-in-out infinite;
+}
+
+.hero-slide:nth-child(2) { animation-delay: -18s; }
+.hero-slide:nth-child(3) { animation-delay: -12s; }
+.hero-slide:nth-child(4) { animation-delay: -6s; }
+
+@keyframes hero-slide {
+  0%, 20% { opacity: 1; transform: translateY(0); }
+  25%, 95% { opacity: 0; transform: translateY(-12px); }
+  96% { transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 .intro {
@@ -245,13 +274,12 @@ h1 span {
 }
 
 .pixel-stars { fill: #b6e8f4; }
-.pixel-orbit { fill: #538da5; }
 .pixel-planet { fill: #a7deea; }
-.pixel-shadow { fill: #6ea7b8; }
-.pixel-craters { fill: #d3f4f4; }
-.pixel-ring { fill: #c4f1e0; }
+.pixel-shadow { fill: #304b60; }
+.pixel-craters { fill: #70aabc; }
 .pixel-ship { fill: #e0f6ff; }
 .pixel-flame { fill: #f0bf82; }
+.pixel-rocket-detail { fill: #6da9bb; }
 
 .grid {
   display: grid;
@@ -634,8 +662,8 @@ footer {
     width: 100%;
   }
 
-  h1 {
-    font-size: clamp(3.5rem, 13vw, 5.5rem);
+  .hero-headline {
+    font-size: clamp(3.1rem, 11vw, 5.5rem);
   }
 
   .space-art {
@@ -672,6 +700,15 @@ footer {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
+  }
+
+  .hero-slide {
+    animation: none;
+    opacity: 0;
+  }
+
+  .hero-slide:first-child {
+    opacity: 1;
   }
 }
 
@@ -736,6 +773,42 @@ input[readonly] {
   margin-top: 0;
 }
 
+.shared-link-preview {
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid var(--line-bright);
+  border-radius: 14px;
+  background:
+    radial-gradient(ellipse at 0 0, rgb(155 222 255 / 8%), transparent 58%),
+    rgb(1 10 17 / 34%);
+}
+
+.shared-link-preview .eyebrow {
+  margin: 0 0 10px;
+  color: var(--ice);
+}
+
+.shared-link-preview dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.shared-link-preview dl > div {
+  min-width: 0;
+}
+
+.shared-link-preview dt {
+  color: var(--muted);
+  font-size: .72rem;
+}
+
+.shared-link-preview dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font: .78rem/1.5 var(--mono);
+}
+
 .payment-result {
   display: grid;
   justify-items: center;
@@ -779,6 +852,7 @@ input[readonly] {
 }
 
 .topbar {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   gap: 18px;
@@ -860,6 +934,10 @@ input[readonly] {
   stroke-width: 1.8;
 }
 
+#top-send svg { color: #8ed8ff; }
+#top-receive svg { color: #ff9fbb; }
+#top-earn svg { color: #f4c779; }
+
 .quick-action:hover,
 .theme-toggle:hover {
   border-color: rgb(169 221 255 / 22%);
@@ -889,6 +967,111 @@ input[readonly] {
   border-color: var(--line);
   background: rgb(255 255 255 / 4%);
   color: #c8d8e7;
+}
+
+.tool-menu {
+  position: relative;
+}
+
+.tool-dropdown {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  min-width: 150px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #102333;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 35%);
+}
+
+.tool-dropdown[hidden] {
+  display: none;
+}
+
+.tool-dropdown button {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #e9f4ff;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tool-dropdown button:hover,
+.tool-dropdown button[aria-pressed="true"] {
+  background: rgb(160 242 207 / 16%);
+}
+
+.category-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.category-line code {
+  min-width: 0;
+  flex: 1;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+html[data-theme="bch"] {
+  background: #071a13;
+  --ice: #8fe6b3;
+  --mint: #55d98b;
+  --panel: rgb(12 38 27 / 88%);
+  --line: rgb(137 231 173 / 20%);
+}
+
+html[data-theme="bch"] body {
+  background: radial-gradient(ellipse at 50% -20%, #245c3b, transparent 60%), #071a13;
+}
+
+html[data-theme="bch-sunrise"] {
+  background: #211912;
+  --ice: #f1cf8c;
+  --mint: #81d99d;
+  --panel: rgb(50 37 25 / 90%);
+  --line: rgb(241 207 140 / 22%);
+}
+
+html[data-theme="bch-sunrise"] body {
+  background: radial-gradient(ellipse at 50% -20%, #675039, transparent 60%), #211912;
+}
+
+html[data-theme="bch"] .primary,
+html[data-theme="bch-sunrise"] .primary {
+  border-color: #9af0b9;
+  background: linear-gradient(125deg, #c0f8d3, #63cf8b);
+}
+
+html[data-theme="bch"] .eyebrow,
+html[data-theme="bch-sunrise"] .eyebrow {
+  color: var(--ice);
+}
+
+html[data-theme="bch"] h1 .hero-slide span,
+html[data-theme="bch-sunrise"] h1 .hero-slide span {
+  background-image: linear-gradient(100deg, #76c393, #e1f8c5, #83dba1);
 }
 
 .theme-icon {
@@ -1014,7 +1197,7 @@ html[data-theme="light"] .eyebrow {
   color: #397c9e;
 }
 
-html[data-theme="light"] h1 span {
+html[data-theme="light"] h1 .hero-slide span {
   background-image: linear-gradient(100deg, #68849a 10%, #3987aa 48%, #318d7e 90%);
 }
 
@@ -1138,13 +1321,12 @@ html[data-theme="light"] .space-art-label {
 }
 
 html[data-theme="light"] .pixel-stars { fill: #4d899f; }
-html[data-theme="light"] .pixel-orbit { fill: #6394a5; }
 html[data-theme="light"] .pixel-planet { fill: #79b4c6; }
-html[data-theme="light"] .pixel-shadow { fill: #4f8d9f; }
-html[data-theme="light"] .pixel-craters { fill: #c5e8e8; }
-html[data-theme="light"] .pixel-ring { fill: #5b9e8d; }
+html[data-theme="light"] .pixel-shadow { fill: #416d80; }
+html[data-theme="light"] .pixel-craters { fill: #4f8d9f; }
 html[data-theme="light"] .pixel-ship { fill: #346d88; }
 html[data-theme="light"] .pixel-flame { fill: #cd8553; }
+html[data-theme="light"] .pixel-rocket-detail { fill: #a7deea; }
 
 @media (max-width: 760px) {
   .topbar {
