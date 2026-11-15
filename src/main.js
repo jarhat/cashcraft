@@ -131,13 +131,13 @@ function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem('ctf-theme', theme);
   document.querySelector('meta[name="theme-color"]').content = {
-    dark: '#05070b', bch: '#071a13', 'bch-sunrise': '#211912',
+    voxel: '#060f20', dark: '#05070b', bch: '#071a13', 'bch-sunrise': '#211912',
   }[theme];
   document.querySelectorAll('[data-theme-option]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.themeOption === theme));
   });
 }
-setTheme(['dark', 'bch', 'bch-sunrise'].includes(savedTheme) ? savedTheme : 'dark');
+setTheme(['voxel', 'dark', 'bch', 'bch-sunrise'].includes(savedTheme) ? savedTheme : 'voxel');
 
 for (const name of ['theme', 'language']) {
   const toggle = $(`${name}-toggle`);
@@ -1338,17 +1338,43 @@ const tutorialSteps = [
     message: 'Pair with WizardConnect using the QR code or open the pairing link in your wallet. Approve the connection there.',
   },
   {
-    id: 'earn-section',
-    title: 'Explore your portfolio',
-    message: 'Your fungible token balances and category IDs appear here after the wallet scan.',
+    id: 'balance-section',
+    title: 'Check your balance',
+    message: 'Your BCH balance and first receive address appear here after connecting.',
   },
   {
     id: 'transfer-section',
     title: 'Send or receive',
     message: 'Select a token to send, or switch to Receive to create a payment QR. Amounts are whole base units; review every transaction in your wallet.',
   },
+  {
+    id: 'earn-section',
+    title: 'Explore your portfolio',
+    message: 'Your fungible token balances and category IDs appear here after the wallet scan.',
+  },
 ];
 let tutorialStep = 0;
+let tutorialPositionFrame = 0;
+
+function positionTutorial() {
+  tutorialPositionFrame = 0;
+  const guide = document.querySelector('.wizard-guide');
+  if ($('wizard-dialog').hidden) return;
+  const panel = $(tutorialSteps[tutorialStep].id).getBoundingClientRect();
+  const bar = document.querySelector('.topbar').getBoundingClientRect();
+  const width = guide.offsetWidth;
+  const height = guide.offsetHeight;
+  const left = Math.max(8, Math.min(window.innerWidth - width - 8, panel.left + panel.width * .15));
+  const top = Math.max(bar.bottom + 8, Math.min(window.innerHeight - height - 8, panel.top + 24));
+  guide.style.left = `${left}px`;
+  guide.style.top = `${top}px`;
+}
+
+function scheduleTutorialPosition() {
+  if (!tutorialPositionFrame && !$('wizard-dialog').hidden) {
+    tutorialPositionFrame = requestAnimationFrame(positionTutorial);
+  }
+}
 
 function showTutorialStep() {
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
@@ -1361,11 +1387,16 @@ function showTutorialStep() {
   $('wizard-prev').disabled = tutorialStep === 0;
   $('wizard-next').textContent = tutorialStep === tutorialSteps.length - 1 ? 'Done' : 'Next';
   panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  scheduleTutorialPosition();
 }
 
 function closeTutorial() {
   $('wizard-dialog').hidden = true;
   $('wizard-toggle').setAttribute('aria-expanded', 'false');
+  const guide = document.querySelector('.wizard-guide');
+  guide.classList.remove('walking');
+  guide.style.removeProperty('left');
+  guide.style.removeProperty('top');
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
 }
 
@@ -1376,9 +1407,12 @@ $('wizard-toggle').addEventListener('click', () => {
   }
   tutorialStep = 0;
   $('wizard-dialog').hidden = false;
+  document.querySelector('.wizard-guide').classList.add('walking');
   $('wizard-toggle').setAttribute('aria-expanded', 'true');
   showTutorialStep();
 });
+window.addEventListener('scroll', scheduleTutorialPosition, { passive: true });
+window.addEventListener('resize', scheduleTutorialPosition);
 $('wizard-prev').addEventListener('click', () => {
   if (tutorialStep > 0) {
     tutorialStep--;

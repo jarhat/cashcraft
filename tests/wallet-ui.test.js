@@ -200,3 +200,63 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   await categoryLine.children[1].handler();
   assert.equal(copied, category);
 });
+
+test('wizard follows the panels in reading order and resets when closed', () => {
+  const highlighted = new Set();
+  const nodes = new Map();
+  const positions = {
+    'connection-section': 20, 'balance-section': 520,
+    'transfer-section': 20, 'earn-section': 20,
+  };
+  const element = (id) => {
+    if (!nodes.has(id)) nodes.set(id, {
+      hidden: id === 'wizard-dialog', listeners: {},
+      style: { removeProperty(name) { delete this[name]; } },
+      classList: {
+        add(name) { if (name === 'tutorial-highlight') highlighted.add(id); },
+        remove(name) { if (name === 'tutorial-highlight') highlighted.delete(id); },
+      },
+      setAttribute() {},
+      addEventListener(type, handler) { this.listeners[type] = handler; },
+      scrollIntoView() {},
+      getBoundingClientRect() { return { left: positions[id], top: 200, width: 400 }; },
+    });
+    return nodes.get(id);
+  };
+  const guide = element('guide');
+  guide.offsetWidth = 250;
+  guide.offsetHeight = 120;
+  const callbacks = [];
+  const document = {
+    querySelector(selector) {
+      return selector === '.wizard-guide' ? guide : { getBoundingClientRect: () => ({ bottom: 60 }) };
+    },
+    querySelectorAll() { return [...highlighted].map(element); },
+  };
+  const start = source.indexOf('const tutorialSteps =');
+  const end = source.indexOf('\n\nfetchBchUsd();', start);
+  runInNewContext(source.slice(start, end), {
+    $, document, window: { innerWidth: 1000, innerHeight: 800, addEventListener() {} },
+    requestAnimationFrame(callback) { callbacks.push(callback); return callbacks.length; },
+  });
+  function $ (id) { return element(id); }
+  const flush = () => callbacks.shift()();
+  element('wizard-toggle').listeners.click();
+  flush();
+  assert.deepEqual([...highlighted], ['connection-section']);
+  const firstLeft = parseFloat(guide.style.left);
+  element('wizard-next').listeners.click();
+  flush();
+  assert.deepEqual([...highlighted], ['balance-section']);
+  assert.ok(parseFloat(guide.style.left) > firstLeft);
+  element('wizard-next').listeners.click();
+  flush();
+  assert.deepEqual([...highlighted], ['transfer-section']);
+  element('wizard-next').listeners.click();
+  flush();
+  assert.deepEqual([...highlighted], ['earn-section']);
+  element('wizard-next').listeners.click();
+  assert.equal(element('wizard-dialog').hidden, true);
+  assert.equal(highlighted.size, 0);
+  assert.equal(guide.style.left, undefined);
+});
