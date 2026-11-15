@@ -2,6 +2,7 @@ import './style.css';
 import { setLanguage, translate } from './i18n.js';
 import { createPaymentQrImage } from './payment-qr-image.js';
 import { setupScrollEffects } from './scroll-effects.js';
+import { fetchTokenMetadata, fetchCauldronSpot } from './portfolio-data.js';
 import { loadTokenLogo } from './token-logo.js';
 import { submitCashAddress, API_BASE_URL } from './api.js';
 import {
@@ -124,6 +125,7 @@ let addresses = [];
 let scanAddressRecords = [];
 let utxos = [];
 let bchUsd = null;
+let portfolioVersion = 0;
 
 function report(error) {
   console.error(error);
@@ -184,6 +186,7 @@ function setConnection(connected) {
 }
 
 function clearWalletDisplay() {
+  portfolioVersion++;
   addresses = [];
   scanAddressRecords = [];
   utxos = [];
@@ -194,6 +197,7 @@ function clearWalletDisplay() {
   $('token-count').textContent = '—';
   $('tokens').innerHTML =
     '<div class="empty">Connect a wallet to view token balances.</div>';
+  $('portfolio-chart-content').textContent = translate('Connect a wallet to view allocation.');
   $('category-select').replaceChildren(new Option('Enter a category ID manually', ''));
   $('category-select').disabled = true;
   $('receive-address').textContent = 'Connect wallet to load your address';
@@ -524,6 +528,9 @@ async function scanWallet() {
 }
 
 function renderBalances(scannedUtxos) {
+  const version = ++portfolioVersion;
+  const pricedTokens = [];
+  $('portfolio-chart-content').textContent = translate('Loading Cauldron prices…');
   let satoshis = 0n;
 
   for (const utxo of scannedUtxos) {
@@ -577,9 +584,11 @@ function renderBalances(scannedUtxos) {
     empty.textContent =
       'No fungible-token balances found in the scanned addresses.';
     tokens.append(empty);
+    $('portfolio-chart-content').textContent = translate('No priced token balances available.');
     return;
   }
 
+  let remaining = balances.size;
   for (const [category, amount] of balances.entries()) {
     const row = document.createElement('div');
     row.className = 'token-row';
@@ -619,8 +628,20 @@ function renderBalances(scannedUtxos) {
     });
     const categoryLine = document.createElement('div');
     categoryLine.className = 'category-line';
-    categoryLine.append(categoryElement, copyCategory);
+    const info = document.createElement('details');
+    info.className = 'metadata-info';
+    const infoToggle = document.createElement('summary');
+    infoToggle.textContent = 'ⓘ';
+    infoToggle.setAttribute('aria-label', translate('Token metadata'));
+    const infoText = document.createElement('p');
+    infoText.textContent = translate('Loading token metadata…');
+    info.append(infoToggle, infoText);
+    categoryLine.append(info, categoryElement, copyCategory);
     details.append(title, categoryLine);
+    const price = document.createElement('div');
+    price.className = 'token-metadata';
+    price.textContent = translate('Loading Cauldron price…');
+    details.append(price);
 
     const amountElement = document.createElement('span');
     amountElement.className = 'token-amount';
@@ -628,7 +649,78 @@ function renderBalances(scannedUtxos) {
     summary.append(icon, details, amountElement);
     row.append(summary);
     tokens.append(row);
+
+    const metadataPromise = mainnet
+      ? fetchTokenMetadata(category)
+      : Promise.reject(new Error('BCMR metadata is only available for mainnet.'));
+    Promise.allSettled([metadataPromise, fetchCauldronSpot(category, network)]).then(([metadataResult, priceResult]) => {
+      if (version !== portfolioVersion) return;
+      const metadata = metadataResult.status === 'fulfilled' ? metadataResult.value : null;
+      if (metadata) {
+        title.textContent = metadata.name || metadata.symbol || translate('Fungible token');
+        infoText.textContent = [metadata.symbol, metadata.description, `${metadata.decimals} decimals`].filter(Boolean).join(' · ');
+        if (metadata.icon) {
+          const image = document.createElement('img');
+          image.alt = '';
+          image.referrerPolicy = 'no-referrer';
+          image.addEventListener('error', () => { icon.textContent = '◆'; });
+          image.src = metadata.icon;
+          icon.replaceChildren(image);
+        }
+      } else {
+        infoText.textContent = translate('BCMR metadata unavailable.');
+        console.warn(`BCMR metadata unavailable for ${category}:`, metadataResult.reason);
+      }
+      if (priceResult.status === 'fulfilled') {
+        const spot = priceResult.value;
+        const value = Number(amount) * spot;
+        if (Number.isFinite(value) && value > 0) {
+          const unit = metadata ? spot * 10 ** metadata.decimals : spot;
+          const denomination = metadata?.symbol || (metadata ? translate('token') : translate('base unit'));
+          price.textContent = `≈ ${unit.toPrecision(4)} BCH / ${denomination} · ≈ ${value.toPrecision(4)} BCH`;
+          pricedTokens.push({ category, name: metadata?.symbol || metadata?.name || `${category.slice(0, 10)}…`, value });
+        } else price.textContent = translate('Cauldron price unavailable.');
+      } else {
+        price.textContent = translate('Cauldron price unavailable.');
+        console.warn(`Cauldron price unavailable for ${category}:`, priceResult.reason);
+      }
+      if (--remaining === 0) renderPortfolioChart(pricedTokens);
+    });
   }
+}
+
+function renderPortfolioChart(items) {
+  const content = $('portfolio-chart-content');
+  content.replaceChildren();
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  if (!items.length || !Number.isFinite(total) || total <= 0) {
+    content.textContent = translate('No priced token balances available.');
+    return;
+  }
+  const colors = ['#55bfff', '#a0f2cf', '#ffbc77', '#c4a4ff', '#ff84a0', '#e4df89'];
+  const wrapper = document.createElement('div');
+  wrapper.className = 'allocation';
+  const pie = document.createElement('div');
+  pie.className = 'allocation-pie';
+  pie.setAttribute('aria-hidden', 'true');
+  const legend = document.createElement('ul');
+  legend.className = 'allocation-legend';
+  let offset = 0;
+  const stops = items.map((item, index) => {
+    const start = offset;
+    offset += item.value / total * 100;
+    const color = colors[index % colors.length];
+    const li = document.createElement('li');
+    const swatch = document.createElement('span');
+    swatch.className = 'allocation-swatch';
+    swatch.style.backgroundColor = color;
+    li.append(swatch, document.createTextNode(`${item.name}: ${(item.value / total * 100).toFixed(1)}% · ${item.value.toPrecision(4)} BCH`));
+    legend.append(li);
+    return `${color} ${start}% ${offset}%`;
+  });
+  pie.style.background = `conic-gradient(${stops.join(', ')})`;
+  wrapper.append(pie, legend);
+  content.append(wrapper);
 }
 
 async function refreshBalances({ quiet = false } = {}) {
@@ -1252,21 +1344,18 @@ $('generate-payment').addEventListener('click', async () => {
       width: 512,
       margin: 4,
       errorCorrectionLevel: 'H',
-      color: { dark: '#ffffff', light: '#000000' },
+      color: { dark: '#07111b', light: '#ffffff' },
     });
-
-    if (mainnet) {
-      try {
-        const logo = await loadTokenLogo(category);
-        const context = qr.getContext('2d');
-        const size = qr.width * 0.1;
-        const x = (qr.width - size) / 2;
-        context.fillStyle = '#000000';
-        context.fillRect(x - 3, x - 3, size + 6, size + 6);
-        context.drawImage(logo, x, x, size, size);
-      } catch (error) {
-        report(error);
-      }
+    const context = qr.getContext('2d');
+    const center = qr.width / 2;
+    const size = qr.width * 0.09;
+    context.fillStyle = '#ffffff';
+    context.fillRect(center - size / 2 - 4, center - size / 2 - 4, size + 8, size + 8);
+    context.fillStyle = '#0879c9';
+    context.fillRect(center - size * 0.1, center - size * 0.4, size * 0.2, size * 0.8);
+    context.fillRect(center - size * 0.4, center - size * 0.1, size * 0.8, size * 0.2);
+    for (const x of [-1, 1]) for (const y of [-1, 1]) {
+      context.fillRect(center + x * size * 0.25 - size * 0.08, center + y * size * 0.25 - size * 0.08, size * 0.16, size * 0.16);
     }
 
     if (
@@ -1283,6 +1372,20 @@ $('generate-payment').addEventListener('click', async () => {
     $('payment-amount').textContent = `${amount} token base units`;
     $('payment-category').textContent = category;
     $('payment-result').classList.remove('hidden');
+
+    if (mainnet) {
+      loadTokenLogo(category).then((logo) => {
+        if ($('payment-result').classList.contains('hidden') ||
+            $('payment-url').textContent !== paymentUrl.toString() ||
+            !walletReady || addressFor(0, 0, 'p2pkhWithTokens') !== address) return;
+        const context = canvas.getContext('2d');
+        const size = canvas.width * 0.09;
+        const start = (canvas.width - size) / 2;
+        context.fillStyle = '#ffffff';
+        context.fillRect(start - 4, start - 4, size + 8, size + 8);
+        context.drawImage(logo, start, start, size, size);
+      }).catch((error) => console.warn(`Token logo unavailable for ${category}:`, error));
+    }
   } catch (error) {
     report(error);
   }
