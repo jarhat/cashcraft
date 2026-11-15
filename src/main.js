@@ -16,6 +16,14 @@ import {
   TransactionBuilder,
   placeholderP2PKHUnlocker,
 } from 'cashscript';
+import { submitCashAddress, API_BASE_URL } from './api.js';
+import {
+  SATOSHIS_PER_BCH,
+  formatBch,
+  normalizeUtxo,
+  utxoKey,
+  wait,
+} from './utils.js';
 
 const network = (import.meta.env.VITE_BCH_NETWORK || 'chipnet').toLowerCase();
 
@@ -25,42 +33,28 @@ if (!['mainnet', 'chipnet'].includes(network)) {
   );
 }
 
-const params = new URLSearchParams(window.location.search);
-
-const value = params.get("category");     // first value, or null
-const allValues = params.getAll("addr"); // all values for repeated keys
-const hasParam = params.has("amount");
-
-console.log(value)
-console.log(allValues)
-console.log(hasParam)
-
 function fillFromUrl() {
   const params = new URLSearchParams(window.location.search);
 
   const fields = [
-    ["addr", "recipient"],
-    ["category", "category"],
-    ["amount", "amount"]
+    ['addr', 'recipient'],
+    ['category', 'category'],
+    ['amount', 'amount'],
   ];
 
   for (const [paramName, inputId] of fields) {
     const input = document.getElementById(inputId);
     const value = params.get(paramName);
 
-    if (value !== null && value.trim() !== "") {
+    if (value !== null && value.trim() !== '') {
       input.value = value;
       input.readOnly = true;
     } else {
       input.readOnly = false;
     }
   }
-}
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", fillFromUrl);
-} else {
-  fillFromUrl();
+  $('category-select').disabled =
+    !walletReady || $('category').readOnly || $('category-select').options.length < 2;
 }
 
 const mainnet = network === 'mainnet';
@@ -71,7 +65,6 @@ const $ = (id) => document.getElementById(id);
 const ADDRESS_SCAN_COUNT = 50;
 const SCAN_CONCURRENCY = 8;
 const SCAN_RETRY_DELAYS_MS = [300, 700, 1500];
-const SATOSHIS_PER_BCH = 100_000_000n;
 const MAXIMUM_FEE_SATOSHIS = 10_000n;
 const FEE_RESERVE_SATOSHIS = 10_000n;
 const TOKEN_OUTPUT_SATOSHIS = 1_000n;
@@ -89,40 +82,41 @@ let scanAddressRecords = [];
 let utxos = [];
 let bchUsd = null;
 
-const API_BASE_URL = "https://auth.ctf.cash";
-
-async function submitCashAddress(cashAddress) {
-  if (typeof cashAddress !== "string" || !cashAddress.trim()) {
-    throw new TypeError("A cash address is required.");
-  }
-
-  console.log(cashAddress.trim())
-
-  const response = await fetch(`${API_BASE_URL}/api/cash-address`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      cash_address: cashAddress.trim(),
-    }),
-  });
-
-  const result = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(
-      result.detail ?? `Address API error (${response.status})`,
-    );
-  }
-  return result.cash_address;
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', fillFromUrl);
+} else {
+  fillFromUrl();
 }
-
 
 function report(error) {
   console.error(error);
   $('log').textContent = error?.message || String(error);
 }
+
+const savedTheme = localStorage.getItem('ctf-theme');
+document.documentElement.dataset.theme =
+  savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark';
+document.querySelector('meta[name="theme-color"]').content =
+  document.documentElement.dataset.theme === 'dark' ? '#05070b' : '#eaf3fa';
+$('theme-toggle').setAttribute(
+  'aria-label',
+  `Switch to ${document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'} theme`,
+);
+
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem('ctf-theme', theme);
+  document.querySelector('meta[name="theme-color"]').content =
+    theme === 'dark' ? '#05070b' : '#eaf3fa';
+  $('theme-toggle').setAttribute(
+    'aria-label',
+    `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`,
+  );
+}
+
+$('theme-toggle').addEventListener('click', () => {
+  setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+});
 
 function setConnection(connected) {
   $('dot').classList.toggle('online', connected);
@@ -136,12 +130,19 @@ function clearWalletDisplay() {
   addresses = [];
   scanAddressRecords = [];
   utxos = [];
+  refreshPromise = null;
   $('address').textContent = 'Connect wallet to derive address';
   $('bch').innerHTML = `— <small>BCH</small>`;
   $('usd').textContent = 'USD value unavailable';
   $('token-count').textContent = '—';
   $('tokens').innerHTML =
     '<div class="empty">Connect a wallet to view token balances.</div>';
+  $('category-select').replaceChildren(new Option('Enter a category ID manually', ''));
+  $('category-select').disabled = true;
+  $('receive-address').textContent = 'Connect wallet to load your address';
+  $('generate-payment').disabled = true;
+  $('copy-receive-address').disabled = true;
+  $('payment-result').classList.add('hidden');
 }
 
 function publicKey(pathIndex, index) {
@@ -189,86 +190,13 @@ function deriveScanAddresses() {
   return records;
 }
 
-function formatBch(satoshis) {
-  const whole = satoshis / SATOSHIS_PER_BCH;
-  const fraction = (satoshis % SATOSHIS_PER_BCH)
-    .toString()
-    .padStart(8, '0');
-
-  return `${whole.toString()}.${fraction}`;
-}
-
-function utxoKey(utxo) {
-  const txid = utxo.txid ?? utxo.txHash;
-  const outputIndex = utxo.vout ?? utxo.outputIndex ?? utxo.index;
-
-  if (txid == null || outputIndex == null) return null;
-  return `${String(txid).toLowerCase()}:${outputIndex}`;
-}
-
-function normalizeUtxo(utxo, record) {
-  const txid = String(utxo.txid ?? utxo.txHash ?? '').toLowerCase();
-  const vout = Number(utxo.vout ?? utxo.outputIndex ?? utxo.index);
-
-  if (!/^[0-9a-f]{64}$/.test(txid)) {
-    throw new Error(
-      `Invalid transaction ID for ${record.pathName}/${record.index}.`,
-    );
-  }
-
-  if (!Number.isSafeInteger(vout) || vout < 0) {
-    throw new Error(
-      `Invalid output index for ${record.pathName}/${record.index}.`,
-    );
-  }
-
-  let satoshis;
-
-  try {
-    satoshis = BigInt(utxo.satoshis);
-  } catch {
-    throw new Error(`Invalid satoshi value for ${txid}:${vout}.`);
-  }
-
-  if (satoshis <= 0n) {
-    throw new Error(`Non-positive UTXO value for ${txid}:${vout}.`);
-  }
-
-  const normalized = {
-    ...utxo,
-    txid,
-    vout,
-    satoshis,
-    pathName: record.pathName,
-    pathIndex: record.pathIndex,
-    addressIndex: record.index,
-    spendAddress: record.spendAddress,
-  };
-
-  if (normalized.token?.amount != null) {
-    try {
-      normalized.token = {
-        ...normalized.token,
-        amount: BigInt(normalized.token.amount),
-      };
-    } catch {
-      throw new Error(`Invalid token amount for ${txid}:${vout}.`);
-    }
-  }
-
-  return normalized;
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function showPairingUri(uri) {
   if (!uri) {
     throw new Error('WizardConnect did not return a pairing URI.');
   }
 
   $('pair-uri').textContent = uri;
+  $('open-wallet').href = uri;
   $('pairing').classList.remove('hidden');
 
   await QRCode.toCanvas($('qr'), uri, {
@@ -287,6 +215,8 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
   $('log').textContent = '';
   walletReady = false;
   clearWalletDisplay();
+  $('pairing').classList.add('hidden');
+  $('open-wallet').removeAttribute('href');
   setConnection(false);
 
   try {
@@ -316,7 +246,9 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
     manager = new DappConnectionManager('CTF CashTokens');
 
     manager.on('walletready', async (message) => {
+      const sessionManager = manager;
       walletReady = true;
+      updateReceiveAddress();
       setConnection(true);
       $('pairing').classList.add('hidden');
       $('status').textContent =
@@ -329,9 +261,21 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         scanAddressRecords = deriveScanAddresses();
         addresses = scanAddressRecords;
         $('address').textContent = addressFor(0, 0);
-	const acceptedAddress = await submitCashAddress(addressFor(0,0));
+        let addressSubmissionError;
+        try {
+          await submitCashAddress(addressFor(0, 0));
+        } catch (error) {
+          addressSubmissionError = error;
+          console.error('Could not submit the wallet address:', error);
+        }
         await refreshBalances();
+        if (addressSubmissionError) {
+          report(addressSubmissionError);
+          $('status').textContent =
+            'Wallet connected · balances refreshed; address submission failed';
+        }
       } catch (error) {
+        if (!walletReady || manager !== sessionManager) return;
         report(error);
         $('status').textContent = 'Wallet connected · balance scan failed';
       }
@@ -340,7 +284,9 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
     manager.on('disconnect', (reason, message) => {
       walletReady = false;
       setConnection(false);
-      scanAddressRecords = [];
+      clearWalletDisplay();
+      $('pairing').classList.add('hidden');
+      $('open-wallet').removeAttribute('href');
       $('status').textContent =
         `Wallet disconnected · ${message || reason || 'connection closed'}`;
       report(
@@ -545,6 +491,15 @@ function renderBalances(scannedUtxos) {
       balances.size === 1 ? 'category' : 'categories'
     }`;
 
+  const selector = $('category-select');
+  const selectedCategory = $('category').value.trim().toLowerCase();
+  selector.replaceChildren(new Option('Enter a category ID manually', ''));
+  for (const [category, amount] of balances) {
+    selector.add(new Option(`${category} (${amount} base units)`, category));
+  }
+  selector.value = balances.has(selectedCategory) ? selectedCategory : '';
+  selector.disabled = !walletReady || $('category').readOnly || balances.size === 0;
+
   const tokens = $('tokens');
   tokens.replaceChildren();
 
@@ -561,6 +516,12 @@ function renderBalances(scannedUtxos) {
     const row = document.createElement('div');
     row.className = 'token-row';
 
+    const summary = document.createElement('div');
+    summary.className = 'token-summary';
+    const icon = document.createElement('span');
+    icon.className = 'token-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '◆';
     const details = document.createElement('div');
     const title = document.createElement('strong');
     title.textContent = 'Fungible token';
@@ -572,9 +533,9 @@ function renderBalances(scannedUtxos) {
 
     const amountElement = document.createElement('span');
     amountElement.className = 'token-amount';
-    amountElement.textContent = amount.toString();
-
-    row.append(details, amountElement);
+    amountElement.textContent = `${amount} base units`;
+    summary.append(icon, details, amountElement);
+    row.append(summary);
     tokens.append(row);
   }
 }
@@ -589,11 +550,16 @@ async function refreshBalances({ quiet = false } = {}) {
   if (refreshPromise) return refreshPromise;
 
   const scanPromise = (async () => {
+    const scanManager = manager;
     if (!quiet) {
       $('status').textContent = 'Scanning wallet addresses…';
     }
 
     const scanned = await scanWallet();
+
+    if (!walletReady || manager !== scanManager) {
+      throw new Error('Wallet disconnected during the balance scan.');
+    }
 
     addresses = scanned.addresses;
     utxos = scanned.utxos;
@@ -1034,6 +1000,16 @@ $('refresh').addEventListener('click', () => {
 });
 
 $('send').addEventListener('click', sendFungibleTokens);
+$('category-select').addEventListener('change', () => {
+  if (!$('category').readOnly) $('category').value = $('category-select').value;
+});
+$('category').addEventListener('input', () => {
+  const value = $('category').value.trim().toLowerCase();
+  $('category-select').value =
+    [...$('category-select').options].some((option) => option.value === value)
+      ? value
+      : '';
+});
 
 $('copy-address').addEventListener('click', async () => {
   try {
@@ -1060,6 +1036,199 @@ $('copy-uri').addEventListener('click', async () => {
     report(error);
   }
 });
+
+function setTransferTab(tabName) {
+  const isSend = tabName === 'send';
+
+  $('send-tab').classList.toggle('active', isSend);
+  $('receive-tab').classList.toggle('active', !isSend);
+  $('top-send').classList.toggle('active', isSend);
+  $('top-receive').classList.toggle('active', !isSend);
+  $('top-earn').classList.remove('active');
+  $('send-tab').setAttribute('aria-selected', String(isSend));
+  $('receive-tab').setAttribute('aria-selected', String(!isSend));
+
+  $('send-panel').hidden = !isSend;
+  $('send-panel').classList.toggle('hidden', !isSend);
+  $('receive-panel').hidden = isSend;
+  $('receive-panel').classList.toggle('hidden', isSend);
+}
+
+function updateReceiveAddress() {
+  if (!walletReady) return;
+
+  const address = addressFor(0, 0, 'p2pkhWithTokens');
+  $('receive-address').textContent = address;
+  $('generate-payment').disabled = false;
+  $('copy-receive-address').disabled = false;
+}
+
+$('send-tab').addEventListener('click', () => setTransferTab('send'));
+$('receive-tab').addEventListener('click', () => setTransferTab('receive'));
+$('top-send').addEventListener('click', () => {
+  setTransferTab('send');
+  $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('top-receive').addEventListener('click', () => {
+  setTransferTab('receive');
+  $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('top-earn').addEventListener('click', () => {
+  $('top-send').classList.remove('active');
+  $('top-receive').classList.remove('active');
+  $('top-earn').classList.add('active');
+  $('earn-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+$('generate-payment').addEventListener('click', async () => {
+  try {
+    if (!walletReady) {
+      throw new Error('Connect your wallet before creating a payment QR.');
+    }
+
+    const address = addressFor(0, 0, 'p2pkhWithTokens');
+    const category = $('receive-category').value.trim().toLowerCase();
+    const amount = $('receive-amount').value.trim();
+
+    if (!/^[0-9a-f]{64}$/.test(category)) {
+      throw new Error('Category ID must be exactly 64 hexadecimal characters.');
+    }
+
+    if (!/^[1-9][0-9]*$/.test(amount)) {
+      throw new Error('Amount must be a positive whole number.');
+    }
+
+    // Keep the current site and path, replacing any existing query parameters.
+    const paymentUrl = new URL(window.location.href);
+    paymentUrl.search = '';
+    paymentUrl.hash = '';
+    paymentUrl.searchParams.set('addr', address);
+    paymentUrl.searchParams.set('amount', amount);
+    paymentUrl.searchParams.set('category', category);
+
+    $('receive-address').textContent = address;
+    $('payment-url').textContent = paymentUrl.toString();
+
+    const qr = document.createElement('canvas');
+    await QRCode.toCanvas(qr, paymentUrl.toString(), {
+      width: 190,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#07111b', light: '#ffffff' },
+    });
+
+    if (
+      !walletReady ||
+      addressFor(0, 0, 'p2pkhWithTokens') !== address ||
+      $('receive-category').value.trim().toLowerCase() !== category ||
+      $('receive-amount').value.trim() !== amount
+    ) return;
+
+    const canvas = $('payment-qr');
+    canvas.width = qr.width;
+    canvas.height = qr.height;
+    canvas.getContext('2d').drawImage(qr, 0, 0);
+    $('payment-amount').textContent = `${amount} token base units`;
+    $('payment-category').textContent = category;
+    $('payment-result').classList.remove('hidden');
+  } catch (error) {
+    report(error);
+  }
+});
+
+for (const id of ['receive-category', 'receive-amount']) {
+  $(id).addEventListener('input', () => $('payment-result').classList.add('hidden'));
+}
+
+$('copy-receive-address').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('receive-address').textContent);
+    $('copy-receive-address').textContent = 'Copied';
+
+    setTimeout(() => {
+      $('copy-receive-address').textContent = 'Copy';
+    }, 1200);
+  } catch (error) {
+    report(error);
+  }
+});
+
+$('copy-payment-url').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('payment-url').textContent);
+    $('copy-payment-url').textContent = 'Copied';
+
+    setTimeout(() => {
+      $('copy-payment-url').textContent = 'Copy link';
+    }, 1200);
+  } catch (error) {
+    report(error);
+  }
+});
+
+const tutorialSteps = [
+  {
+    id: 'connection-section',
+    title: 'Connect your wallet',
+    message: 'Pair with WizardConnect using the QR code or open the pairing link in your wallet. Approve the connection there.',
+  },
+  {
+    id: 'earn-section',
+    title: 'Explore your portfolio',
+    message: 'Your fungible token balances and category IDs appear here after the wallet scan.',
+  },
+  {
+    id: 'transfer-section',
+    title: 'Send or receive',
+    message: 'Select a token to send, or switch to Receive to create a payment QR. Amounts are whole base units; review every transaction in your wallet.',
+  },
+];
+let tutorialStep = 0;
+
+function showTutorialStep() {
+  document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
+  const step = tutorialSteps[tutorialStep];
+  const panel = $(step.id);
+  panel.classList.add('tutorial-highlight');
+  $('wizard-title').textContent = step.title;
+  $('wizard-message').textContent = step.message;
+  $('wizard-progress').textContent = `${tutorialStep + 1} / ${tutorialSteps.length}`;
+  $('wizard-prev').disabled = tutorialStep === 0;
+  $('wizard-next').textContent = tutorialStep === tutorialSteps.length - 1 ? 'Done' : 'Next';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function closeTutorial() {
+  $('wizard-dialog').hidden = true;
+  $('wizard-toggle').setAttribute('aria-expanded', 'false');
+  document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
+}
+
+$('wizard-toggle').addEventListener('click', () => {
+  if (!$('wizard-dialog').hidden) {
+    closeTutorial();
+    return;
+  }
+  tutorialStep = 0;
+  $('wizard-dialog').hidden = false;
+  $('wizard-toggle').setAttribute('aria-expanded', 'true');
+  showTutorialStep();
+});
+$('wizard-prev').addEventListener('click', () => {
+  if (tutorialStep > 0) {
+    tutorialStep--;
+    showTutorialStep();
+  }
+});
+$('wizard-next').addEventListener('click', () => {
+  if (tutorialStep === tutorialSteps.length - 1) {
+    closeTutorial();
+  } else {
+    tutorialStep++;
+    showTutorialStep();
+  }
+});
+
 
 fetchBchUsd();
 
