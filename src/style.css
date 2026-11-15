@@ -59,7 +59,8 @@ body::after {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -206,6 +207,7 @@ h1 {
 h1 .hero-slide span {
   color: #8395aa;
   background: linear-gradient(100deg, #8395aa 10%, #c1eaff 48%, #87d9d0 90%);
+  -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -910,6 +912,10 @@ input[readonly] {
   stroke-width: 1.8;
 }
 
+#top-send svg { color: #8ed8ff; }
+#top-receive svg { color: #ff9fbb; }
+#top-earn svg { color: #f4c779; }
+
 .quick-action:hover,
 .theme-toggle:hover {
   border-color: rgb(169 221 255 / 22%);
@@ -939,6 +945,111 @@ input[readonly] {
   border-color: var(--line);
   background: rgb(255 255 255 / 4%);
   color: #c8d8e7;
+}
+
+.tool-menu {
+  position: relative;
+}
+
+.tool-dropdown {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  min-width: 150px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #102333;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 35%);
+}
+
+.tool-dropdown[hidden] {
+  display: none;
+}
+
+.tool-dropdown button {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #e9f4ff;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tool-dropdown button:hover,
+.tool-dropdown button[aria-pressed="true"] {
+  background: rgb(160 242 207 / 16%);
+}
+
+.category-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.category-line code {
+  min-width: 0;
+  flex: 1;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+html[data-theme="bch"] {
+  background: #071a13;
+  --ice: #8fe6b3;
+  --mint: #55d98b;
+  --panel: rgb(12 38 27 / 88%);
+  --line: rgb(137 231 173 / 20%);
+}
+
+html[data-theme="bch"] body {
+  background: radial-gradient(ellipse at 50% -20%, #245c3b, transparent 60%), #071a13;
+}
+
+html[data-theme="bch-sunrise"] {
+  background: #211912;
+  --ice: #f1cf8c;
+  --mint: #81d99d;
+  --panel: rgb(50 37 25 / 90%);
+  --line: rgb(241 207 140 / 22%);
+}
+
+html[data-theme="bch-sunrise"] body {
+  background: radial-gradient(ellipse at 50% -20%, #675039, transparent 60%), #211912;
+}
+
+html[data-theme="bch"] .primary,
+html[data-theme="bch-sunrise"] .primary {
+  border-color: #9af0b9;
+  background: linear-gradient(125deg, #c0f8d3, #63cf8b);
+}
+
+html[data-theme="bch"] .eyebrow,
+html[data-theme="bch-sunrise"] .eyebrow {
+  color: var(--ice);
+}
+
+html[data-theme="bch"] h1 .hero-slide span,
+html[data-theme="bch-sunrise"] h1 .hero-slide span {
+  background-image: linear-gradient(100deg, #76c393, #e1f8c5, #83dba1);
 }
 
 .theme-icon {
