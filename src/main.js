@@ -17,6 +17,7 @@ import {
   placeholderP2PKHUnlocker,
 } from 'cashscript';
 import { submitCashAddress, API_BASE_URL } from './api.js';
+import { formatTokenAmount, parseRegistry } from './bcmr.js';
 import {
   SATOSHIS_PER_BCH,
   formatBch,
@@ -59,11 +60,12 @@ function fillFromUrl() {
     }
   }
 
-  if (
-    Object.values(sharedLink).every(
-      (value) => value !== null && value.trim() !== '',
-    )
-  ) {
+  const isSharedLink = Object.values(sharedLink).every(
+    (value) => value !== null && value.trim() !== '',
+  );
+  $('available-tokens').hidden = isSharedLink;
+
+  if (isSharedLink) {
     $('shared-link-amount').textContent = `${sharedLink.amount} token base units`;
     $('shared-link-address').textContent = sharedLink.address;
     $('shared-link-category').textContent = sharedLink.category;
@@ -108,6 +110,8 @@ let addresses = [];
 let scanAddressRecords = [];
 let utxos = [];
 let bchUsd = null;
+let tokenMetadata = new Map();
+let registryLoadId = 0;
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', fillFromUrl);
@@ -119,6 +123,72 @@ function report(error) {
   console.error(error);
   $('log').textContent = error?.message || String(error);
 }
+
+async function copyCategory(button, category) {
+  try {
+    await navigator.clipboard.writeText(category);
+    button.textContent = 'Copied';
+    setTimeout(() => {
+      button.textContent = 'Copy';
+    }, 1200);
+  } catch (error) {
+    report(error);
+  }
+}
+
+$('copy-shared-category').addEventListener('click', (event) => {
+  copyCategory(event.currentTarget, $('shared-link-category').textContent);
+});
+$('copy-payment-category').addEventListener('click', (event) => {
+  copyCategory(event.currentTarget, $('payment-category').textContent);
+});
+
+function renderTokenIcon(container, metadata) {
+  container.replaceChildren();
+  container.textContent = '◆';
+  if (!metadata?.iconUrl) return;
+  const image = document.createElement('img');
+  image.alt = '';
+  image.referrerPolicy = 'no-referrer';
+  image.addEventListener('error', () => image.remove());
+  image.src = metadata.iconUrl;
+  container.append(image);
+}
+
+function tokenAmount(amount, metadata) {
+  const base = `${amount} base units`;
+  if (!metadata || metadata.decimals === null) return base;
+  const formatted = formatTokenAmount(amount, metadata.decimals);
+  return `${formatted}${metadata.symbol ? ` ${metadata.symbol}` : ''} (${base})`;
+}
+
+function renderPaymentMetadata() {
+  const category = $('payment-category').textContent;
+  const metadata = tokenMetadata.get(category);
+  renderTokenIcon($('payment-icon'), metadata);
+  $('payment-name').textContent = metadata?.name || 'Fungible token';
+  $('payment-description').textContent = metadata?.description || '';
+  $('payment-amount').textContent = tokenAmount($('receive-amount').value.trim(), metadata);
+}
+
+$('registry-file').addEventListener('change', async (event) => {
+  const file = event.currentTarget.files[0];
+  const loadId = ++registryLoadId;
+  if (!file) return;
+  try {
+    if (file.size > 5 * 1024 * 1024) throw new Error('Registry file must be 5 MB or smaller.');
+    const registry = parseRegistry(JSON.parse(await file.text()));
+    if (loadId !== registryLoadId) return;
+    tokenMetadata = registry;
+    $('registry-status').textContent = `Loaded metadata for ${registry.size} token categories.`;
+    if (walletReady) renderBalances(utxos);
+    if (!$('payment-result').classList.contains('hidden')) renderPaymentMetadata();
+  } catch (error) {
+    if (loadId !== registryLoadId) return;
+    $('registry-status').textContent = `Could not load registry: ${error.message}`;
+    console.error('Could not load BCMR registry:', error);
+  }
+});
 
 const savedTheme = localStorage.getItem('ctf-theme');
 document.documentElement.dataset.theme =
@@ -540,6 +610,7 @@ function renderBalances(scannedUtxos) {
   }
 
   for (const [category, amount] of balances.entries()) {
+    const metadata = tokenMetadata.get(category);
     const row = document.createElement('div');
     row.className = 'token-row';
 
@@ -548,19 +619,32 @@ function renderBalances(scannedUtxos) {
     const icon = document.createElement('span');
     icon.className = 'token-icon';
     icon.setAttribute('aria-hidden', 'true');
-    icon.textContent = '◆';
+    renderTokenIcon(icon, metadata);
     const details = document.createElement('div');
     const title = document.createElement('strong');
-    title.textContent = 'Fungible token';
+    title.textContent = metadata?.name || 'Fungible token';
+    const description = document.createElement('p');
+    description.className = 'token-description';
+    description.textContent = metadata?.description || '';
 
     const categoryElement = document.createElement('code');
     categoryElement.textContent = category;
 
-    details.append(title, categoryElement);
+    const categoryLine = document.createElement('div');
+    categoryLine.className = 'category-line';
+    const copyButton = document.createElement('button');
+    copyButton.className = 'small-button';
+    copyButton.type = 'button';
+    copyButton.setAttribute('aria-label', `Copy category ${category}`);
+    copyButton.textContent = 'Copy';
+    copyButton.addEventListener('click', () => copyCategory(copyButton, category));
+    categoryLine.append(categoryElement, copyButton);
+
+    details.append(title, description, categoryLine);
 
     const amountElement = document.createElement('span');
     amountElement.className = 'token-amount';
-    amountElement.textContent = `${amount} base units`;
+    amountElement.textContent = tokenAmount(amount, metadata);
     summary.append(icon, details, amountElement);
     row.append(summary);
     tokens.append(row);
@@ -1155,8 +1239,8 @@ $('generate-payment').addEventListener('click', async () => {
     canvas.width = qr.width;
     canvas.height = qr.height;
     canvas.getContext('2d').drawImage(qr, 0, 0);
-    $('payment-amount').textContent = `${amount} token base units`;
     $('payment-category').textContent = category;
+    renderPaymentMetadata();
     $('payment-result').classList.remove('hidden');
   } catch (error) {
     report(error);

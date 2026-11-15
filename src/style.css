@@ -1259,6 +1259,7 @@ html[data-theme="light"] .pixel-rocket-detail { fill: #a7deea; }
 }
 
 .token-icon {
+  position: relative;
   display: grid;
   width: 36px;
   height: 36px;
@@ -1270,12 +1271,113 @@ html[data-theme="light"] .pixel-rocket-detail { fill: #a7deea; }
   color: var(--ice);
 }
 
+.token-icon img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  background: #172635;
+}
+
+.token-description {
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: .73rem;
+}
+
+.token-description:empty {
+  display: none;
+}
+
+.payment-amount {
+  display: block;
+  color: var(--mint);
+  font: .72rem var(--mono);
+}
+
+.registry-settings {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgb(120 195 215 / 4%);
+}
+
+.registry-settings summary {
+  color: var(--ice);
+  font-weight: 700;
+}
+
+.registry-settings summary span {
+  margin-left: 8px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.registry-settings p {
+  margin: 10px 0;
+  color: var(--muted);
+  font-size: .72rem;
+}
+
+.registry-settings input {
+  font-size: .72rem;
+}
+
+.panel {
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.panel:focus-within {
+  border-color: rgb(169 228 255 / 30%);
+  box-shadow: 0 12px 38px rgb(0 0 0 / 16%), 0 0 0 1px rgb(169 228 255 / 6%);
+}
+
+.small-button:focus-visible,
+.quick-action:focus-visible,
+.transfer-tab:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--ice);
+  outline-offset: 3px;
+}
+
+.category-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.category-line code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .payment-token {
   display: flex;
   max-width: 100%;
   align-items: center;
   gap: 10px;
   text-align: left;
+}
+
+.payment-token > div {
+  min-width: 0;
+}
+
+@media (max-width: 680px) {
+  .token-summary {
+    flex-wrap: wrap;
+  }
+
+  .token-amount {
+    width: 100%;
+    padding-left: 48px;
+    font-size: .75rem;
+  }
 }
 
 .payment-token code {

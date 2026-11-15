@@ -56,7 +56,7 @@
           <span>Receive</span>
         </button>
         <button id="top-earn" class="quick-action" type="button" aria-controls="earn-section">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 7 3-3 15 15-3 3L3 7Zm8-4 3 3-7 7-3-3 7-7Zm4 7 3 3-7 7-3-3 7-7Z" /></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h16v10H4zM3 7h18v3H3zM12 7v13M12 7H8.5a2.5 2.5 0 1 1 2.3-3.5L12 7Zm0 0h3.5a2.5 2.5 0 1 0-2.3-3.5L12 7Z" /></svg>
           <span>Earn</span>
         </button>
       </nav>
@@ -177,6 +177,14 @@
         <div class="empty">Connect your wallet to load balances.</div>
       </div>
 
+      <details class="registry-settings">
+        <summary>Token metadata <span>Optional BCMR registry</span></summary>
+        <p>Load a trusted BCMR JSON file to show token names, symbols, and icons. Metadata is not verified; external icons may contact their hosts.</p>
+        <label for="registry-file">Choose registry file</label>
+        <input id="registry-file" type="file" accept=".json,application/json">
+        <p id="registry-status" role="status">No registry loaded.</p>
+      </details>
+
       <p class="fine">
         Scans the first 50 receive and 50 change addresses. NFT balances are not included.
       </p>
@@ -220,16 +228,18 @@
           <dl>
             <div><dt>Amount</dt><dd id="shared-link-amount"></dd></div>
             <div><dt>Recipient address</dt><dd id="shared-link-address"></dd></div>
-            <div><dt>CashToken category</dt><dd id="shared-link-category"></dd></div>
+            <div><dt>CashToken category</dt><dd class="category-line"><code id="shared-link-category"></code><button id="copy-shared-category" class="small-button" type="button" aria-label="Copy shared CashToken category">Copy</button></dd></div>
           </dl>
         </aside>
 
         <div class="form">
           <div>
-            <label for="category-select">Available tokens</label>
-            <select id="category-select" aria-label="Choose an available token" disabled>
-              <option value="">Enter a category ID manually</option>
-            </select>
+            <div id="available-tokens">
+              <label for="category-select">Available tokens</label>
+              <select id="category-select" aria-label="Choose an available token" disabled>
+                <option value="">Enter a category ID manually</option>
+              </select>
+            </div>
             <label for="category">Token category ID</label>
             <input
               id="category"
@@ -324,8 +334,8 @@
 
           <p class="pair-title">Scan to open the payment link</p>
           <div class="payment-token">
-            <span class="token-icon" aria-hidden="true">◆</span>
-            <div><strong id="payment-amount"></strong><code id="payment-category"></code></div>
+            <span id="payment-icon" class="token-icon" aria-hidden="true">◆</span>
+            <div><strong id="payment-name">Fungible token</strong><span id="payment-amount" class="payment-amount"></span><p id="payment-description" class="token-description"></p><div class="category-line"><code id="payment-category"></code><button id="copy-payment-category" class="small-button" type="button" aria-label="Copy payment CashToken category">Copy</button></div></div>
           </div>
 
           <div class="payment-url-line">
