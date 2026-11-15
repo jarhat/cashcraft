@@ -131,13 +131,13 @@ function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem('ctf-theme', theme);
   document.querySelector('meta[name="theme-color"]').content = {
-    dark: '#05070b', bch: '#071a13', 'bch-sunrise': '#211912',
+    voxel: '#060f20', dark: '#05070b', bch: '#071a13', 'bch-sunrise': '#211912',
   }[theme];
   document.querySelectorAll('[data-theme-option]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.themeOption === theme));
   });
 }
-setTheme(['dark', 'bch', 'bch-sunrise'].includes(savedTheme) ? savedTheme : 'dark');
+setTheme(['voxel', 'dark', 'bch', 'bch-sunrise'].includes(savedTheme) ? savedTheme : 'voxel');
 
 for (const name of ['theme', 'language']) {
   const toggle = $(`${name}-toggle`);
@@ -1338,14 +1338,19 @@ const tutorialSteps = [
     message: 'Pair with WizardConnect using the QR code or open the pairing link in your wallet. Approve the connection there.',
   },
   {
-    id: 'earn-section',
-    title: 'Explore your portfolio',
-    message: 'Your fungible token balances and category IDs appear here after the wallet scan.',
+    id: 'balance-section',
+    title: 'Check your balance',
+    message: 'Your BCH balance and first receive address appear here after connecting.',
   },
   {
     id: 'transfer-section',
     title: 'Send or receive',
     message: 'Select a token to send, or switch to Receive to create a payment QR. Amounts are whole base units; review every transaction in your wallet.',
+  },
+  {
+    id: 'earn-section',
+    title: 'Explore your portfolio',
+    message: 'Your fungible token balances and category IDs appear here after the wallet scan.',
   },
 ];
 let tutorialStep = 0;
@@ -1372,6 +1377,7 @@ function closeTutorial() {
   const focused = guide.contains(document.activeElement);
   $('wizard-dialog').hidden = true;
   $('wizard-toggle').setAttribute('aria-expanded', 'false');
+  guide.classList.remove('walking');
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
   document.querySelector('.hero').after(guide);
   if (focused) $('wizard-toggle').focus({ preventScroll: true });
@@ -1384,6 +1390,7 @@ $('wizard-toggle').addEventListener('click', () => {
   }
   tutorialStep = 0;
   $('wizard-dialog').hidden = false;
+  document.querySelector('.wizard-guide').classList.add('walking');
   $('wizard-toggle').setAttribute('aria-expanded', 'true');
   showTutorialStep();
 });

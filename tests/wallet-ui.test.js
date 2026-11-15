@@ -9,7 +9,7 @@ test('wizard follows each tutorial panel without covering it and returns home wh
   const elements = new Map();
   const highlighted = new Set();
   let guidePosition = 'hero';
-  const guide = { scrollIntoView() {}, contains() { return false; } };
+  const guide = { scrollIntoView() {}, contains() { return false; }, classList: { add() {}, remove() {} } };
   const target = (position) => ({ before(node) {
     assert.equal(node, guide);
     guidePosition = position;
@@ -19,7 +19,7 @@ test('wizard follows each tutorial panel without covering it and returns home wh
     assert.equal(node, guide);
     guidePosition = 'hero';
   } };
-  for (const id of ['connection-section', 'earn-section', 'transfer-section']) {
+  for (const id of ['connection-section', 'balance-section', 'earn-section', 'transfer-section']) {
     const panel = {
       ...target(id),
       parentElement: grid,
@@ -47,13 +47,15 @@ test('wizard follows each tutorial panel without covering it and returns home wh
 
   elements.get('wizard-toggle').click();
   assert.equal(guidePosition, 'connection');
-  assert.equal(elements.get('wizard-progress').textContent, '1 / 3');
+  assert.equal(elements.get('wizard-progress').textContent, '1 / 4');
   elements.get('wizard-next').click();
-  assert.equal(guidePosition, 'earn-section');
+  assert.equal(guidePosition, 'balance-section');
   elements.get('wizard-next').click();
   assert.equal(guidePosition, 'transfer-section');
-  elements.get('wizard-prev').click();
+  elements.get('wizard-next').click();
   assert.equal(guidePosition, 'earn-section');
+  elements.get('wizard-prev').click();
+  assert.equal(guidePosition, 'transfer-section');
   elements.get('wizard-toggle').click();
   assert.equal(guidePosition, 'hero');
   assert.equal(elements.get('wizard-dialog').hidden, true);
@@ -254,4 +256,58 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   assert.match(categoryLine.children[1].innerHTML, /<svg/);
   await categoryLine.children[1].handler();
   assert.equal(copied, category);
+});
+
+test('wizard follows the panels in reading order and resets when closed', () => {
+  const highlighted = new Set();
+  const nodes = new Map();
+  let guidePosition = 'hero';
+  let walking = false;
+  const element = (id) => {
+    if (!nodes.has(id)) nodes.set(id, {
+      hidden: id === 'wizard-dialog', listeners: {},
+      style: { removeProperty(name) { delete this[name]; } },
+      classList: {
+        add(name) { if (name === 'tutorial-highlight') highlighted.add(id); if (name === 'walking') walking = true; },
+        remove(name) { if (name === 'tutorial-highlight') highlighted.delete(id); if (name === 'walking') walking = false; },
+      },
+      setAttribute() {},
+      addEventListener(type, handler) { this.listeners[type] = handler; },
+      scrollIntoView() {},
+      contains() { return false; },
+      before() { guidePosition = id; },
+    });
+    return nodes.get(id);
+  };
+  const guide = element('guide');
+  element('connection-section').parentElement = element('grid');
+  element('balance-section').parentElement = element('grid');
+  const document = {
+    querySelector(selector) {
+      return selector === '.wizard-guide' ? guide : { after() { guidePosition = 'hero'; } };
+    },
+    querySelectorAll() { return [...highlighted].map(element); },
+  };
+  const start = source.indexOf('const tutorialSteps =');
+  const end = source.indexOf('\n\nfetchBchUsd();', start);
+  runInNewContext(source.slice(start, end), { $, document });
+  function $ (id) { return element(id); }
+  element('wizard-toggle').listeners.click();
+  assert.deepEqual([...highlighted], ['connection-section']);
+  assert.equal(guidePosition, 'grid');
+  assert.equal(walking, true);
+  element('wizard-next').listeners.click();
+  assert.deepEqual([...highlighted], ['balance-section']);
+  assert.equal(guidePosition, 'balance-section');
+  element('wizard-next').listeners.click();
+  assert.deepEqual([...highlighted], ['transfer-section']);
+  assert.equal(guidePosition, 'transfer-section');
+  element('wizard-next').listeners.click();
+  assert.deepEqual([...highlighted], ['earn-section']);
+  assert.equal(guidePosition, 'earn-section');
+  element('wizard-next').listeners.click();
+  assert.equal(element('wizard-dialog').hidden, true);
+  assert.equal(highlighted.size, 0);
+  assert.equal(guidePosition, 'hero');
+  assert.equal(walking, false);
 });

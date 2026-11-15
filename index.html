@@ -26,20 +26,7 @@
 <body>
   <div class="snow snow-one" aria-hidden="true"></div>
   <div class="snow snow-two" aria-hidden="true"></div>
-  <div class="snow snow-three" aria-hidden="true"></div>
-  <div class="moon-background" aria-hidden="true">
-    <svg viewBox="0 0 128 128" shape-rendering="crispEdges">
-      <path fill="#142b3a" d="M40 0h60v4h12v8h8v12h8v80h-8v12h-8v8h-12v4H40v-4H28v-8h-8v-12h-8V24h8V12h8V4h12z"/>
-      <path fill="#395d6d" d="M48 4h48v4h12v8h8v12h8v68h-8v12h-8v8H96v4H48v-4H36v-8h-8V96h-8V28h8V16h8V8h12z"/>
-      <path fill="#6a9da7" d="M52 8h40v4h12v8h8v12h8v60h-8v12h-8v8H92v4H52v-4H40v-8h-8V92h-8V32h8V20h8v-8h12z"/>
-      <path fill="#83b8bd" d="M64 8h28v4h12v8h8v12h8v60h-8v12h-8v8H92v4H64v-8h-8V96h-8V80h-4V44h4V28h8V16h8z"/>
-      <path fill="#b0d6d0" d="M88 12h8v4h8v8h8v12h4v16h-4V40h-8V28h-8V20h-8zM104 72h8v12h-4v12h-8v8h-8v4H76v-4h12v-8h8V84h8z"/>
-      <path fill="#4a7b86" d="M52 28h16v4h8v8h-4v4H56v-4h-8v-8h4zM88 48h12v4h4v8h-4v4H88v-4h-4v-8h4zM60 76h20v4h4v8h-4v4H60v-4h-4v-8h4zM96 96h8v4h-8zM44 60h8v4h-8z"/>
-      <path fill="#a0c9c4" d="M56 32h12v4h4v4H56v-4h-4v-4zM88 52h12v4h-12zM64 80h16v4H64z"/>
-      <path fill="#071420" opacity=".65" d="M40 0h24v128H40v-4H28v-8h-8v-12h-8V24h8V12h8V4h12z"/>
-    </svg>
-  </div>
-
+  <div class="voxel-sphere" aria-hidden="true"></div>
   <main class="shell">
     <header class="topbar">
       <a class="brand" href="#">
@@ -67,6 +54,7 @@
             <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.7 1.7 0 0 1 1.3-2.7H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><circle cx="7.5" cy="11" r=".7"/><circle cx="10" cy="7.5" r=".7"/><circle cx="14" cy="7.5" r=".7"/><circle cx="17" cy="11" r=".7"/></svg>
           </button>
           <div id="theme-menu" class="tool-dropdown" hidden>
+            <button type="button" data-theme-option="voxel">Voxel Blue</button>
             <button type="button" data-theme-option="dark">Lunar</button>
             <button type="button" data-theme-option="bch">BCH Green</button>
             <button type="button" data-theme-option="bch-sunrise">BCH Sunrise</button>
@@ -105,13 +93,16 @@
 
     <aside class="wizard-guide" aria-label="Wizard tutorial">
       <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
-        <svg viewBox="0 0 64 72" shape-rendering="crispEdges" aria-hidden="true">
-          <path fill="#94d9f4" d="M30 2h8v8h4v8h4v8h8v6H10v-6h8v-8h4v-8h8z"/>
-          <path fill="#517caa" d="M10 28h44v8H10zM18 48h28v6h6v14H12V54h6z"/>
-          <path fill="#f3d9b8" d="M20 36h24v14H20z"/>
-          <path fill="#e8f7ff" d="M20 46h24v10H20zM24 56h16v6H24z"/>
-          <path fill="#26394f" d="M24 39h4v4h-4zM36 39h4v4h-4z"/>
-          <path fill="#a0f2cf" d="M29 16h6v6h-6zM26 19h12v2H26z"/>
+        <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true">
+          <path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/>
+          <path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/>
+          <path fill="#f0c7ae" d="M13 18h10v8H13z"/>
+          <path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/>
+          <path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/>
+          <path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/>
+          <path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/>
+          <path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/>
+          <path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/>
         </svg>
         <span>Wizard help</span>
       </button>
@@ -166,7 +157,7 @@
         </button>
       </article>
 
-      <article class="panel">
+      <article id="balance-section" class="panel">
         <div class="heading">
           <div>
             <p class="eyebrow">NATIVE BALANCE</p>
@@ -186,24 +177,6 @@
           <button id="copy-address" class="small-button" disabled>Copy</button>
         </div>
       </article>
-    </section>
-
-    <section id="earn-section" class="panel section">
-      <div class="heading">
-        <div>
-          <p class="eyebrow">PORTFOLIO</p>
-          <h2>Tokens</h2>
-        </div>
-        <span id="token-count" class="muted">—</span>
-      </div>
-
-      <div id="tokens" class="token-list">
-        <div class="empty">Connect your wallet to load balances.</div>
-      </div>
-
-      <p class="fine">
-        Scans the first 50 receive and 50 change addresses. NFT balances are not included.
-      </p>
     </section>
 
     <section id="transfer-section" class="panel section transfer-panel">
@@ -366,6 +339,22 @@
           category ID, and requested amount.
         </p>
       </div>
+    </section>
+
+    <section id="earn-section" class="panel section">
+      <div class="heading">
+        <div>
+          <p class="eyebrow">PORTFOLIO</p>
+          <h2>Tokens</h2>
+        </div>
+        <span id="token-count" class="muted">—</span>
+      </div>
+      <div id="tokens" class="token-list">
+        <div class="empty">Connect your wallet to load balances.</div>
+      </div>
+      <p class="fine">
+        Scans the first 50 receive and 50 change addresses. NFT balances are not included.
+      </p>
     </section>
 
     <footer>
