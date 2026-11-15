@@ -139,6 +139,62 @@ test('partial and empty links do not create a request notification', () => {
   assert.equal(emptyCategory('notifications-dialog').open, undefined);
 });
 
+test('shared payment notes are displayed as text and omitted when absent', () => {
+  const category = 'a'.repeat(64);
+  const request = `?addr=bitcoincash%3Aztest&category=${category}&amount=42`;
+  const withNote = sharedLinkFixture(`${request}&note=%3Chello%3E`);
+  assert.equal(withNote('shared-link-note').textContent, '<hello>');
+  assert.equal(withNote('shared-link-note-row').hidden, false);
+  assert.equal(sharedLinkFixture(request)('shared-link-note-row').hidden, true);
+});
+
+test('payment QR includes the optional note and discards stale results', async () => {
+  const nodes = new Map();
+  const element = (id) => {
+    if (!nodes.has(id)) nodes.set(id, {
+      value: '', hidden: false, textContent: '', listeners: {},
+      classList: { add() {}, remove() {} },
+      addEventListener(type, handler) { this.listeners[type] = handler; },
+      getContext() { return { drawImage() {} }; },
+    });
+    return nodes.get(id);
+  };
+  element('receive-category').value = 'a'.repeat(64);
+  element('receive-amount').value = '42';
+  element('receive-note').value = 'Lunch & coffee';
+  let release;
+  let options;
+  let content;
+  const start = source.indexOf('let paymentGeneration = 0;');
+  const end = source.indexOf("\n$('copy-receive-address')", start);
+  const context = {
+    $: element, walletReady: true, mainnet: true, addressFor: () => 'bitcoincash:ztest',
+    window: { location: { href: 'https://example.com/?old=1' } }, URL,
+    document: { createElement: () => ({ width: 512, height: 512 }) },
+    QRCode: { toCanvas: async (canvas, value, opts) => { content = value; options = opts; } },
+    fetchTokenLogo: () => new Promise((resolve) => { release = resolve; }),
+    drawTokenLogo: async () => {}, translate: (text) => text, console,
+    report(error) { throw error; },
+  };
+  runInNewContext(source.slice(start, end), context);
+  const pending = element('generate-payment').listeners.click();
+  await Promise.resolve();
+  release(null);
+  await pending;
+  assert.equal(new URL(content).searchParams.get('note'), 'Lunch & coffee');
+  assert.equal(element('payment-note').textContent, 'Lunch & coffee');
+  assert.equal(options.errorCorrectionLevel, 'H');
+  assert.equal(options.color.dark, '#ffffff');
+  assert.equal(options.color.light, '#000000');
+  const stale = element('generate-payment').listeners.click();
+  await Promise.resolve();
+  element('receive-note').value = 'Changed';
+  element('receive-note').listeners.input();
+  release(null);
+  await stale;
+  assert.equal(element('payment-note').textContent, 'Lunch & coffee');
+});
+
 test('notification can be dismissed outside and reopened with its request intact', () => {
   class Element {
     constructor() { this.listeners = {}; }

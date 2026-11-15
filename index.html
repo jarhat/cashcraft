@@ -10,18 +10,18 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
-  <meta name="description" content="Send and receive CashTokens with CTF Cash.">
+  <meta name="description" content="Explore permissionless payments with CTF Cash. Connect your Bitcoin Cash wallet to send and receive CashTokens, share payment links, and track balances.">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="CTF | CashTokens">
-  <meta property="og:description" content="Send and receive CashTokens with CTF Cash.">
-  <meta property="og:url" content="">
-  <meta property="og:image" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/social-preview.png'>
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
+  <meta property="og:title" content="CTF Cash | Bitcoin Cash and CashToken Payments">
+  <meta property="og:description" content="Connect your Bitcoin Cash wallet to send and receive CashTokens, create payment links, and explore permissionless payments.">
+  <meta property="og:url" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/'>
+  <meta property="og:image" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/icon-512.png'>
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
   <meta property="og:image:alt" content="CTF Cash: send and receive CashTokens">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:image" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/social-preview.png'>
-  <title>CTF | CashTokens</title>
+  <meta name="twitter:image" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/icon-512.png'>
+  <title>CTF Cash | Bitcoin Cash and CashToken Payments</title>
 </head>
 <body>
   <div class="snow snow-one" aria-hidden="true"></div>
@@ -49,6 +49,7 @@
   <main class="shell">
     <header class="topbar">
       <a class="brand" href="#">
+        <img class="brand-mark" src="/icon.svg" alt="" width="28" height="28">
         CTF
         <span class="brand-dim">/ CASH</span>
       </a>
@@ -104,8 +105,9 @@
           <span class="hero-slide" aria-hidden="true">Track<br><span>Token balances</span></span>
         </h1>
         <p class="intro">
-          Connect your wallet to send and receive tokens, create payment QR codes, and explore your balances.
+          Money should move as freely as you do. Connect your Bitcoin Cash wallet to send and receive CashTokens, share payment links, and explore your balances.
         </p>
+        <p class="intro">New to permissionless payments? Bitcoin Cash lets you send peer-to-peer without asking a payment provider for permission. Your wallet keeps your keys; you approve every transaction.</p>
       </div>
     </section>
 
@@ -256,7 +258,6 @@
               autocomplete="off"
             >
           </label>
-
           <label class="full">
             Recipient token-aware CashAddr
             <input
@@ -319,6 +320,10 @@
               autocomplete="off"
             >
           </label>
+          <label class="full">
+            Note (optional)
+            <input id="receive-note" maxlength="160" placeholder="What is this payment for?" autocomplete="off">
+          </label>
         </div>
 
         <button id="generate-payment" class="button primary send" type="button" disabled>
@@ -343,6 +348,9 @@
             <span class="token-icon" aria-hidden="true">◆</span>
             <div><strong id="payment-amount"></strong><code id="payment-category"></code></div>
           </div>
+          <p id="payment-note" class="payment-note" hidden></p>
+          <p id="payment-logo-status" class="payment-logo-status" role="status"></p>
+          <p class="payment-logo-status">If your scanner cannot read a light-on-dark QR code, use Copy link instead.</p>
 
           <div class="payment-url-line">
             <code id="payment-url"></code>
@@ -354,7 +362,7 @@
 
         <p class="fine">
           The QR code contains a link to this site with the receive address,
-          category ID, and requested amount.
+          category ID, requested amount, and optional note. Notes are public to anyone with the link.
         </p>
       </div>
     </section>
@@ -373,6 +381,13 @@
       <p class="fine">
         Scans the first 50 receive and 50 change addresses. NFT balances are not included.
       </p>
+    </section>
+
+    <section class="learn-section" aria-labelledby="learn-title">
+      <p class="eyebrow">YOUR FIRST STEPS</p>
+      <h2 id="learn-title">A simpler way to explore digital money</h2>
+      <p>Bitcoin Cash is peer-to-peer electronic cash: you can send it directly to another wallet without relying on a payment intermediary. Its fixed supply is one reason supporters describe it as sound money.</p>
+      <p>CashTokens are digital tokens on Bitcoin Cash. To get started, connect a compatible wallet, check the token category and amount, and approve payments in your wallet. Keep your recovery phrase private and verify the details before sending.</p>
     </section>
 
     <footer>
@@ -396,6 +411,7 @@
         <div><dt>Amount</dt><dd id="shared-link-amount"></dd></div>
         <div><dt>Recipient address</dt><dd id="shared-link-address"></dd></div>
         <div><dt>CashToken category</dt><dd id="shared-link-category"></dd></div>
+        <div id="shared-link-note-row" hidden><dt>Note</dt><dd id="shared-link-note"></dd></div>
       </dl>
       <button id="view-payment-request" class="button primary" type="button">View payment request <span aria-hidden="true">→</span></button>
     </div>

@@ -1,6 +1,8 @@
 import './style.css';
 import { setLanguage, translate } from './i18n.js';
 import { submitCashAddress, API_BASE_URL } from './api.js';
+import { initScrollEffects } from './scroll-effects.js';
+import { fetchTokenLogo, drawTokenLogo } from './payment-qr.js';
 import {
   SATOSHIS_PER_BCH,
   formatBch,
@@ -10,9 +12,10 @@ import {
 } from './utils.js';
 
 const network = (import.meta.env.VITE_BCH_NETWORK || 'mainnet').toLowerCase();
+initScrollEffects();
 
 for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
-  document.querySelector(selector).content = new URL('/social-preview.png', window.location.origin).href;
+  document.querySelector(selector).content = new URL('/icon-512.png', window.location.origin).href;
 }
 
 if (!['mainnet', 'chipnet'].includes(network)) {
@@ -28,6 +31,7 @@ function fillFromUrl() {
     category: params.get('category'),
     amount: params.get('amount'),
   };
+  const note = params.get('note')?.trim() || '';
 
   const fields = [
     ['addr', 'recipient'],
@@ -57,6 +61,8 @@ function fillFromUrl() {
     $('shared-link-amount').textContent = `${sharedLink.amount} token base units`;
     $('shared-link-address').textContent = sharedLink.address;
     $('shared-link-category').textContent = sharedLink.category;
+    $('shared-link-note').textContent = note;
+    $('shared-link-note-row').hidden = !note;
     $('shared-link-preview').classList.remove('hidden');
     $('notifications-empty').hidden = true;
     $('notification-indicator').hidden = false;
@@ -1215,8 +1221,10 @@ $('top-earn').addEventListener('click', () => {
   $('earn-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
+let paymentGeneration = 0;
 $('generate-payment').addEventListener('click', async () => {
   try {
+    const generation = ++paymentGeneration;
     if (!walletReady) {
       throw new Error('Connect your wallet before creating a payment QR.');
     }
@@ -1224,6 +1232,7 @@ $('generate-payment').addEventListener('click', async () => {
     const address = addressFor(0, 0, 'p2pkhWithTokens');
     const category = $('receive-category').value.trim().toLowerCase();
     const amount = $('receive-amount').value.trim();
+    const note = $('receive-note').value.trim();
 
     if (!/^[0-9a-f]{64}$/.test(category)) {
       throw new Error('Category ID must be exactly 64 hexadecimal characters.');
@@ -1240,39 +1249,60 @@ $('generate-payment').addEventListener('click', async () => {
     paymentUrl.searchParams.set('addr', address);
     paymentUrl.searchParams.set('amount', amount);
     paymentUrl.searchParams.set('category', category);
-
-    $('receive-address').textContent = address;
-    $('payment-url').textContent = paymentUrl.toString();
+    if (note) paymentUrl.searchParams.set('note', note);
 
     const qr = document.createElement('canvas');
     await QRCode.toCanvas(qr, paymentUrl.toString(), {
-      width: 190,
-      margin: 1,
-      errorCorrectionLevel: 'M',
-      color: { dark: '#07111b', light: '#ffffff' },
+      width: 512,
+      margin: 4,
+      errorCorrectionLevel: 'H',
+      color: { dark: '#ffffff', light: '#000000' },
     });
 
+    let logoStatus = mainnet ? 'No token logo found in the BCMR index.' : 'Token logos are available on mainnet only.';
+    if (mainnet) {
+      try {
+        const logo = await fetchTokenLogo(category);
+        if (logo) {
+          await drawTokenLogo(qr, logo);
+          logoStatus = 'Token logo from the BCMR index (not independently verified).';
+        }
+      } catch (error) {
+        console.warn('Could not load the BCMR token logo:', error);
+        logoStatus = 'Token logo unavailable; the QR code is still ready.';
+      }
+    }
+
     if (
-      !walletReady ||
+      generation !== paymentGeneration || !walletReady ||
       addressFor(0, 0, 'p2pkhWithTokens') !== address ||
       $('receive-category').value.trim().toLowerCase() !== category ||
-      $('receive-amount').value.trim() !== amount
+      $('receive-amount').value.trim() !== amount ||
+      $('receive-note').value.trim() !== note
     ) return;
 
+    $('receive-address').textContent = address;
+    $('payment-url').textContent = paymentUrl.toString();
     const canvas = $('payment-qr');
     canvas.width = qr.width;
     canvas.height = qr.height;
     canvas.getContext('2d').drawImage(qr, 0, 0);
     $('payment-amount').textContent = `${amount} token base units`;
     $('payment-category').textContent = category;
+    $('payment-note').textContent = note;
+    $('payment-note').hidden = !note;
+    $('payment-logo-status').textContent = translate(logoStatus);
     $('payment-result').classList.remove('hidden');
   } catch (error) {
     report(error);
   }
 });
 
-for (const id of ['receive-category', 'receive-amount']) {
-  $(id).addEventListener('input', () => $('payment-result').classList.add('hidden'));
+for (const id of ['receive-category', 'receive-amount', 'receive-note']) {
+  $(id).addEventListener('input', () => {
+    paymentGeneration++;
+    $('payment-result').classList.add('hidden');
+  });
 }
 
 $('copy-receive-address').addEventListener('click', async () => {

@@ -116,11 +116,21 @@ button {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: #edf5ff;
   font-size: .76rem;
   font-weight: 800;
   letter-spacing: .16em;
   text-decoration: none;
+}
+
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  filter: drop-shadow(0 0 6px rgb(10 193 142 / 40%));
 }
 
 .brand-dim {
@@ -187,6 +197,15 @@ h1 .hero-slide span {
 .hero-copy {
   min-width: 0;
   flex: 1;
+}
+
+.hero-copy,
+.wizard-guide,
+.learn-section,
+footer,
+#log {
+  mask-image: linear-gradient(to bottom, transparent var(--content-fade-start, 0px), #000 var(--content-fade-end, 0px));
+  -webkit-mask-image: linear-gradient(to bottom, transparent var(--content-fade-start, 0px), #000 var(--content-fade-end, 0px));
 }
 
 .hero-headline {
@@ -831,7 +850,20 @@ input[readonly] {
   gap: 18px;
   padding: 8px;
   border-radius: 14px;
-  background: rgb(6 15 32 / 96%);
+  background: rgb(6 15 32 / 45%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  opacity: var(--topbar-opacity, 1);
+  transition: opacity .16s linear;
+}
+
+.topbar.over-panels {
+  pointer-events: none;
+}
+
+.topbar:has(:focus-visible) {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .quick-nav,
@@ -1636,7 +1668,89 @@ select {
 .tutorial-highlight {
   outline: 3px solid #0087ff;
   outline-offset: 4px;
-  box-shadow: 0 0 24px rgb(0 135 255 / 28%);
+  box-shadow: 0 0 8px 4px rgb(0 135 255 / 65%), 0 0 30px 10px rgb(0 135 255 / 35%);
+}
+
+@property --glow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.tutorial-highlight::after,
+.wallet-link::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 3px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--glow-angle), transparent 0 66%, #0087ff 77%, #f2ffff 80%, #0087ff 83%, transparent 94%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: lightning-glow 3s linear infinite;
+  content: "";
+  pointer-events: none;
+}
+
+.wallet-link {
+  position: relative;
+  box-shadow: 0 0 12px rgb(0 135 255 / 48%), 0 0 24px rgb(0 135 255 / 22%);
+}
+
+@keyframes lightning-glow {
+  to { --glow-angle: 360deg; }
+}
+
+.payment-result,
+html[data-theme="light"] .payment-result {
+  background: #000;
+  color: #fff;
+  border-color: #444;
+}
+
+.payment-result .pair-title,
+.payment-result .payment-token,
+.payment-result .payment-url-line code,
+.payment-result .payment-note,
+.payment-result .payment-logo-status {
+  color: #fff;
+}
+
+.payment-result .small-button,
+html[data-theme="light"] .payment-result .small-button {
+  background: #171717;
+  border-color: #888;
+  color: #fff;
+}
+
+#payment-qr {
+  width: min(256px, 100%);
+  height: auto;
+  background: #000;
+  image-rendering: pixelated;
+}
+
+.payment-note,
+.payment-logo-status {
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.payment-logo-status {
+  font-size: .72rem;
+}
+
+.learn-section {
+  margin: 36px 0;
+  max-width: 760px;
+}
+
+.learn-section p:not(.eyebrow) {
+  color: var(--muted);
+  font-size: .9rem;
 }
 
 .wizard-guide.walking .wizard-toggle svg {
