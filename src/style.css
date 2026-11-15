@@ -1,8 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=VT323&display=swap");
-
 :root {
   color-scheme: dark;
-  font: 16px/1.55 "Manrope", ui-sans-serif, system-ui, sans-serif;
+  font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   color: #e9f4ff;
   background: #060910;
   --muted: #8c9bae;
@@ -10,7 +8,7 @@
   --ice: #a8e4ff;
   --mint: #a0f2cf;
   --panel: rgb(14 21 34 / 72%);
-  --mono: "DM Mono", ui-monospace, monospace;
+  --mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
 * {
@@ -74,6 +72,31 @@ button {
   width: min(100% - 40px, 1040px);
   margin-inline: auto;
   padding: 28px 0 34px;
+}
+
+.moon-background {
+  position: absolute;
+  z-index: 0;
+  top: -150px;
+  right: max(-180px, calc((100vw - 1300px) / 2 - 180px));
+  width: clamp(440px, 68vw, 850px);
+  opacity: .38;
+  pointer-events: none;
+}
+
+.moon-background svg {
+  display: block;
+  width: 100%;
+}
+
+.rocket-smoke {
+  animation: rocket-smoke 2.8s ease-in-out infinite alternate;
+  transform-origin: 90px 90px;
+}
+
+@keyframes rocket-smoke {
+  from { opacity: .35; transform: translateY(0); }
+  to { opacity: .8; transform: translateY(3px); }
 }
 
 .snow {
@@ -197,11 +220,11 @@ button {
 
 h1 {
   margin: 0;
-  font-family: "VT323", var(--mono);
+  font-family: ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
   font-size: clamp(4.5rem, 10vw, 8rem);
-  line-height: .72;
-  letter-spacing: -.015em;
-  font-weight: 400;
+  line-height: .95;
+  letter-spacing: -.055em;
+  font-weight: 800;
 }
 
 h1 .hero-slide span {
@@ -314,11 +337,11 @@ h1 .hero-slide span {
 
 h2 {
   margin: 0;
-  font-family: "VT323", var(--mono);
-  font-size: 1.65rem;
-  line-height: 1;
-  font-weight: 400;
-  letter-spacing: .015em;
+  font-family: ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
+  font-size: 1.35rem;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -.02em;
 }
 
 .dot {
@@ -853,6 +876,7 @@ input[readonly] {
 
 .topbar {
   position: relative;
+  z-index: 2;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   gap: 18px;
@@ -912,9 +936,7 @@ input[readonly] {
   stroke-width: 1.8;
 }
 
-#top-send svg { color: #8ed8ff; }
-#top-receive svg { color: #ff9fbb; }
-#top-earn svg { color: #f4c779; }
+.quick-action svg { color: #69d58e; }
 
 .quick-action:hover,
 .theme-toggle:hover {
@@ -993,7 +1015,30 @@ input[readonly] {
 
 .category-line code {
   min-width: 0;
-  flex: 1;
+  white-space: nowrap;
+}
+
+.category-copy {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+.category-copy svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.category-copy.copied {
+  color: var(--mint);
 }
 
 .icon-button {
@@ -1328,6 +1373,10 @@ html[data-theme="light"] .pixel-rocket-detail { fill: #a7deea; }
 }
 
 @media (max-width: 420px) {
+  .brand-dim {
+    display: none;
+  }
+
   .quick-nav {
     width: 100%;
     justify-content: space-around;
@@ -1433,6 +1482,107 @@ html[data-theme="light"] select {
   gap: 10px;
 }
 
+.notification-toggle {
+  position: relative;
+  flex: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.notification-indicator:not([hidden]) {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #102333;
+  border-radius: 50%;
+  background: #ff5269;
+}
+
+.notifications-dialog {
+  width: min(440px, calc(100% - 32px));
+  max-height: min(80vh, 700px);
+  padding: 20px;
+  border: 1px solid rgb(168 228 255 / 35%);
+  border-radius: 16px;
+  background: #102333;
+  color: #e9f4ff;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 55%);
+}
+
+.notifications-dialog::backdrop {
+  background: rgb(2 8 14 / 72%);
+}
+
+.notifications-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.close-notifications {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.3rem;
+}
+
+.notifications-dialog .shared-link-preview {
+  margin: 16px 0 0;
+}
+
+.notification-message {
+  margin: 0 0 12px;
+  font-size: .85rem;
+}
+
+@media (pointer: coarse) {
+  .snow {
+    animation: none;
+  }
+
+  body::after {
+    animation: none;
+    filter: none;
+  }
+
+  .panel, .quick-nav, .button, .small-button, .transfer-tab {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  button, .wallet-link, summary {
+    touch-action: manipulation;
+  }
+
+  .button, .small-button, .quick-action, .theme-toggle,
+  .transfer-tab, .tool-dropdown button, summary {
+    min-height: 44px;
+  }
+
+  .theme-toggle {
+    width: 44px;
+  }
+
+  input, select {
+    font-size: 16px;
+  }
+
+  .button:active:not(:disabled), .small-button:active:not(:disabled),
+  .quick-action:active, .theme-toggle:active, .transfer-tab:active {
+    transform: scale(.97);
+    filter: brightness(1.2);
+  }
+}
+
 .wizard-toggle {
   display: grid;
   width: 82px;
@@ -1481,6 +1631,25 @@ html[data-theme="light"] select {
 }
 
 @media (max-width: 680px) {
+  .moon-background {
+    top: -35px;
+    right: -210px;
+    width: 540px;
+    opacity: .28;
+  }
+
+  .topbar-tools {
+    gap: 4px;
+  }
+
+  .send {
+    max-width: none;
+  }
+
+  .token-summary {
+    flex-wrap: wrap;
+  }
+
   .wizard-guide {
     bottom: 10px;
     left: 8px;
