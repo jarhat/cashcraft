@@ -131,13 +131,14 @@ function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem('ctf-theme', theme);
   document.querySelector('meta[name="theme-color"]').content = {
-    voxel: '#060f20', dark: '#05070b', bch: '#071a13', 'bch-sunrise': '#211912',
+    dark: '#080a10', blue: '#071528', green: '#071b15',
   }[theme];
   document.querySelectorAll('[data-theme-option]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.themeOption === theme));
   });
 }
-setTheme(['voxel', 'dark', 'bch', 'bch-sunrise'].includes(savedTheme) ? savedTheme : 'voxel');
+const migratedTheme = { bch: 'green', 'bch-sunrise': 'green' }[savedTheme] || savedTheme;
+setTheme(['dark', 'blue', 'green'].includes(migratedTheme) ? migratedTheme : 'dark');
 
 for (const name of ['theme', 'language']) {
   const toggle = $(`${name}-toggle`);
