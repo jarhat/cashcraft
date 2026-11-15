@@ -107,48 +107,148 @@
       </p>
     </section>
 
-    <section class="panel section">
+    <section class="panel section transfer-panel">
       <div class="heading">
         <div>
           <p class="eyebrow">TRANSFER</p>
-          <h2>Send tokens</h2>
+          <h2>Tokens</h2>
         </div>
-        <span class="arrow">↗</span>
+        <span class="arrow" aria-hidden="true">↗</span>
       </div>
 
-      <div class="form">
-        <label>
-          Token category ID
-          <input
-            id="category"
-            placeholder="64-character category ID"
-            autocomplete="off"
-          >
-        </label>
-
-        <label>
-          Amount
-          <input id="amount" inputmode="numeric" placeholder="Whole token units">
-        </label>
-
-        <label class="full">
-          Recipient token-aware CashAddr
-          <input
-            id="recipient"
-            placeholder="bchtest:z… or bitcoincash:z…"
-            autocomplete="off"
-          >
-        </label>
+      <div class="transfer-tabs" role="tablist" aria-label="Token transfer">
+        <button
+          id="send-tab"
+          class="transfer-tab active"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          aria-controls="send-panel"
+        >
+          Send
+        </button>
+        <button
+          id="receive-tab"
+          class="transfer-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="receive-panel"
+        >
+          Receive
+        </button>
       </div>
 
-      <button id="send" class="button primary send" disabled>
-        Review and approve in wallet <span>→</span>
-      </button>
+      <div id="send-panel" class="tab-panel" role="tabpanel" aria-labelledby="send-tab">
+        <div class="form">
+          <label>
+            Token category ID
+            <input
+              id="category"
+              placeholder="64-character category ID"
+              autocomplete="off"
+              spellcheck="false"
+            >
+          </label>
 
-      <p class="fine">
-        This demo sends whole token base units only. The wallet displays the
-        transaction for approval; review all details before approving.
-      </p>
+          <label>
+            Amount
+            <input
+              id="amount"
+              inputmode="numeric"
+              placeholder="Whole token units"
+              autocomplete="off"
+            >
+          </label>
+
+          <label class="full">
+            Recipient token-aware CashAddr
+            <input
+              id="recipient"
+              placeholder="bchtest:z… or bitcoincash:z…"
+              autocomplete="off"
+              spellcheck="false"
+            >
+          </label>
+        </div>
+
+        <button id="send" class="button primary send" disabled>
+          Review and approve in wallet <span aria-hidden="true">→</span>
+        </button>
+
+        <p class="fine">
+          This demo sends whole token base units only. Review the transaction
+          details in your wallet before approving.
+        </p>
+      </div>
+
+      <div
+        id="receive-panel"
+        class="tab-panel hidden"
+        role="tabpanel"
+        aria-labelledby="receive-tab"
+        hidden
+      >
+        <p class="receive-intro">
+          Create a payment link and QR code for someone to send tokens to your wallet.
+        </p>
+
+        <label class="receive-address-label">
+          Your receive address
+          <div class="address-line">
+            <code id="receive-address">Connect wallet to load your address</code>
+            <button id="copy-receive-address" class="small-button" type="button" disabled>
+              Copy
+            </button>
+          </div>
+        </label>
+
+        <div class="form receive-form">
+          <label>
+            Token category ID
+            <input
+              id="receive-category"
+              placeholder="64-character category ID"
+              autocomplete="off"
+              spellcheck="false"
+            >
+          </label>
+
+          <label>
+            Amount
+            <input
+              id="receive-amount"
+              inputmode="numeric"
+              placeholder="Whole token units"
+              autocomplete="off"
+            >
+          </label>
+        </div>
+
+        <button id="generate-payment" class="button primary send" type="button" disabled>
+          Generate payment QR <span aria-hidden="true">⌁</span>
+        </button>
+
+        <div id="payment-result" class="payment-result hidden">
+          <div class="qr-frame">
+            <canvas id="payment-qr" aria-label="Token payment URL QR code"></canvas>
+          </div>
+
+          <p class="pair-title">Scan to open the payment link</p>
+
+          <div class="payment-url-line">
+            <code id="payment-url"></code>
+            <button id="copy-payment-url" class="small-button" type="button">
+              Copy link
+            </button>
+          </div>
+        </div>
+
+        <p class="fine">
+          The QR code contains a link to this site with the receive address,
+          category ID, and requested amount.
+        </p>
+      </div>
     </section>
 
     <footer>
