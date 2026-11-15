@@ -1354,50 +1354,33 @@ const tutorialSteps = [
   },
 ];
 let tutorialStep = 0;
-let tutorialPositionFrame = 0;
-
-function positionTutorial() {
-  tutorialPositionFrame = 0;
-  const guide = document.querySelector('.wizard-guide');
-  if ($('wizard-dialog').hidden) return;
-  const panel = $(tutorialSteps[tutorialStep].id).getBoundingClientRect();
-  const bar = document.querySelector('.topbar').getBoundingClientRect();
-  const width = guide.offsetWidth;
-  const height = guide.offsetHeight;
-  const left = Math.max(8, Math.min(window.innerWidth - width - 8, panel.left + panel.width * .15));
-  const top = Math.max(bar.bottom + 8, Math.min(window.innerHeight - height - 8, panel.top + 24));
-  guide.style.left = `${left}px`;
-  guide.style.top = `${top}px`;
-}
-
-function scheduleTutorialPosition() {
-  if (!tutorialPositionFrame && !$('wizard-dialog').hidden) {
-    tutorialPositionFrame = requestAnimationFrame(positionTutorial);
-  }
-}
 
 function showTutorialStep() {
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
   const step = tutorialSteps[tutorialStep];
   const panel = $(step.id);
+  const guide = document.querySelector('.wizard-guide');
+  const focused = guide.contains(document.activeElement) ? document.activeElement : null;
+  (step.id === 'connection-section' ? panel.parentElement : panel).before(guide);
+  focused?.focus({ preventScroll: true });
   panel.classList.add('tutorial-highlight');
   $('wizard-title').textContent = step.title;
   $('wizard-message').textContent = step.message;
   $('wizard-progress').textContent = `${tutorialStep + 1} / ${tutorialSteps.length}`;
   $('wizard-prev').disabled = tutorialStep === 0;
   $('wizard-next').textContent = tutorialStep === tutorialSteps.length - 1 ? 'Done' : 'Next';
-  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  scheduleTutorialPosition();
+  guide.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function closeTutorial() {
+  const guide = document.querySelector('.wizard-guide');
+  const focused = guide.contains(document.activeElement);
   $('wizard-dialog').hidden = true;
   $('wizard-toggle').setAttribute('aria-expanded', 'false');
-  const guide = document.querySelector('.wizard-guide');
   guide.classList.remove('walking');
-  guide.style.removeProperty('left');
-  guide.style.removeProperty('top');
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
+  document.querySelector('.hero').after(guide);
+  if (focused) $('wizard-toggle').focus({ preventScroll: true });
 }
 
 $('wizard-toggle').addEventListener('click', () => {
@@ -1411,8 +1394,6 @@ $('wizard-toggle').addEventListener('click', () => {
   $('wizard-toggle').setAttribute('aria-expanded', 'true');
   showTutorialStep();
 });
-window.addEventListener('scroll', scheduleTutorialPosition, { passive: true });
-window.addEventListener('resize', scheduleTutorialPosition);
 $('wizard-prev').addEventListener('click', () => {
   if (tutorialStep > 0) {
     tutorialStep--;

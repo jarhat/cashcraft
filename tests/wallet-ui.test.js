@@ -5,6 +5,63 @@ import { runInNewContext } from 'node:vm';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
+test('wizard follows each tutorial panel without covering it and returns home when closed', () => {
+  const elements = new Map();
+  const highlighted = new Set();
+  let guidePosition = 'hero';
+  const guide = { scrollIntoView() {}, contains() { return false; }, classList: { add() {}, remove() {} } };
+  const target = (position) => ({ before(node) {
+    assert.equal(node, guide);
+    guidePosition = position;
+  } });
+  const grid = target('connection');
+  const hero = { after(node) {
+    assert.equal(node, guide);
+    guidePosition = 'hero';
+  } };
+  for (const id of ['connection-section', 'balance-section', 'earn-section', 'transfer-section']) {
+    const panel = {
+      ...target(id),
+      parentElement: grid,
+      classList: {
+        add() { highlighted.add(panel); },
+        remove() { highlighted.delete(panel); },
+      },
+    };
+    elements.set(id, panel);
+  }
+  for (const id of ['wizard-toggle', 'wizard-dialog', 'wizard-title', 'wizard-message', 'wizard-progress', 'wizard-prev', 'wizard-next']) {
+    elements.set(id, {
+      hidden: id === 'wizard-dialog',
+      addEventListener(type, handler) { this[type] = handler; },
+      setAttribute() {},
+    });
+  }
+  const document = {
+    querySelector(selector) { return selector === '.hero' ? hero : guide; },
+    querySelectorAll() { return [...highlighted]; },
+  };
+  const start = source.indexOf('const tutorialSteps =');
+  const end = source.indexOf('\n\nfetchBchUsd();', start);
+  runInNewContext(source.slice(start, end), { document, $: (id) => elements.get(id) });
+
+  elements.get('wizard-toggle').click();
+  assert.equal(guidePosition, 'connection');
+  assert.equal(elements.get('wizard-progress').textContent, '1 / 4');
+  elements.get('wizard-next').click();
+  assert.equal(guidePosition, 'balance-section');
+  elements.get('wizard-next').click();
+  assert.equal(guidePosition, 'transfer-section');
+  elements.get('wizard-next').click();
+  assert.equal(guidePosition, 'earn-section');
+  elements.get('wizard-prev').click();
+  assert.equal(guidePosition, 'transfer-section');
+  elements.get('wizard-toggle').click();
+  assert.equal(guidePosition, 'hero');
+  assert.equal(elements.get('wizard-dialog').hidden, true);
+  assert.equal(highlighted.size, 0);
+});
+
 function sharedLinkFixture(search) {
   const elements = new Map();
   function element(id) {
@@ -204,59 +261,53 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
 test('wizard follows the panels in reading order and resets when closed', () => {
   const highlighted = new Set();
   const nodes = new Map();
-  const positions = {
-    'connection-section': 20, 'balance-section': 520,
-    'transfer-section': 20, 'earn-section': 20,
-  };
+  let guidePosition = 'hero';
+  let walking = false;
   const element = (id) => {
     if (!nodes.has(id)) nodes.set(id, {
       hidden: id === 'wizard-dialog', listeners: {},
       style: { removeProperty(name) { delete this[name]; } },
       classList: {
-        add(name) { if (name === 'tutorial-highlight') highlighted.add(id); },
-        remove(name) { if (name === 'tutorial-highlight') highlighted.delete(id); },
+        add(name) { if (name === 'tutorial-highlight') highlighted.add(id); if (name === 'walking') walking = true; },
+        remove(name) { if (name === 'tutorial-highlight') highlighted.delete(id); if (name === 'walking') walking = false; },
       },
       setAttribute() {},
       addEventListener(type, handler) { this.listeners[type] = handler; },
       scrollIntoView() {},
-      getBoundingClientRect() { return { left: positions[id], top: 200, width: 400 }; },
+      contains() { return false; },
+      before() { guidePosition = id; },
     });
     return nodes.get(id);
   };
   const guide = element('guide');
-  guide.offsetWidth = 250;
-  guide.offsetHeight = 120;
-  const callbacks = [];
+  element('connection-section').parentElement = element('grid');
+  element('balance-section').parentElement = element('grid');
   const document = {
     querySelector(selector) {
-      return selector === '.wizard-guide' ? guide : { getBoundingClientRect: () => ({ bottom: 60 }) };
+      return selector === '.wizard-guide' ? guide : { after() { guidePosition = 'hero'; } };
     },
     querySelectorAll() { return [...highlighted].map(element); },
   };
   const start = source.indexOf('const tutorialSteps =');
   const end = source.indexOf('\n\nfetchBchUsd();', start);
-  runInNewContext(source.slice(start, end), {
-    $, document, window: { innerWidth: 1000, innerHeight: 800, addEventListener() {} },
-    requestAnimationFrame(callback) { callbacks.push(callback); return callbacks.length; },
-  });
+  runInNewContext(source.slice(start, end), { $, document });
   function $ (id) { return element(id); }
-  const flush = () => callbacks.shift()();
   element('wizard-toggle').listeners.click();
-  flush();
   assert.deepEqual([...highlighted], ['connection-section']);
-  const firstLeft = parseFloat(guide.style.left);
+  assert.equal(guidePosition, 'grid');
+  assert.equal(walking, true);
   element('wizard-next').listeners.click();
-  flush();
   assert.deepEqual([...highlighted], ['balance-section']);
-  assert.ok(parseFloat(guide.style.left) > firstLeft);
+  assert.equal(guidePosition, 'balance-section');
   element('wizard-next').listeners.click();
-  flush();
   assert.deepEqual([...highlighted], ['transfer-section']);
+  assert.equal(guidePosition, 'transfer-section');
   element('wizard-next').listeners.click();
-  flush();
   assert.deepEqual([...highlighted], ['earn-section']);
+  assert.equal(guidePosition, 'earn-section');
   element('wizard-next').listeners.click();
   assert.equal(element('wizard-dialog').hidden, true);
   assert.equal(highlighted.size, 0);
-  assert.equal(guide.style.left, undefined);
+  assert.equal(guidePosition, 'hero');
+  assert.equal(walking, false);
 });

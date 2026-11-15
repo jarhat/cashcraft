@@ -45,7 +45,8 @@ button {
 .shell {
   position: relative;
   z-index: 1;
-  width: min(100% - 40px, 1040px);
+  width: calc(100% - 40px);
+  max-width: 1040px;
   margin-inline: auto;
   padding: 28px 0 34px;
 }
@@ -621,7 +622,8 @@ footer {
 
 @media (max-width: 680px) {
   .shell {
-    width: min(100% - 26px, 520px);
+    width: calc(100% - 26px);
+    max-width: 520px;
     padding-top: 17px;
   }
 
@@ -1429,13 +1431,15 @@ html[data-theme="light"] select {
 }
 
 .wizard-guide {
-  position: fixed;
-  z-index: 5;
-  bottom: 20px;
-  left: 16px;
   display: flex;
-  align-items: flex-end;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  scroll-margin-top: 140px;
+}
+
+.grid > .wizard-guide {
+  grid-column: 1 / -1;
 }
 
 .notification-toggle {
@@ -1530,10 +1534,12 @@ html[data-theme="light"] select {
 }
 
 .wizard-toggle {
-  display: grid;
-  width: 82px;
-  justify-items: center;
-  padding: 7px;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 6px 12px;
   border: 1px solid rgb(168 228 255 / 35%);
   border-radius: 12px;
   background: #102333;
@@ -1549,7 +1555,8 @@ html[data-theme="light"] select {
 }
 
 .wizard-dialog {
-  width: min(270px, calc(100vw - 120px));
+  flex: 1;
+  min-width: 0;
   padding: 14px;
   border: 1px solid rgb(168 228 255 / 45%);
   border-radius: 12px 12px 12px 2px;
@@ -1566,7 +1573,7 @@ html[data-theme="light"] select {
 .wizard-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
   font: .65rem var(--mono);
 }
@@ -1575,12 +1582,6 @@ html[data-theme="light"] select {
   outline: 3px solid #0087ff;
   outline-offset: 4px;
   box-shadow: 0 0 24px rgb(0 135 255 / 28%);
-}
-
-.wizard-guide.walking {
-  z-index: 9;
-  bottom: auto;
-  transition: left .3s ease, top .3s ease;
 }
 
 .wizard-guide.walking .wizard-toggle svg {
@@ -1679,17 +1680,11 @@ footer span:first-child {
   }
 
   .wizard-guide {
-    bottom: 10px;
-    left: 8px;
+    flex-wrap: wrap;
   }
 
-  .wizard-toggle {
-    width: 64px;
-  }
-
-  .wizard-toggle svg {
-    width: 42px;
-    height: 47px;
+  .wizard-dialog {
+    flex-basis: 100%;
   }
 
   html[data-theme="voxel"] .hero-headline {
