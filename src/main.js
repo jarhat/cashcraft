@@ -25,7 +25,7 @@ import {
   wait,
 } from './utils.js';
 
-const network = (import.meta.env.VITE_BCH_NETWORK || 'chipnet').toLowerCase();
+const network = (import.meta.env.VITE_BCH_NETWORK || 'mainnet').toLowerCase();
 
 if (!['mainnet', 'chipnet'].includes(network)) {
   throw new Error(
