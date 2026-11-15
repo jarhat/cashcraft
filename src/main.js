@@ -1,6 +1,8 @@
 import './style.css';
 import { setLanguage, translate } from './i18n.js';
 import { createPaymentQrImage } from './payment-qr-image.js';
+import { setupScrollEffects } from './scroll-effects.js';
+import { loadTokenLogo } from './token-logo.js';
 import { submitCashAddress, API_BASE_URL } from './api.js';
 import {
   SATOSHIS_PER_BCH,
@@ -11,6 +13,7 @@ import {
 } from './utils.js';
 
 const network = (import.meta.env.VITE_BCH_NETWORK || 'mainnet').toLowerCase();
+setupScrollEffects();
 
 for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
   document.querySelector(selector).content = new URL('/social-preview.png', window.location.origin).href;
@@ -1216,6 +1219,7 @@ $('top-earn').addEventListener('click', () => {
 
 $('generate-payment').addEventListener('click', async () => {
   try {
+    $('payment-result').classList.add('hidden');
     if (!walletReady) {
       throw new Error('Connect your wallet before creating a payment QR.');
     }
@@ -1245,11 +1249,25 @@ $('generate-payment').addEventListener('click', async () => {
 
     const qr = document.createElement('canvas');
     await QRCode.toCanvas(qr, paymentUrl.toString(), {
-      width: 190,
-      margin: 1,
-      errorCorrectionLevel: 'M',
-      color: { dark: '#07111b', light: '#ffffff' },
+      width: 512,
+      margin: 4,
+      errorCorrectionLevel: 'H',
+      color: { dark: '#ffffff', light: '#000000' },
     });
+
+    if (mainnet) {
+      try {
+        const logo = await loadTokenLogo(category);
+        const context = qr.getContext('2d');
+        const size = qr.width * 0.1;
+        const x = (qr.width - size) / 2;
+        context.fillStyle = '#000000';
+        context.fillRect(x - 3, x - 3, size + 6, size + 6);
+        context.drawImage(logo, x, x, size, size);
+      } catch (error) {
+        report(error);
+      }
+    }
 
     if (
       !walletReady ||
