@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#05070b">
+  <meta name="description" content="Send CashTokens with CTF Cash.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="CTF | CashTokens">
+  <meta property="og:description" content="Send CashTokens with CTF Cash.">
+  <meta property="og:url" content="">
+  <meta name="twitter:card" content="summary">
   <title>CTF | CashTokens</title>
 </head>
 <body>
@@ -203,6 +209,15 @@
       </div>
 
       <div id="send-panel" class="tab-panel" role="tabpanel" aria-labelledby="send-tab">
+        <aside id="shared-link-preview" class="shared-link-preview hidden" aria-label="Shared payment link preview">
+          <p class="eyebrow">SHARED PAYMENT LINK</p>
+          <dl>
+            <div><dt>Amount</dt><dd id="shared-link-amount"></dd></div>
+            <div><dt>Recipient address</dt><dd id="shared-link-address"></dd></div>
+            <div><dt>CashToken category</dt><dd id="shared-link-category"></dd></div>
+          </dl>
+        </aside>
+
         <div class="form">
           <div>
             <label for="category-select">Available tokens</label>
