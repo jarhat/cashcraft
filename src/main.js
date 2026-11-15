@@ -91,6 +91,31 @@ function report(error) {
   $('log').textContent = error?.message || String(error);
 }
 
+const savedTheme = localStorage.getItem('ctf-theme');
+document.documentElement.dataset.theme =
+  savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark';
+document.querySelector('meta[name="theme-color"]').content =
+  document.documentElement.dataset.theme === 'dark' ? '#05070b' : '#eaf3fa';
+$('theme-toggle').setAttribute(
+  'aria-label',
+  `Switch to ${document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'} theme`,
+);
+
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem('ctf-theme', theme);
+  document.querySelector('meta[name="theme-color"]').content =
+    theme === 'dark' ? '#05070b' : '#eaf3fa';
+  $('theme-toggle').setAttribute(
+    'aria-label',
+    `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`,
+  );
+}
+
+$('theme-toggle').addEventListener('click', () => {
+  setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+});
+
 function setConnection(connected) {
   $('dot').classList.toggle('online', connected);
   $('refresh').disabled = !connected;
@@ -960,6 +985,9 @@ function setTransferTab(tabName) {
 
   $('send-tab').classList.toggle('active', isSend);
   $('receive-tab').classList.toggle('active', !isSend);
+  $('top-send').classList.toggle('active', isSend);
+  $('top-receive').classList.toggle('active', !isSend);
+  $('top-earn').classList.remove('active');
   $('send-tab').setAttribute('aria-selected', String(isSend));
   $('receive-tab').setAttribute('aria-selected', String(!isSend));
 
@@ -980,6 +1008,20 @@ function updateReceiveAddress() {
 
 $('send-tab').addEventListener('click', () => setTransferTab('send'));
 $('receive-tab').addEventListener('click', () => setTransferTab('receive'));
+$('top-send').addEventListener('click', () => {
+  setTransferTab('send');
+  $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('top-receive').addEventListener('click', () => {
+  setTransferTab('receive');
+  $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('top-earn').addEventListener('click', () => {
+  $('top-send').classList.remove('active');
+  $('top-receive').classList.remove('active');
+  $('top-earn').classList.add('active');
+  $('earn-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 
 $('generate-payment').addEventListener('click', async () => {
   try {

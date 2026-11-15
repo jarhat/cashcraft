@@ -17,15 +17,54 @@
         <span class="flake">❄</span> CTF
         <span class="brand-dim">/ CASH</span>
       </a>
-      <span class="network"><i></i><span id="network">CHIPNET</span></span>
+      <nav class="quick-nav" aria-label="Wallet actions">
+        <button id="top-send" class="quick-action active" type="button" aria-controls="send-panel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M12 5l7 7-7 7" /></svg>
+          <span>Send</span>
+        </button>
+        <button id="top-receive" class="quick-action" type="button" aria-controls="receive-panel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 8.8c0 5.1-8.8 10-8.8 10s-8.8-4.9-8.8-10a4.7 4.7 0 0 1 8.8-2.2 4.7 4.7 0 0 1 8.8 2.2Z" /></svg>
+          <span>Receive</span>
+        </button>
+        <button id="top-earn" class="quick-action" type="button" aria-controls="earn-section">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 7 3-3 15 15-3 3L3 7Zm8-4 3 3-7 7-3-3 7-7Zm4 7 3 3-7 7-3-3 7-7Z" /></svg>
+          <span>Earn</span>
+        </button>
+      </nav>
+      <div class="topbar-tools">
+        <span class="network"><i></i><span id="network">CHIPNET</span></span>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to light theme">
+          <svg class="theme-icon moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.4A8.5 8.5 0 0 1 8.6 3.8 8.5 8.5 0 1 0 20.2 15.4Z" /></svg>
+          <svg class="theme-icon sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></svg>
+        </button>
+      </div>
     </header>
 
     <section class="hero">
-      <p class="eyebrow">BITCOIN CASH · CASHTOKENS</p>
-      <h1>Send<br><span>CashTokens</span></h1>
-      <p class="intro">
-        Connect a compatible wallet to participate.
-      </p>
+      <div class="hero-copy">
+        <p class="eyebrow">BITCOIN CASH · CASHTOKENS</p>
+        <h1>Send<br><span>CashTokens</span></h1>
+        <p class="intro">
+          Connect a compatible wallet to participate.
+        </p>
+      </div>
+      <div class="space-art" aria-hidden="true">
+        <div class="space-art-label"><span>DEEP SPACE / 001</span><span>✦</span></div>
+        <svg viewBox="0 0 180 120" shape-rendering="crispEdges">
+          <g class="pixel-stars">
+            <path d="M21 19h3v3h-3zM28 52h2v2h-2zM52 12h2v2h-2zM153 27h3v3h-3zM159 79h2v2h-2zM37 99h3v3h-3zM137 101h3v3h-3zM113 12h2v2h-2z" />
+            <path d="M143 43h3v9h-3zM140 46h9v3h-9zM48 72h2v8h-2zM45 75h8v2h-8z" />
+          </g>
+          <path class="pixel-orbit" d="M42 77h8v-4h10v-4h12v-4h38v4h12v4h10v4h8v4h-8v4h-10v4h-12v4H72v-4H60v-4H50v-4h-8z" />
+          <path class="pixel-planet" d="M76 30h28v4h8v4h8v8h4v28h-4v8h-8v4h-8v4H76v-4h-8v-4h-8v-8h-4V46h4v-8h8v-4h8z" />
+          <path class="pixel-shadow" d="M108 38h4v4h8v8h4v24h-4v8h-8v4h-8v4H76v-4h-8v-4h-4v-8h8v4h12v-4h12v-4h8v-8h4z" />
+          <path class="pixel-craters" d="M72 46h12v4H72zM80 42h8v4h-8zM94 58h12v4H94zM90 62h8v4h-8zM68 66h8v4h-8z" />
+          <path class="pixel-ring" d="M42 77h8v4h10v4h12v4h38v-4h12v-4h10v-4h8v4h-8v4h-10v4h-12v4H72v-4H60v-4H50v-4h-8z" />
+          <path class="pixel-ship" d="M131 17h4v4h4v4h4v4h-8v4h-4v-4h-8v-4h4v-4h4z" />
+          <path class="pixel-flame" d="M127 33h12v4h-4v4h-4v-4h-4z" />
+        </svg>
+        <div class="space-art-label"><span>◦ ORBITAL SIGNAL</span><span>•••</span></div>
+      </div>
     </section>
 
     <section class="grid">
@@ -89,7 +128,7 @@
       </article>
     </section>
 
-    <section class="panel section">
+    <section id="earn-section" class="panel section">
       <div class="heading">
         <div>
           <p class="eyebrow">PORTFOLIO</p>
@@ -107,7 +146,7 @@
       </p>
     </section>
 
-    <section class="panel section transfer-panel">
+    <section id="transfer-section" class="panel section transfer-panel">
       <div class="heading">
         <div>
           <p class="eyebrow">TRANSFER</p>
