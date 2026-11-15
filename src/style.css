@@ -12,6 +12,7 @@
   --glass-border: rgb(206 222 239 / 20%);
   --glass-glow: rgb(176 196 218 / 12%);
   --accent-soft: #d3e2ef;
+  --glow-color: #55bfff;
   --mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
@@ -807,10 +808,11 @@ input[readonly] {
 
 #payment-qr {
   display: block;
-  width: 190px;
-  height: 190px;
+  width: min(100%, 300px);
+  height: auto;
   border-radius: 5px;
-  background: #fff;
+  background: #000;
+  image-rendering: pixelated;
 }
 
 .payment-url-line {
@@ -1023,6 +1025,7 @@ html[data-theme="aurora"] {
   --ice: #a1edc5;
   --mint: #69e2a1;
   --accent-soft: #a5eec7;
+  --glow-color: #0ac18e;
 }
 
 .theme-icon {
@@ -1603,9 +1606,64 @@ select {
 }
 
 .tutorial-highlight {
-  outline: 3px solid #0087ff;
+  outline: 3px solid var(--glow-color);
   outline-offset: 4px;
-  box-shadow: 0 0 24px rgb(0 135 255 / 28%);
+  box-shadow: 0 0 8px var(--glow-color), 0 0 28px color-mix(in srgb, var(--glow-color) 45%, transparent);
+}
+
+@property --glow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.tutorial-highlight::after,
+.wallet-link::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 3px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--glow-angle), transparent 0 70%, var(--glow-color) 82%, #fff 85%, var(--glow-color) 88%, transparent 100%);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  content: "";
+  animation: glow-orbit 4s linear infinite;
+}
+
+.wallet-link {
+  position: relative;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--glow-color) 55%, transparent), 0 0 24px color-mix(in srgb, var(--glow-color) 25%, transparent);
+}
+
+@keyframes glow-orbit {
+  to { --glow-angle: 360deg; }
+}
+
+.topbar {
+  opacity: var(--navbar-opacity, 1);
+  transition: opacity .16s ease;
+}
+
+.topbar.is-obscured:not(:focus-within) {
+  pointer-events: none;
+}
+
+.topbar:focus-within {
+  opacity: 1;
+}
+
+.hero-copy {
+  -webkit-mask-image: linear-gradient(to bottom, transparent var(--hero-mask-start, 0px), #000 var(--hero-mask-end, 0px));
+  mask-image: linear-gradient(to bottom, transparent var(--hero-mask-start, 0px), #000 var(--hero-mask-end, 0px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-highlight::after,
+  .wallet-link::after {
+    animation: none;
+  }
 }
 
 .wizard-guide.walking .wizard-toggle svg {

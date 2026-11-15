@@ -5,7 +5,7 @@ import { createPaymentQrImage } from '../src/payment-qr-image.js';
 test('payment image includes the QR and complete amount and category', () => {
   const calls = [];
   const context = {
-    fillRect(...args) { calls.push(['fillRect', ...args]); },
+    fillRect(...args) { calls.push(['fillRect', this.fillStyle, ...args]); },
     drawImage(...args) { calls.push(['drawImage', ...args]); },
     fillText(...args) { calls.push(['fillText', ...args]); },
   };
@@ -18,6 +18,8 @@ test('payment image includes the QR and complete amount and category', () => {
     const category = 'abcdef01'.repeat(8);
     assert.equal(createPaymentQrImage(qr, amount, category, (text) => text), canvas);
     assert.ok(calls.some(([type, image]) => type === 'drawImage' && image === qr));
+    assert.ok(calls.some(([type, color]) => type === 'fillRect' && color === '#000000'));
+    assert.equal(context.fillStyle, '#ffffff');
     const text = calls.filter(([type]) => type === 'fillText').map(([, value]) => value);
     assert.deepEqual(text, ['Amount', amount.slice(0, 40), amount.slice(40),
       'Token category ID', category.slice(0, 40), category.slice(40)]);

@@ -6,11 +6,11 @@ export function createPaymentQrImage(qr, amount, category, translate) {
   canvas.height = 474 + (amountLines.length + categoryLines.length) * 26 + 70;
 
   const context = canvas.getContext('2d');
-  context.fillStyle = '#ffffff';
+  context.fillStyle = '#000000';
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.imageSmoothingEnabled = false;
   context.drawImage(qr, 130, 24, 380, 380);
-  context.fillStyle = '#07111b';
+  context.fillStyle = '#ffffff';
   context.textBaseline = 'top';
   context.font = 'bold 20px sans-serif';
   context.fillText(translate('Amount'), 40, 430);
