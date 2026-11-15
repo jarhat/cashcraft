@@ -623,3 +623,99 @@ input[readonly] {
   opacity: 1;
   cursor: not-allowed;
 }
+
+.transfer-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin: 20px 0 18px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgb(0 0 0 / 18%);
+}
+
+.transfer-tab {
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: #9aafc0;
+  cursor: pointer;
+  font: inherit;
+  font-size: .82rem;
+  transition: color .18s ease, background .18s ease, border-color .18s ease;
+}
+
+.transfer-tab:hover {
+  color: #e7f5ff;
+}
+
+.transfer-tab.active {
+  border-color: rgb(197 231 255 / 18%);
+  background: linear-gradient(120deg, rgb(255 255 255 / 12%), rgb(255 255 255 / 5%));
+  color: #eff9ff;
+  box-shadow: inset 0 1px rgb(255 255 255 / 9%), 0 4px 14px rgb(0 0 0 / 12%);
+}
+
+.tab-panel[hidden],
+.hidden {
+  display: none !important;
+}
+
+.receive-intro {
+  margin: 0 0 18px;
+  color: #a9bdcc;
+  font-size: .83rem;
+}
+
+.receive-address-label {
+  display: block;
+  margin-bottom: 18px;
+}
+
+.receive-form {
+  margin-top: 0;
+}
+
+.payment-result {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid var(--line-bright);
+  border-radius: 15px;
+  background:
+    radial-gradient(ellipse at 50% 0, rgb(155 222 255 / 9%), transparent 55%),
+    rgb(1 10 17 / 38%);
+  text-align: center;
+}
+
+#payment-qr {
+  display: block;
+  width: 190px;
+  height: 190px;
+  border-radius: 5px;
+  background: #fff;
+}
+
+.payment-url-line {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 4px;
+  text-align: left;
+}
+
+.payment-url-line code {
+  min-width: 0;
+  flex: 1;
+  max-height: 78px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  color: #d0e0eb;
+  font-family: var(--mono);
+  font-size: .68rem;
+}

@@ -317,6 +317,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
 
     manager.on('walletready', async (message) => {
       walletReady = true;
+      updateReceiveAddress();
       setConnection(true);
       $('pairing').classList.add('hidden');
       $('status').textContent =
@@ -1060,6 +1061,101 @@ $('copy-uri').addEventListener('click', async () => {
     report(error);
   }
 });
+
+function setTransferTab(tabName) {
+  const isSend = tabName === 'send';
+
+  $('send-tab').classList.toggle('active', isSend);
+  $('receive-tab').classList.toggle('active', !isSend);
+  $('send-tab').setAttribute('aria-selected', String(isSend));
+  $('receive-tab').setAttribute('aria-selected', String(!isSend));
+
+  $('send-panel').hidden = !isSend;
+  $('send-panel').classList.toggle('hidden', !isSend);
+  $('receive-panel').hidden = isSend;
+  $('receive-panel').classList.toggle('hidden', isSend);
+}
+
+function updateReceiveAddress() {
+  if (!walletReady) return;
+
+  const address = addressFor(0, 0, 'p2pkhWithTokens');
+  $('receive-address').textContent = address;
+  $('generate-payment').disabled = false;
+  $('copy-receive-address').disabled = false;
+}
+
+$('send-tab').addEventListener('click', () => setTransferTab('send'));
+$('receive-tab').addEventListener('click', () => setTransferTab('receive'));
+
+$('generate-payment').addEventListener('click', async () => {
+  try {
+    if (!walletReady) {
+      throw new Error('Connect your wallet before creating a payment QR.');
+    }
+
+    const address = addressFor(0, 0, 'p2pkhWithTokens');
+    const category = $('receive-category').value.trim().toLowerCase();
+    const amount = $('receive-amount').value.trim();
+
+    if (!/^[0-9a-f]{64}$/.test(category)) {
+      throw new Error('Category ID must be exactly 64 hexadecimal characters.');
+    }
+
+    if (!/^[1-9][0-9]*$/.test(amount)) {
+      throw new Error('Amount must be a positive whole number.');
+    }
+
+    // Keep the current site and path, replacing any existing query parameters.
+    const paymentUrl = new URL(window.location.href);
+    paymentUrl.search = '';
+    paymentUrl.hash = '';
+    paymentUrl.searchParams.set('addr', address);
+    paymentUrl.searchParams.set('amount', amount);
+    paymentUrl.searchParams.set('category', category);
+
+    $('receive-address').textContent = address;
+    $('payment-url').textContent = paymentUrl.toString();
+
+    await QRCode.toCanvas($('payment-qr'), paymentUrl.toString(), {
+      width: 190,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#07111b', light: '#ffffff' },
+    });
+
+    $('payment-result').classList.remove('hidden');
+  } catch (error) {
+    report(error);
+  }
+});
+
+$('copy-receive-address').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('receive-address').textContent);
+    $('copy-receive-address').textContent = 'Copied';
+
+    setTimeout(() => {
+      $('copy-receive-address').textContent = 'Copy';
+    }, 1200);
+  } catch (error) {
+    report(error);
+  }
+});
+
+$('copy-payment-url').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('payment-url').textContent);
+    $('copy-payment-url').textContent = 'Copied';
+
+    setTimeout(() => {
+      $('copy-payment-url').textContent = 'Copy link';
+    }, 1200);
+  } catch (error) {
+    report(error);
+  }
+});
+
 
 fetchBchUsd();
 
