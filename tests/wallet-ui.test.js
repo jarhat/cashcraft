@@ -5,6 +5,32 @@ import { runInNewContext } from 'node:vm';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
+test('theme preferences migrate and select the correct palette', () => {
+  for (const [saved, expected] of [['bch', 'green'], ['bch-sunrise', 'green'], ['blue', 'blue'], ['unknown', 'dark']]) {
+    const buttons = ['dark', 'blue', 'green'].map((themeOption) => ({
+      dataset: { themeOption },
+      setAttribute(name, value) { this[name] = value; },
+    }));
+    const document = {
+      documentElement: { dataset: {} },
+      querySelector() { return this.meta; },
+      querySelectorAll() { return buttons; },
+      meta: {},
+    };
+    const localStorage = {
+      getItem() { return saved; },
+      setItem(key, value) { this[key] = value; },
+    };
+    const start = source.indexOf('const savedTheme =');
+    const end = source.indexOf("\nfor (const name of ['theme', 'language'])", start);
+    runInNewContext(source.slice(start, end), { document, localStorage });
+    assert.equal(document.documentElement.dataset.theme, expected);
+    assert.equal(localStorage['ctf-theme'], expected);
+    assert.ok(document.meta.content);
+    assert.equal(buttons.find((button) => button.dataset.themeOption === expected)['aria-pressed'], 'true');
+  }
+});
+
 test('wizard follows each tutorial panel without covering it and returns home when closed', () => {
   const elements = new Map();
   const highlighted = new Set();
