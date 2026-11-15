@@ -1163,3 +1163,153 @@ html[data-theme="light"] .pixel-flame { fill: #cd8553; }
     font-size: .57rem;
   }
 }
+
+.wallet-link {
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.token-row {
+  display: block;
+}
+
+.token-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  list-style: none;
+}
+
+.token-summary > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.token-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: rgb(120 195 215 / 14%);
+  color: var(--ice);
+}
+
+.payment-token {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.payment-token code {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font: .65rem var(--mono);
+}
+
+select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #172635;
+  color: #f3f8fd;
+  font: .75rem var(--mono);
+}
+
+select:disabled {
+  opacity: .6;
+}
+
+select:focus-visible,
+.wizard-toggle:focus-visible {
+  outline: 2px solid var(--ice);
+  outline-offset: 3px;
+}
+
+html[data-theme="light"] select {
+  background: #f5fafc;
+  color: #1d3448;
+}
+
+.wizard-guide {
+  position: fixed;
+  z-index: 5;
+  bottom: 20px;
+  left: 16px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.wizard-toggle {
+  display: grid;
+  width: 82px;
+  justify-items: center;
+  padding: 7px;
+  border: 1px solid rgb(168 228 255 / 35%);
+  border-radius: 12px;
+  background: #102333;
+  color: #e9f4ff;
+  cursor: pointer;
+  font: .6rem var(--mono);
+}
+
+.wizard-toggle svg {
+  width: 54px;
+  height: 61px;
+}
+
+.wizard-dialog {
+  width: min(270px, calc(100vw - 120px));
+  padding: 14px;
+  border: 1px solid rgb(168 228 255 / 45%);
+  border-radius: 12px 12px 12px 2px;
+  background: #102333;
+  color: #e9f4ff;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 35%);
+  font-size: .8rem;
+}
+
+.wizard-dialog p {
+  margin: 6px 0 12px;
+}
+
+.wizard-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font: .65rem var(--mono);
+}
+
+.tutorial-highlight {
+  outline: 3px solid #a0f2cf;
+  outline-offset: 4px;
+  box-shadow: 0 0 32px rgb(114 224 162 / 40%);
+}
+
+@media (max-width: 680px) {
+  .wizard-guide {
+    bottom: 10px;
+    left: 8px;
+  }
+
+  .wizard-toggle {
+    width: 64px;
+  }
+
+  .wizard-toggle svg {
+    width: 42px;
+    height: 47px;
+  }
+}

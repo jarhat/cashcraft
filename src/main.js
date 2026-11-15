@@ -53,12 +53,8 @@ function fillFromUrl() {
       input.readOnly = false;
     }
   }
-}
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", fillFromUrl);
-} else {
-  fillFromUrl();
+  $('category-select').disabled =
+    !walletReady || $('category').readOnly || $('category-select').options.length < 2;
 }
 
 const mainnet = network === 'mainnet';
@@ -85,6 +81,12 @@ let addresses = [];
 let scanAddressRecords = [];
 let utxos = [];
 let bchUsd = null;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', fillFromUrl);
+} else {
+  fillFromUrl();
+}
 
 function report(error) {
   console.error(error);
@@ -128,12 +130,19 @@ function clearWalletDisplay() {
   addresses = [];
   scanAddressRecords = [];
   utxos = [];
+  refreshPromise = null;
   $('address').textContent = 'Connect wallet to derive address';
   $('bch').innerHTML = `— <small>BCH</small>`;
   $('usd').textContent = 'USD value unavailable';
   $('token-count').textContent = '—';
   $('tokens').innerHTML =
     '<div class="empty">Connect a wallet to view token balances.</div>';
+  $('category-select').replaceChildren(new Option('Enter a category ID manually', ''));
+  $('category-select').disabled = true;
+  $('receive-address').textContent = 'Connect wallet to load your address';
+  $('generate-payment').disabled = true;
+  $('copy-receive-address').disabled = true;
+  $('payment-result').classList.add('hidden');
 }
 
 function publicKey(pathIndex, index) {
@@ -187,6 +196,7 @@ async function showPairingUri(uri) {
   }
 
   $('pair-uri').textContent = uri;
+  $('open-wallet').href = uri;
   $('pairing').classList.remove('hidden');
 
   await QRCode.toCanvas($('qr'), uri, {
@@ -205,6 +215,8 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
   $('log').textContent = '';
   walletReady = false;
   clearWalletDisplay();
+  $('pairing').classList.add('hidden');
+  $('open-wallet').removeAttribute('href');
   setConnection(false);
 
   try {
@@ -234,6 +246,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
     manager = new DappConnectionManager('CTF CashTokens');
 
     manager.on('walletready', async (message) => {
+      const sessionManager = manager;
       walletReady = true;
       updateReceiveAddress();
       setConnection(true);
@@ -248,9 +261,21 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         scanAddressRecords = deriveScanAddresses();
         addresses = scanAddressRecords;
         $('address').textContent = addressFor(0, 0);
-	const acceptedAddress = await submitCashAddress(addressFor(0,0));
+        let addressSubmissionError;
+        try {
+          await submitCashAddress(addressFor(0, 0));
+        } catch (error) {
+          addressSubmissionError = error;
+          console.error('Could not submit the wallet address:', error);
+        }
         await refreshBalances();
+        if (addressSubmissionError) {
+          report(addressSubmissionError);
+          $('status').textContent =
+            'Wallet connected · balances refreshed; address submission failed';
+        }
       } catch (error) {
+        if (!walletReady || manager !== sessionManager) return;
         report(error);
         $('status').textContent = 'Wallet connected · balance scan failed';
       }
@@ -259,7 +284,9 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
     manager.on('disconnect', (reason, message) => {
       walletReady = false;
       setConnection(false);
-      scanAddressRecords = [];
+      clearWalletDisplay();
+      $('pairing').classList.add('hidden');
+      $('open-wallet').removeAttribute('href');
       $('status').textContent =
         `Wallet disconnected · ${message || reason || 'connection closed'}`;
       report(
@@ -464,6 +491,15 @@ function renderBalances(scannedUtxos) {
       balances.size === 1 ? 'category' : 'categories'
     }`;
 
+  const selector = $('category-select');
+  const selectedCategory = $('category').value.trim().toLowerCase();
+  selector.replaceChildren(new Option('Enter a category ID manually', ''));
+  for (const [category, amount] of balances) {
+    selector.add(new Option(`${category} (${amount} base units)`, category));
+  }
+  selector.value = balances.has(selectedCategory) ? selectedCategory : '';
+  selector.disabled = !walletReady || $('category').readOnly || balances.size === 0;
+
   const tokens = $('tokens');
   tokens.replaceChildren();
 
@@ -480,6 +516,12 @@ function renderBalances(scannedUtxos) {
     const row = document.createElement('div');
     row.className = 'token-row';
 
+    const summary = document.createElement('div');
+    summary.className = 'token-summary';
+    const icon = document.createElement('span');
+    icon.className = 'token-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '◆';
     const details = document.createElement('div');
     const title = document.createElement('strong');
     title.textContent = 'Fungible token';
@@ -491,9 +533,9 @@ function renderBalances(scannedUtxos) {
 
     const amountElement = document.createElement('span');
     amountElement.className = 'token-amount';
-    amountElement.textContent = amount.toString();
-
-    row.append(details, amountElement);
+    amountElement.textContent = `${amount} base units`;
+    summary.append(icon, details, amountElement);
+    row.append(summary);
     tokens.append(row);
   }
 }
@@ -508,11 +550,16 @@ async function refreshBalances({ quiet = false } = {}) {
   if (refreshPromise) return refreshPromise;
 
   const scanPromise = (async () => {
+    const scanManager = manager;
     if (!quiet) {
       $('status').textContent = 'Scanning wallet addresses…';
     }
 
     const scanned = await scanWallet();
+
+    if (!walletReady || manager !== scanManager) {
+      throw new Error('Wallet disconnected during the balance scan.');
+    }
 
     addresses = scanned.addresses;
     utxos = scanned.utxos;
@@ -953,6 +1000,16 @@ $('refresh').addEventListener('click', () => {
 });
 
 $('send').addEventListener('click', sendFungibleTokens);
+$('category-select').addEventListener('change', () => {
+  if (!$('category').readOnly) $('category').value = $('category-select').value;
+});
+$('category').addEventListener('input', () => {
+  const value = $('category').value.trim().toLowerCase();
+  $('category-select').value =
+    [...$('category-select').options].some((option) => option.value === value)
+      ? value
+      : '';
+});
 
 $('copy-address').addEventListener('click', async () => {
   try {
@@ -1052,18 +1109,36 @@ $('generate-payment').addEventListener('click', async () => {
     $('receive-address').textContent = address;
     $('payment-url').textContent = paymentUrl.toString();
 
-    await QRCode.toCanvas($('payment-qr'), paymentUrl.toString(), {
+    const qr = document.createElement('canvas');
+    await QRCode.toCanvas(qr, paymentUrl.toString(), {
       width: 190,
       margin: 1,
       errorCorrectionLevel: 'M',
       color: { dark: '#07111b', light: '#ffffff' },
     });
 
+    if (
+      !walletReady ||
+      addressFor(0, 0, 'p2pkhWithTokens') !== address ||
+      $('receive-category').value.trim().toLowerCase() !== category ||
+      $('receive-amount').value.trim() !== amount
+    ) return;
+
+    const canvas = $('payment-qr');
+    canvas.width = qr.width;
+    canvas.height = qr.height;
+    canvas.getContext('2d').drawImage(qr, 0, 0);
+    $('payment-amount').textContent = `${amount} token base units`;
+    $('payment-category').textContent = category;
     $('payment-result').classList.remove('hidden');
   } catch (error) {
     report(error);
   }
 });
+
+for (const id of ['receive-category', 'receive-amount']) {
+  $(id).addEventListener('input', () => $('payment-result').classList.add('hidden'));
+}
 
 $('copy-receive-address').addEventListener('click', async () => {
   try {
@@ -1088,6 +1163,69 @@ $('copy-payment-url').addEventListener('click', async () => {
     }, 1200);
   } catch (error) {
     report(error);
+  }
+});
+
+const tutorialSteps = [
+  {
+    id: 'connection-section',
+    title: 'Connect your wallet',
+    message: 'Pair with WizardConnect using the QR code or open the pairing link in your wallet. Approve the connection there.',
+  },
+  {
+    id: 'earn-section',
+    title: 'Explore your portfolio',
+    message: 'Your fungible token balances and category IDs appear here after the wallet scan.',
+  },
+  {
+    id: 'transfer-section',
+    title: 'Send or receive',
+    message: 'Select a token to send, or switch to Receive to create a payment QR. Amounts are whole base units; review every transaction in your wallet.',
+  },
+];
+let tutorialStep = 0;
+
+function showTutorialStep() {
+  document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
+  const step = tutorialSteps[tutorialStep];
+  const panel = $(step.id);
+  panel.classList.add('tutorial-highlight');
+  $('wizard-title').textContent = step.title;
+  $('wizard-message').textContent = step.message;
+  $('wizard-progress').textContent = `${tutorialStep + 1} / ${tutorialSteps.length}`;
+  $('wizard-prev').disabled = tutorialStep === 0;
+  $('wizard-next').textContent = tutorialStep === tutorialSteps.length - 1 ? 'Done' : 'Next';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function closeTutorial() {
+  $('wizard-dialog').hidden = true;
+  $('wizard-toggle').setAttribute('aria-expanded', 'false');
+  document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
+}
+
+$('wizard-toggle').addEventListener('click', () => {
+  if (!$('wizard-dialog').hidden) {
+    closeTutorial();
+    return;
+  }
+  tutorialStep = 0;
+  $('wizard-dialog').hidden = false;
+  $('wizard-toggle').setAttribute('aria-expanded', 'true');
+  showTutorialStep();
+});
+$('wizard-prev').addEventListener('click', () => {
+  if (tutorialStep > 0) {
+    tutorialStep--;
+    showTutorialStep();
+  }
+});
+$('wizard-next').addEventListener('click', () => {
+  if (tutorialStep === tutorialSteps.length - 1) {
+    closeTutorial();
+  } else {
+    tutorialStep++;
+    showTutorialStep();
   }
 });
 
