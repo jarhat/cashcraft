@@ -135,7 +135,8 @@ services:
       - nginx-vhost:/etc/nginx/vhost.d:ro
       - nginx-html:/usr/share/nginx/html:ro
     depends_on:
-      - docker-socket-router
+      docker-socket-router:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - app-network
@@ -157,9 +158,16 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    healthcheck: &docker-api-healthcheck
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2375/_ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
     depends_on:
-      - docker-socket-read
-      - docker-socket-write
+      docker-socket-read:
+        condition: service_healthy
+      docker-socket-write:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - docker-control
@@ -167,6 +175,16 @@ services:
 
   docker-socket-read:
     image: tecnativa/docker-socket-proxy:0.3.0
+    entrypoint: &socket-proxy-entrypoint
+      - /bin/sh
+      - -ec
+      - |
+        case "$$(printf '%s' "$$DISABLE_IPV6" | tr '[:upper:]' '[:lower:]')" in
+          1|true|yes) bind_config=":2375" ;;
+          *) bind_config="[::]:2375 v4v6" ;;
+        esac
+        sed "s/\$${BIND_CONFIG}/$$bind_config/g" /usr/local/etc/haproxy/haproxy.cfg.template > /tmp/haproxy.cfg
+        exec haproxy -W -db -f /tmp/haproxy.cfg
     environment:
       CONTAINERS: "1"
       EVENTS: "1"
@@ -180,6 +198,7 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    healthcheck: *docker-api-healthcheck
     tmpfs:
       - /run
       - /tmp
@@ -192,6 +211,7 @@ services:
 
   docker-socket-write:
     image: tecnativa/docker-socket-proxy:0.3.0
+    entrypoint: *socket-proxy-entrypoint
     environment:
       ALLOW_RESTARTS: "1"
       CONTAINERS: "0"
@@ -201,6 +221,7 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    healthcheck: *docker-api-healthcheck
     tmpfs:
       - /run
       - /tmp
