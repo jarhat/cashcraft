@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from fastapi.testclient import TestClient
+
 os.environ.update({
     "BCH_NETWORK": "mainnet",
     "BCH_RPC_USER": "test",
@@ -41,6 +43,20 @@ class RewardTests(unittest.TestCase):
             rows = db.execute("SELECT cash_address, category FROM token_rewards ORDER BY cash_address").fetchall()
             self.assertEqual(rows, [("new", "b" * 64), ("proof", "b" * 64)])
             self.assertIsNone(db.execute("SELECT 1 FROM cash_addresses WHERE cash_address = 'failed'").fetchone())
+
+    def test_address_endpoint_saves_valid_address_and_queues_one_reward(self):
+        address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
+        client = TestClient(backend.app)
+        for _ in range(2):
+            response = client.post("/api/cash-address", json={"cash_address": address})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["cash_address"], address)
+        with sqlite3.connect(backend.DB_PATH) as db:
+            self.assertEqual(db.execute("SELECT cash_address FROM cash_addresses").fetchall(), [(address,)])
+            self.assertEqual(
+                db.execute("SELECT cash_address, category FROM token_rewards").fetchall(),
+                [(address, "b" * 64)],
+            )
 
     def test_existing_database_is_migrated_without_queueing_old_addresses(self):
         with sqlite3.connect(backend.DB_PATH) as db:

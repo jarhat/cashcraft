@@ -1,4 +1,4 @@
-export const API_BASE_URL = 'https://auth.ctf.cash';
+export const API_BASE_URL = '';
 
 export async function submitCashAddress(cashAddress) {
   if (typeof cashAddress !== 'string' || !cashAddress.trim()) {
@@ -15,12 +15,21 @@ export async function submitCashAddress(cashAddress) {
     }),
   });
 
-  const result = await response.json().catch(() => ({}));
+  let result;
+  try {
+    result = await response.json();
+  } catch (error) {
+    throw new Error(`Address API returned an invalid response (${response.status}).`, { cause: error });
+  }
 
   if (!response.ok) {
     throw new Error(
-      result.detail ?? `Address API error (${response.status})`,
+      typeof result?.detail === 'string' ? result.detail : `Address API error (${response.status})`,
     );
+  }
+  if (typeof result?.cash_address !== 'string' ||
+      result.cash_address.toLowerCase() !== cashAddress.trim().toLowerCase()) {
+    throw new Error('Address API did not confirm the submitted address.');
   }
   return result.cash_address;
 }
