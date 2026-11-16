@@ -107,7 +107,6 @@ function loadWalletDependencies() {
   return dependenciesPromise;
 }
 
-const ADDRESS_SCAN_COUNT = 50;
 const SCAN_CONCURRENCY = 8;
 const SCAN_RETRY_DELAYS_MS = [300, 700, 1500];
 const MAXIMUM_FEE_SATOSHIS = 10_000n;
@@ -122,6 +121,7 @@ let walletReady = false;
 let pairingInProgress = false;
 let showPairingWhenReady = false;
 let sending = false;
+let transferInteracted = false;
 let refreshPromise = null;
 let addresses = [];
 let scanAddressRecords = [];
@@ -132,10 +132,14 @@ let emptyBalanceNotified = false;
 let portfolioVersion = 0;
 let paymentGeneration = 0;
 let paymentPriceSnapshot = null;
+let walletReceiveAddress = null;
+let tokenBalances = new Map();
+let pricedPortfolioBch = 0;
 
 function report(error) {
   console.error(error);
-  $('log').textContent = error?.message || String(error);
+  $('log').classList.add('error');
+  $('log').textContent = `Action failed: ${error?.message || String(error)}\nCheck the status above, your inputs and wallet connection before retrying.`;
 }
 
 const savedTheme = localStorage.getItem('ctf-theme');
@@ -195,10 +199,10 @@ function setConnection(connected) {
   $('copy-address').disabled = !connected;
   $('connect').disabled = connected || pairingInProgress;
   const isSend = $('send-tab').getAttribute('aria-selected') === 'true';
-  $('send-tab').classList.toggle('active', connected && isSend);
-  $('receive-tab').classList.toggle('active', connected && !isSend);
-  $('top-send').classList.toggle('active', connected && isSend);
-  $('top-receive').classList.toggle('active', connected && !isSend);
+  $('send-tab').classList.toggle('active', (connected || transferInteracted) && isSend);
+  $('receive-tab').classList.toggle('active', (connected || transferInteracted) && !isSend);
+  $('top-send').classList.toggle('active', (connected || transferInteracted) && isSend);
+  $('top-receive').classList.toggle('active', (connected || transferInteracted) && !isSend);
 }
 
 function clearWalletDisplay() {
@@ -216,12 +220,23 @@ function clearWalletDisplay() {
   $('tokens').innerHTML =
     '<div class="empty">Connect a wallet to view token balances.</div>';
   $('portfolio-chart-content').textContent = translate('Connect a wallet to view allocation.');
+  $('portfolio-chart').hidden = true;
+  $('portfolio-chart').open = false;
+  tokenBalances = new Map();
+  pricedPortfolioBch = 0;
+  $('balance-tokens').textContent = 'Connect wallet to load tokens.';
+  $('total-value').textContent = 'Total USD —';
+  $('amount-help').textContent = 'Enter whole base units. Select a token to see its decimals and available balance.';
   $('category-select').replaceChildren(new Option('Enter a category ID manually', ''));
   $('category-select').disabled = true;
-  $('receive-address').textContent = 'Connect wallet to load your address';
-  $('generate-payment').disabled = true;
-  $('copy-receive-address').disabled = true;
-  $('payment-result').classList.add('hidden');
+  $('token-options').hidden = true;
+  $('token-options-list').replaceChildren();
+  if (walletReceiveAddress && $('receive-address').value === walletReceiveAddress) {
+    $('receive-address').value = '';
+    $('copy-receive-address').disabled = true;
+    $('payment-result').classList.add('hidden');
+  }
+  walletReceiveAddress = null;
 }
 
 function publicKey(pathIndex, index) {
@@ -250,12 +265,16 @@ function addressFor(pathIndex, index, type = 'p2pkhWithTokens') {
 
 function deriveScanAddresses() {
   const records = [];
+  const count = Number($('scan-count').value);
+  if (!Number.isInteger(count) || count < 1 || count > 1000) {
+    throw new Error('Address scan count must be a whole number between 1 and 1000 per path.');
+  }
 
   for (const [pathName, pathIndex] of [
     ['receive', 0],
     ['change', 1],
   ]) {
-    for (let index = 0; index < ADDRESS_SCAN_COUNT; index++) {
+    for (let index = 0; index < count; index++) {
       records.push({
         pathName,
         pathIndex,
@@ -344,19 +363,12 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
       $('log').textContent = '';
 
       try {
-        scanAddressRecords = deriveScanAddresses();
-        addresses = scanAddressRecords;
         $('address').textContent = addressFor(0, 0);
-        let addressSubmissionError;
-        try {
-          await submitCashAddress(addressFor(0, 0));
-        } catch (error) {
-          addressSubmissionError = error;
-          console.error('Could not submit the wallet address:', error);
-        }
-        await refreshBalances();
-        if (addressSubmissionError) {
-          report(addressSubmissionError);
+        const submission = submitCashAddress(addressFor(0, 0));
+        const [scanResult, submissionResult] = await Promise.allSettled([refreshBalances(), submission]);
+        if (scanResult.status === 'rejected') throw scanResult.reason;
+        if (submissionResult.status === 'rejected') {
+          report(new Error(`Balances refreshed, but address submission failed: ${submissionResult.reason?.message || submissionResult.reason}`));
           $('status').textContent =
             'Wallet connected · balances refreshed; address submission failed';
         }
@@ -431,7 +443,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         $('status').textContent = 'Relay reconnecting · check your internet connection…';
       } else if (payload?.status?.status === 'error') {
         $('status').textContent = 'Relay error · see details below';
-        $('log').textContent = JSON.stringify(payload.status);
+        report(new Error(`WizardConnect relay error: ${payload.status.message || 'Check your connection and reconnect.'}`));
       }
     };
 
@@ -496,10 +508,35 @@ async function fetchBchUsd() {
 
     if (typeof data['bitcoin-cash']?.usd === 'number') {
       bchUsd = data['bitcoin-cash'].usd;
+      updateTotalValue();
+      if (walletReady && balanceSatoshis !== null) renderBalances(utxos);
     }
   } catch (error) {
     console.warn('BCH/USD price unavailable:', error);
   }
+}
+
+function updateTotalValue() {
+  if (bchUsd === null || balanceSatoshis === null) return;
+  const total = (Number(balanceSatoshis) / Number(SATOSHIS_PER_BCH) + pricedPortfolioBch) * bchUsd;
+  $('total-value').textContent = `Priced total ≈ $${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatTokenAmount(amount, decimals) {
+  const digits = amount.toString().padStart(decimals + 1, '0');
+  if (!decimals) return digits;
+  return `${digits.slice(0, -decimals)}.${digits.slice(-decimals)}`;
+}
+
+function updateAmountHelp() {
+  const token = tokenBalances.get($('category').value.trim().toLowerCase());
+  const entered = $('amount').value.trim();
+  const enteredDisplay = token?.metadata && /^[0-9]+$/.test(entered)
+    ? ` · Entered: ${formatTokenAmount(BigInt(entered), token.metadata.decimals)} ${token.metadata.symbol || 'tokens'}`
+    : '';
+  $('amount-help').textContent = token
+    ? `Enter whole base units · Available: ${token.amount} base units${token.metadata ? ` = ${formatTokenAmount(token.amount, token.metadata.decimals)} ${token.metadata.symbol || 'tokens'} · ${token.metadata.decimals} decimals${enteredDisplay}` : ' · decimals unavailable'}.`
+    : 'Enter whole base units. Select a token to see its decimals and available balance.';
 }
 
 async function fetchAddressUtxosWithRetry(record) {
@@ -569,6 +606,8 @@ async function scanWallet() {
 function renderBalances(scannedUtxos) {
   const version = ++portfolioVersion;
   const pricedTokens = [];
+  pricedPortfolioBch = 0;
+  $('portfolio-chart').hidden = true;
   $('portfolio-chart-content').textContent = translate('Loading Cauldron prices…');
   let satoshis = 0n;
 
@@ -604,8 +643,15 @@ function renderBalances(scannedUtxos) {
     `${balances.size} fungible-token ${
       balances.size === 1 ? 'category' : 'categories'
     }`;
+  tokenBalances = new Map([...balances].map(([category, amount]) => [category, { amount, metadata: null }]));
+  updateAmountHelp();
+  updateTotalValue();
 
   const selector = $('category-select');
+  const optionList = $('token-options-list');
+  optionList.replaceChildren();
+  $('token-options').hidden = balances.size === 0;
+  $('balance-tokens').replaceChildren();
   const selectedCategory = $('category').value.trim().toLowerCase();
   selector.replaceChildren(new Option('Enter a category ID manually', ''));
   for (const [category, amount] of balances) {
@@ -624,6 +670,7 @@ function renderBalances(scannedUtxos) {
       'No fungible-token balances found in the scanned addresses.';
     tokens.append(empty);
     $('portfolio-chart-content').textContent = translate('No priced token balances available.');
+    $('balance-tokens').textContent = 'No fungible tokens found.';
     return;
   }
 
@@ -693,44 +740,99 @@ function renderBalances(scannedUtxos) {
     const amountElement = document.createElement('span');
     amountElement.className = 'token-amount';
     amountElement.textContent = `${amount} base units`;
-    summary.append(icon, details, amountElement);
+    const amountGroup = document.createElement('div');
+    amountGroup.className = 'token-amount-group';
+    const amountIcon = document.createElement('span');
+    amountIcon.className = 'token-icon';
+    amountIcon.textContent = '◆';
+    const amountValues = document.createElement('span');
+    const amountPrice = document.createElement('small');
+    amountPrice.className = 'token-amount-price';
+    amountValues.append(amountElement, amountPrice);
+    amountGroup.append(amountIcon, amountValues);
+    summary.append(icon, details, amountGroup);
     row.append(summary);
     tokens.append(row);
+
+    const balanceRow = document.createElement('div');
+    balanceRow.className = 'balance-token-row';
+    balanceRow.textContent = `${category.slice(0, 10)}… · ${amount} base units`;
+    $('balance-tokens').append(balanceRow);
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.className = 'token-option';
+    const optionIcon = document.createElement('span');
+    optionIcon.className = 'token-icon';
+    optionIcon.textContent = '◆';
+    const optionLabel = document.createElement('span');
+    optionLabel.textContent = `${category.slice(0, 10)}… · ${amount} base units`;
+    option.append(optionIcon, optionLabel);
+    option.addEventListener('click', () => {
+      $('category').value = category;
+      selector.value = category;
+      $('token-options').open = false;
+      updateAmountHelp();
+    });
+    optionList.append(option);
 
     if (mainnet) {
       loadTokenLogo(category).then((image) => {
         if (version !== portfolioVersion) return;
         image.alt = '';
         icon.replaceChildren(image);
+        optionIcon.replaceChildren(image.cloneNode());
+        amountIcon.replaceChildren(image.cloneNode());
       }).catch((error) => console.warn(`Token logo unavailable for ${category}:`, error));
     }
-    const metadataPromise = mainnet
+    const metadataPromise = (mainnet
       ? fetchTokenMetadata(category)
-      : Promise.reject(new Error('BCMR metadata is only available for mainnet.'));
+      : Promise.reject(new Error('BCMR metadata is only available for mainnet.'))).then((metadata) => {
+        if (version !== portfolioVersion) return metadata;
+        tokenBalances.get(category).metadata = metadata;
+        title.textContent = metadata.name || metadata.symbol || translate('Fungible token');
+        infoText.textContent = [metadata.name, metadata.symbol, metadata.description, `${metadata.decimals} decimals`,
+          metadata.uris && `URIs: ${JSON.stringify(metadata.uris)}`,
+          metadata.extensions && `Extensions: ${JSON.stringify(metadata.extensions)}`].filter(Boolean).join(' · ');
+        amountElement.textContent = `${formatTokenAmount(amount, metadata.decimals)} ${metadata.symbol || 'tokens'} (${amount} base units)`;
+        optionLabel.textContent = `${metadata.name || metadata.symbol || 'Token'} · ${amountElement.textContent} · loading price`;
+        balanceRow.textContent = optionLabel.textContent;
+        updateAmountHelp();
+        return metadata;
+      });
     Promise.allSettled([metadataPromise, fetchCauldronSpot(category, network)]).then(([metadataResult, priceResult]) => {
       if (version !== portfolioVersion) return;
       const metadata = metadataResult.status === 'fulfilled' ? metadataResult.value : null;
-      if (metadata) {
-        title.textContent = metadata.name || metadata.symbol || translate('Fungible token');
-        infoText.textContent = [metadata.symbol, metadata.description, `${metadata.decimals} decimals`].filter(Boolean).join(' · ');
-      } else {
+      if (!metadata) {
         infoText.textContent = translate('BCMR metadata unavailable.');
         console.warn(`BCMR metadata unavailable for ${category}:`, metadataResult.reason);
       }
       if (priceResult.status === 'fulfilled') {
         const spot = priceResult.value;
         const value = Number(amount) * spot;
-        if (Number.isFinite(value) && value > 0) {
+        if (metadata && Number.isFinite(value) && value > 0) {
           const unit = metadata ? spot * 10 ** metadata.decimals : spot;
           const denomination = metadata?.symbol || (metadata ? translate('token') : translate('base unit'));
-          price.textContent = `≈ ${unit.toPrecision(4)} BCH / ${denomination} · ≈ ${value.toPrecision(4)} BCH`;
+          const usd = bchUsd === null ? '' : ` · ≈ $${(unit * bchUsd).toPrecision(4)} USD / ${denomination} · ≈ $${(value * bchUsd).toFixed(2)} USD`;
+          price.textContent = `≈ ${unit.toPrecision(4)} BCH / ${denomination} · ≈ ${value.toPrecision(4)} BCH${usd}`;
+          if (bchUsd !== null) amountPrice.textContent = `≈ $${(unit * bchUsd).toPrecision(4)} / ${denomination}`;
+          optionLabel.textContent = `${metadata.name || denomination} (${denomination}) · ${amountElement.textContent}${bchUsd === null ? '' : ` · $${(unit * bchUsd).toPrecision(4)} / token`}`;
+          balanceRow.textContent = `${metadata.name || denomination} · ${amountElement.textContent}${bchUsd === null ? '' : ` · ≈ $${(value * bchUsd).toFixed(2)}`}`;
           pricedTokens.push({ category, name: metadata?.symbol || metadata?.name || `${category.slice(0, 10)}…`, value });
         } else price.textContent = translate('Cauldron price unavailable.');
       } else {
         price.textContent = translate('Cauldron price unavailable.');
         console.warn(`Cauldron price unavailable for ${category}:`, priceResult.reason);
       }
-      if (--remaining === 0) renderPortfolioChart(pricedTokens);
+      if (metadata && !pricedTokens.some((item) => item.category === category)) {
+        optionLabel.textContent = `${metadata.name || metadata.symbol || 'Token'} · ${amountElement.textContent} · price unavailable`;
+        balanceRow.textContent = optionLabel.textContent;
+      }
+      if (--remaining === 0) {
+        pricedPortfolioBch = pricedTokens.reduce((sum, item) => sum + item.value, 0);
+        updateTotalValue();
+        renderPortfolioChart(pricedTokens);
+        $('portfolio-chart').hidden = pricedTokens.length === 0;
+      }
     });
   }
 }
@@ -743,7 +845,7 @@ function renderPortfolioChart(items) {
     content.textContent = translate('No priced token balances available.');
     return;
   }
-  const colors = ['#55bfff', '#a0f2cf', '#ffbc77', '#c4a4ff', '#ff84a0', '#e4df89'];
+  const colors = Array.from({ length: 6 }, (_, index) => `var(--chart-${index + 1})`);
   const wrapper = document.createElement('div');
   wrapper.className = 'allocation';
   const pie = document.createElement('div');
@@ -784,6 +886,7 @@ async function refreshBalances({ quiet = false } = {}) {
       $('status').textContent = 'Scanning wallet addresses…';
     }
 
+    scanAddressRecords = deriveScanAddresses();
     const scanned = await scanWallet();
 
     if (!walletReady || manager !== scanManager) {
@@ -792,8 +895,8 @@ async function refreshBalances({ quiet = false } = {}) {
 
     addresses = scanned.addresses;
     utxos = scanned.utxos;
-    renderBalances(utxos);
     balanceSatoshis = utxos.reduce((sum, utxo) => sum + BigInt(utxo.satoshis), 0n);
+    renderBalances(utxos);
     if (!quiet && balanceSatoshis === 0n && !emptyBalanceNotified) {
       const notice = () => {
         if (walletReady && balanceSatoshis === 0n && !emptyBalanceNotified) {
@@ -1161,6 +1264,7 @@ async function sendFungibleTokens() {
       signed.signedTransaction,
     );
 
+    $('log').classList.remove('error');
     $('log').textContent = `Transaction ID: ${txid}`;
     $('status').textContent =
       'Transaction broadcast · checking balances…';
@@ -1183,9 +1287,8 @@ async function sendFungibleTokens() {
 
       console.log("Submitted BCH txid:", txid);
     } catch (error) {
-      console.error('Could not send tx proof.');
-
-      throw error;
+      report(new Error(`Transaction ${txid} was broadcast, but proof submission failed: ${error?.message || String(error)}`));
+      $('status').textContent = 'Transaction broadcast · proof submission failed';
     }
   } catch (error) {
     report(error);
@@ -1283,8 +1386,6 @@ $('notifications-toggle').addEventListener('click', () => {
   markNotificationsRead();
 });
 $('notifications-close').addEventListener('click', () => notificationsDialog.close());
-$('beer-toggle').addEventListener('click', () => $('beer-dialog').showModal());
-$('beer-close').addEventListener('click', () => $('beer-dialog').close());
 notificationsDialog.addEventListener('click', (event) => {
   const rect = notificationsDialog.getBoundingClientRect();
   if (event.clientX < rect.left || event.clientX > rect.right ||
@@ -1307,6 +1408,7 @@ if (document.readyState === 'loading') {
 }
 $('category-select').addEventListener('change', () => {
   if (!$('category').readOnly) $('category').value = $('category-select').value;
+  updateAmountHelp();
 });
 $('category').addEventListener('input', () => {
   const value = $('category').value.trim().toLowerCase();
@@ -1314,7 +1416,9 @@ $('category').addEventListener('input', () => {
     [...$('category-select').options].some((option) => option.value === value)
       ? value
       : '';
+  updateAmountHelp();
 });
+$('amount').addEventListener('input', updateAmountHelp);
 
 $('copy-address').addEventListener('click', async () => {
   try {
@@ -1344,11 +1448,12 @@ $('copy-uri').addEventListener('click', async () => {
 
 function setTransferTab(tabName) {
   const isSend = tabName === 'send';
+  transferInteracted = true;
 
-  $('send-tab').classList.toggle('active', walletReady && isSend);
-  $('receive-tab').classList.toggle('active', walletReady && !isSend);
-  $('top-send').classList.toggle('active', walletReady && isSend);
-  $('top-receive').classList.toggle('active', walletReady && !isSend);
+  $('send-tab').classList.toggle('active', isSend);
+  $('receive-tab').classList.toggle('active', !isSend);
+  $('top-send').classList.toggle('active', isSend);
+  $('top-receive').classList.toggle('active', !isSend);
   $('send-tab').setAttribute('aria-selected', String(isSend));
   $('receive-tab').setAttribute('aria-selected', String(!isSend));
 
@@ -1362,8 +1467,10 @@ function updateReceiveAddress() {
   if (!walletReady) return;
 
   const address = addressFor(0, 0, 'p2pkhWithTokens');
-  $('receive-address').textContent = address;
-  $('generate-payment').disabled = false;
+  if (!$('receive-address').value.trim() || $('receive-address').value === walletReceiveAddress) {
+    $('receive-address').value = address;
+    walletReceiveAddress = address;
+  }
   $('copy-receive-address').disabled = false;
 }
 
@@ -1382,11 +1489,8 @@ $('generate-payment').addEventListener('click', async () => {
   const generation = ++paymentGeneration;
   try {
     $('payment-result').classList.add('hidden');
-    if (!walletReady) {
-      throw new Error('Connect your wallet before creating a payment QR.');
-    }
-
-    const address = addressFor(0, 0, 'p2pkhWithTokens');
+    await loadWalletDependencies();
+    const address = validateRecipient($('receive-address').value);
     const category = $('receive-category').value.trim().toLowerCase();
     const amount = $('receive-amount').value.trim();
 
@@ -1406,7 +1510,6 @@ $('generate-payment').addEventListener('click', async () => {
     paymentUrl.searchParams.set('amount', amount);
     paymentUrl.searchParams.set('category', category);
 
-    $('receive-address').textContent = address;
     $('payment-url').textContent = paymentUrl.toString();
 
     const qr = document.createElement('canvas');
@@ -1429,8 +1532,8 @@ $('generate-payment').addEventListener('click', async () => {
     }
 
     if (
-      generation !== paymentGeneration || !walletReady ||
-      addressFor(0, 0, 'p2pkhWithTokens') !== address ||
+      generation !== paymentGeneration ||
+      $('receive-address').value.trim() !== address ||
       $('receive-category').value.trim().toLowerCase() !== category ||
       $('receive-amount').value.trim() !== amount
     ) return;
@@ -1445,15 +1548,15 @@ $('generate-payment').addEventListener('click', async () => {
     $('payment-logo-status').textContent = translate(mainnet ? 'Loading token logo…' : 'Token logo unavailable.');
     paymentPriceSnapshot = null;
     $('payment-price').textContent = translate('Loading Cauldron price…');
-    $('share-payment-qr').disabled = true;
-    $('download-payment-qr').disabled = true;
+    $('share-payment-qr').disabled = false;
+    $('download-payment-qr').disabled = false;
     $('payment-result').classList.remove('hidden');
 
     const currentPayment = () => generation === paymentGeneration &&
       !$('payment-result').classList.contains('hidden') &&
       $('payment-url').textContent === paymentUrl.toString() &&
-      walletReady && addressFor(0, 0, 'p2pkhWithTokens') === address;
-    const pricePromise = fetchCauldronSpot(category, network).then((spot) => {
+      $('receive-address').value.trim() === address;
+    fetchCauldronSpot(category, network).then((spot) => {
       if (!Number.isFinite(spot) || spot <= 0) throw new Error('Invalid Cauldron spot price.');
       if (!currentPayment()) return;
       const timestamp = new Date().toISOString();
@@ -1464,9 +1567,8 @@ $('generate-payment').addEventListener('click', async () => {
       if (currentPayment()) $('payment-price').textContent = translate('Cauldron price unavailable.');
     });
 
-    let logoPromise = Promise.resolve();
     if (mainnet) {
-      logoPromise = loadTokenLogo(category).then((logo) => {
+      loadTokenLogo(category).then((logo) => {
         if (!currentPayment()) return;
         const context = canvas.getContext('2d');
         const size = canvas.width * 0.09;
@@ -1483,24 +1585,24 @@ $('generate-payment').addEventListener('click', async () => {
         if (currentPayment()) $('payment-logo-status').textContent = translate('Token logo unavailable.');
       });
     }
-    Promise.all([logoPromise, pricePromise]).then(() => {
-      if (currentPayment()) {
-        $('share-payment-qr').disabled = false;
-        $('download-payment-qr').disabled = false;
-      }
-    });
   } catch (error) {
     report(error);
   }
 });
 
-for (const id of ['receive-category', 'receive-amount']) {
-  $(id).addEventListener('input', () => $('payment-result').classList.add('hidden'));
+for (const id of ['receive-address', 'receive-category', 'receive-amount']) {
+  $(id).addEventListener('input', () => {
+    $('payment-result').classList.add('hidden');
+    if (id === 'receive-address') {
+      walletReceiveAddress = null;
+      $('copy-receive-address').disabled = !$(id).value.trim();
+    }
+  });
 }
 
 $('copy-receive-address').addEventListener('click', async () => {
   try {
-    await navigator.clipboard.writeText($('receive-address').textContent);
+    await navigator.clipboard.writeText($('receive-address').value.trim());
     $('copy-receive-address').textContent = 'Copied';
 
     setTimeout(() => {
@@ -1605,10 +1707,6 @@ function showTutorialStep() {
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
   const step = tutorialSteps[tutorialStep];
   const panel = $(step.id);
-  const guide = document.querySelector('.wizard-guide');
-  const focused = guide.contains(document.activeElement) ? document.activeElement : null;
-  (panel.closest('.grid') || panel).before(guide);
-  focused?.focus({ preventScroll: true });
   panel.classList.add('tutorial-highlight');
   $('wizard-title').textContent = step.title;
   $('wizard-message').textContent = step.message;
@@ -1616,7 +1714,7 @@ function showTutorialStep() {
   $('wizard-progress').textContent = `${tutorialStep + 1} / ${tutorialSteps.length}`;
   $('wizard-prev').disabled = tutorialStep === 0;
   $('wizard-next').textContent = tutorialStep === tutorialSteps.length - 1 ? 'Done' : 'Next';
-  guide.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function closeTutorial() {
@@ -1626,7 +1724,6 @@ function closeTutorial() {
   $('wizard-toggle').setAttribute('aria-expanded', 'false');
   guide.classList.remove('walking');
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
-  document.querySelector('.hero').after(guide);
   if (focused) $('wizard-toggle').focus({ preventScroll: true });
 }
 

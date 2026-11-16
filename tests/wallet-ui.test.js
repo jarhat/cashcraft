@@ -31,10 +31,11 @@ test('theme preferences migrate and select the correct palette', () => {
   }
 });
 
-test('wizard follows tutorial panels without entering or reflowing the panel grid', () => {
+test('wizard highlights and scrolls to each tutorial panel without moving the navigation', () => {
   const elements = new Map();
   const highlighted = new Set();
   let guidePosition = 'hero';
+  let scrolled;
   const guide = { scrollIntoView() {}, contains() { return false; }, classList: { add() {}, remove() {} } };
   const target = (position) => ({ before(node) {
     assert.equal(node, guide);
@@ -48,6 +49,7 @@ test('wizard follows tutorial panels without entering or reflowing the panel gri
   for (const id of ['connection-section', 'balance-section', 'earn-section', 'transfer-section']) {
     const panel = {
       ...target(id),
+      scrollIntoView() { scrolled = id; },
       closest(selector) {
         assert.equal(selector, '.grid');
         return id === 'connection-section' || id === 'balance-section' ? grid : null;
@@ -75,16 +77,17 @@ test('wizard follows tutorial panels without entering or reflowing the panel gri
   runInNewContext(source.slice(start, end), { document, $: (id) => elements.get(id) });
 
   elements.get('wizard-toggle').click();
-  assert.equal(guidePosition, 'grid');
+  assert.equal(guidePosition, 'hero');
+  assert.equal(scrolled, 'connection-section');
   assert.equal(elements.get('wizard-progress').textContent, '1 / 4');
   elements.get('wizard-next').click();
-  assert.equal(guidePosition, 'grid');
+  assert.equal(scrolled, 'balance-section');
   elements.get('wizard-next').click();
-  assert.equal(guidePosition, 'transfer-section');
+  assert.equal(scrolled, 'transfer-section');
   elements.get('wizard-next').click();
-  assert.equal(guidePosition, 'earn-section');
+  assert.equal(scrolled, 'earn-section');
   elements.get('wizard-prev').click();
-  assert.equal(guidePosition, 'transfer-section');
+  assert.equal(scrolled, 'transfer-section');
   elements.get('wizard-toggle').click();
   assert.equal(guidePosition, 'hero');
   assert.equal(elements.get('wizard-dialog').hidden, true);
@@ -244,7 +247,7 @@ test('connect during relay startup displays a fresh pairing after it is ready', 
   assert.equal(context.showPairingWhenReady, false);
 });
 
-test('transfer selection is highlighted only while connected', () => {
+test('transfer selection is highlighted after an explicit selection', () => {
   const nodes = new Map();
   const element = (id) => {
     if (!nodes.has(id)) nodes.set(id, {
@@ -259,16 +262,43 @@ test('transfer selection is highlighted only while connected', () => {
   };
   const start = source.indexOf('function setTransferTab(');
   const end = source.indexOf('\nfunction updateReceiveAddress', start);
-  const context = { $: element, walletReady: false };
+  const context = { $: element, walletReady: false, transferInteracted: false };
   runInNewContext(source.slice(start, end), context);
   context.setTransferTab('send');
   assert.equal(element('send-tab').attributes['aria-selected'], 'true');
-  assert.equal(element('send-tab').classes.has('active'), false);
-  assert.equal(element('top-send').classes.has('active'), false);
-  context.walletReady = true;
+  assert.equal(element('send-tab').classes.has('active'), true);
+  assert.equal(element('top-send').classes.has('active'), true);
   context.setTransferTab('receive');
   assert.equal(element('receive-tab').classes.has('active'), true);
   assert.equal(element('top-receive').classes.has('active'), true);
+});
+
+test('address scan count applies to both derivation paths and rejects invalid limits', () => {
+  let count = '3';
+  const start = source.indexOf('function deriveScanAddresses()');
+  const end = source.indexOf('\nasync function showPairingUri', start);
+  const context = {
+    $: () => ({ value: count }),
+    addressFor: (path, index, type) => `${path}/${index}/${type}`,
+  };
+  runInNewContext(source.slice(start, end), context);
+  const records = context.deriveScanAddresses();
+  assert.equal(records.length, 6);
+  assert.equal(records[5].tokenAddress, '1/2/p2pkhWithTokens');
+  count = '0';
+  assert.throws(() => context.deriveScanAddresses(), /between 1 and 1000/);
+  count = '1.5';
+  assert.throws(() => context.deriveScanAddresses(), /whole number/);
+});
+
+test('token decimals are formatted exactly without losing large base units', () => {
+  const start = source.indexOf('function formatTokenAmount(');
+  const end = source.indexOf('\nfunction updateAmountHelp', start);
+  const context = {};
+  runInNewContext(source.slice(start, end), context);
+  assert.equal(context.formatTokenAmount(1234567890123456789n, 8), '12345678901.23456789');
+  assert.equal(context.formatTokenAmount(5n, 3), '0.005');
+  assert.equal(context.formatTokenAmount(5n, 0), '5');
 });
 
 test('late scans restart the manager handshake and attach the listener immediately', async () => {
@@ -331,6 +361,7 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   const end = source.indexOf('\nasync function refreshBalances', start);
   runInNewContext(`${source.slice(start, end)}\nrenderBalances(utxos);`, {
     $: element, walletReady: true, bchUsd: null, portfolioVersion: 0, mainnet: true, network: 'mainnet', SATOSHIS_PER_BCH: 100_000_000n,
+    tokenBalances: new Map(), pricedPortfolioBch: 0, updateAmountHelp() {}, updateTotalValue() {},
     loadTokenLogo: () => new Promise(() => {}),
     fetchTokenMetadata: () => new Promise(() => {}), fetchCauldronSpot: () => new Promise(() => {}),
     formatBch: () => '0.00001000', Option: class { constructor(text, value) { this.text = text; this.value = value; } },
@@ -350,6 +381,49 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   assert.equal(summary.children[1].children[1], categoryLine);
   await categoryLine.children[2].handler();
   assert.equal(copied, category);
+});
+
+test('priced metadata updates balances, token choices and allocation', async () => {
+  class Element {
+    constructor() { this.children = []; this.options = []; this.style = {}; this.value = ''; this.classList = { add() {}, remove() {} }; }
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = children; this.options = children; }
+    add(option) { this.options.push(option); }
+    setAttribute() {}
+    addEventListener(type, handler) { this[type] = handler; }
+  }
+  const nodes = new Map();
+  const element = (id) => {
+    if (!nodes.has(id)) nodes.set(id, new Element());
+    return nodes.get(id);
+  };
+  const category = '1'.repeat(64);
+  element('category').value = category;
+  element('amount').value = '125';
+  const helpers = source.slice(source.indexOf('function updateTotalValue()'), source.indexOf('\nasync function fetchAddressUtxosWithRetry'));
+  const render = source.slice(source.indexOf('function renderBalances('), source.indexOf('\nasync function refreshBalances'));
+  const context = {
+    $: element, walletReady: true, bchUsd: 200, balanceSatoshis: 100_000_000n,
+    portfolioVersion: 0, tokenBalances: new Map(), pricedPortfolioBch: 0, mainnet: true, network: 'mainnet',
+    SATOSHIS_PER_BCH: 100_000_000n, formatBch: () => '1.00000000',
+    Option: class { constructor(text, value) { this.text = text; this.value = value; } },
+    document: { createElement: () => new Element(), createTextNode: (text) => ({ textContent: text }) },
+    fetchTokenMetadata: async () => ({ name: 'Example', symbol: 'EX', decimals: 2, description: 'Example token', uris: { web: 'https://example.com' } }),
+    fetchCauldronSpot: async () => 0.0001,
+    loadTokenLogo: () => new Promise(() => {}), translate: (text) => text,
+    console, navigator: {}, setTimeout() {}, report(error) { throw error; },
+  };
+  runInNewContext(`${helpers}\n${render}`, context);
+  context.renderBalances([{ satoshis: 100_000_000n, token: { category, amount: 125n } }]);
+  assert.equal(element('portfolio-chart').hidden, true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(element('portfolio-chart').hidden, false);
+  assert.match(element('balance-tokens').children[0].textContent, /1\.25 EX.*\$2\.50/);
+  assert.match(element('token-options-list').children[0].children[1].textContent, /Example.*\$2\.000/);
+  assert.match(element('amount-help').textContent, /2 decimals.*Entered: 1\.25 EX/);
+  assert.match(element('total-value').textContent, /202\.50/);
+  const metadata = element('tokens').children[0].children[0].children[1].children[2];
+  assert.match(metadata.textContent, /Example token.*example\.com/);
 });
 
 test('payment QR draws the loaded token logo and ignores a stale result', async () => {
@@ -374,13 +448,15 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
   const category = 'a'.repeat(64);
   element('receive-category').value = category;
   element('receive-amount').value = '2';
+  element('receive-address').value = 'bitcoincash:ztest';
   let resolveLogo, rejectLogo, failPrice = false;
   const logo = { cloneNode: () => ({}) };
   const start = source.indexOf("$('generate-payment').addEventListener('click'");
-  const end = source.indexOf("\nfor (const id of ['receive-category'", start);
+  const end = source.indexOf("\nfor (const id of ['receive-address'", start);
   const helpers = source.slice(source.indexOf('function paymentQrImage()'), source.indexOf("\n$('download-payment-qr')"));
   runInNewContext(`${source.slice(start, end)}\n${helpers}`, {
-    $: element, walletReady: true, mainnet: true, addressFor: () => 'bitcoincash:ztest',
+    $: element, walletReady: false, mainnet: true, loadWalletDependencies: async () => {},
+    validateRecipient: (address) => address,
     network: 'mainnet', paymentGeneration: 0, paymentPriceSnapshot: null,
     window: { location: { href: 'https://ctf.example/' } }, URL,
     document: { createElement: () => ({ width: 512, getContext: () => ({ fillRect() {} }) }) },
@@ -390,7 +466,7 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
     translate: (text) => text, console: { warn() {} }, report(error) { throw error; },
   });
   await handler();
-  assert.equal(element('download-payment-qr').disabled, true);
+  assert.equal(element('download-payment-qr').disabled, false);
   resolveLogo(logo);
   await new Promise((resolve) => setImmediate(resolve));
   assert.ok(canvasDraws.some(([image]) => image === logo));
@@ -429,7 +505,7 @@ test('wizard follows the panels in reading order and resets when closed', () => 
       },
       setAttribute() {},
       addEventListener(type, handler) { this.listeners[type] = handler; },
-      scrollIntoView() {},
+      scrollIntoView() { guidePosition = id; },
       contains() { return false; },
       before() { guidePosition = id; },
       closest(selector) {
@@ -454,11 +530,11 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   function $ (id) { return element(id); }
   element('wizard-toggle').listeners.click();
   assert.deepEqual([...highlighted], ['connection-section']);
-  assert.equal(guidePosition, 'grid');
+  assert.equal(guidePosition, 'connection-section');
   assert.equal(walking, true);
   element('wizard-next').listeners.click();
   assert.deepEqual([...highlighted], ['balance-section']);
-  assert.equal(guidePosition, 'grid');
+  assert.equal(guidePosition, 'balance-section');
   element('wizard-next').listeners.click();
   assert.deepEqual([...highlighted], ['transfer-section']);
   assert.equal(guidePosition, 'transfer-section');
@@ -468,6 +544,6 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   element('wizard-next').listeners.click();
   assert.equal(element('wizard-dialog').hidden, true);
   assert.equal(highlighted.size, 0);
-  assert.equal(guidePosition, 'hero');
+  assert.equal(guidePosition, 'earn-section');
   assert.equal(walking, false);
 });

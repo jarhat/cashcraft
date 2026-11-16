@@ -63,12 +63,9 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 19h16" /></svg>
           <span>Receive</span>
         </button>
-        <button id="beer-toggle" class="quick-action" type="button" aria-label="Beerware information" aria-controls="beer-dialog" aria-haspopup="dialog">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h11v11H5zM16 10h2a2 2 0 0 1 0 4h-2M7 8a3 3 0 0 1 5-3 3 3 0 0 1 4 3M9 11v5m3-5v5"/></svg>
-          <span>Beer</span>
-        </button>
       </nav>
       <div class="topbar-tools">
+        <span id="total-value" class="total-value">Total USD —</span>
         <span class="network"><i></i><span id="network">CHIPNET</span></span>
         <div class="tool-menu">
           <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Choose theme" aria-expanded="false" aria-controls="theme-menu">
@@ -95,6 +92,12 @@
           <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread payment request</span></span>
         </button>
       </div>
+    <aside class="wizard-guide" aria-label="Wizard tutorial">
+      <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
+        <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true"><path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/><path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/><path fill="#f0c7ae" d="M13 18h10v8H13z"/><path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/><path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/><path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/><path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/><path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/><path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/></svg>
+        <span>Wizard help</span>
+      </button>
+    </aside>
     </header>
 
     <section class="hero">
@@ -112,21 +115,6 @@
       </div>
     </section>
 
-    <aside class="wizard-guide" aria-label="Wizard tutorial">
-      <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
-        <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true">
-          <path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/>
-          <path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/>
-          <path fill="#f0c7ae" d="M13 18h10v8H13z"/>
-          <path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/>
-          <path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/>
-          <path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/>
-          <path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/>
-          <path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/>
-          <path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/>
-        </svg>
-        <span>Wizard help</span>
-      </button>
       <div id="wizard-dialog" class="wizard-dialog" hidden>
         <strong id="wizard-title"></strong>
         <p id="wizard-message" aria-live="polite"></p>
@@ -145,7 +133,6 @@
           <button id="wizard-next" class="small-button" type="button">Next</button>
         </div>
       </div>
-    </aside>
 
     <section class="grid">
       <article id="connection-section" class="panel">
@@ -185,6 +172,9 @@
         <button id="refresh" class="button secondary" disabled>
           Refresh balances
         </button>
+        <label for="scan-count">Addresses per receive and change path</label>
+        <input id="scan-count" type="number" min="1" max="1000" step="1" value="50">
+        <p class="fine">Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.</p>
       </article>
 
       <article id="balance-section" class="panel">
@@ -198,6 +188,9 @@
 
         <p id="bch" class="balance">— <small>BCH</small></p>
         <p id="usd" class="muted">USD value —</p>
+        <div class="divider"></div>
+        <p class="eyebrow">CASHTOKENS</p>
+        <div id="balance-tokens" class="muted">Connect wallet to load tokens.</div>
 
         <div class="divider"></div>
 
@@ -244,13 +237,16 @@
       <div id="send-panel" class="tab-panel" role="tabpanel" aria-labelledby="send-tab">
         <div class="form">
           <div>
+            <label for="category">Token category ID</label>
             <div id="category-selector">
-            <label for="category-select">Available tokens</label>
-            <select id="category-select" aria-label="Choose an available token" disabled>
+            <select id="category-select" aria-label="Choose an available token" hidden disabled>
               <option value="">Enter a category ID manually</option>
             </select>
+            <details id="token-options" class="token-options" hidden>
+              <summary>Choose an available token</summary>
+              <div id="token-options-list"></div>
+            </details>
             </div>
-            <label for="category">Token category ID</label>
             <input
               id="category"
               placeholder="64-character category ID"
@@ -267,13 +263,14 @@
               placeholder="Whole token units"
               autocomplete="off"
             >
+            <span id="amount-help" class="fine">Enter whole base units. Select a token to see its decimals and available balance.</span>
           </label>
 
           <label class="full">
             Recipient token-aware CashAddr
             <input
               id="recipient"
-              placeholder="bchtest:z… or bitcoincash:z…"
+              placeholder="bitcoincash:z…"
               autocomplete="off"
               spellcheck="false"
             >
@@ -284,10 +281,6 @@
           Review and approve in wallet <span aria-hidden="true">→</span>
         </button>
 
-        <p class="fine">
-          This demo sends whole token base units only. Review the transaction
-          details in your wallet before approving.
-        </p>
       </div>
 
       <div
@@ -304,7 +297,7 @@
         <label class="receive-address-label">
           Your receive address
           <div class="address-line">
-            <code id="receive-address">Connect wallet to load your address</code>
+            <input id="receive-address" placeholder="bitcoincash:z…" autocomplete="off" spellcheck="false">
             <button id="copy-receive-address" class="small-button" type="button" disabled>
               Copy
             </button>
@@ -337,7 +330,7 @@
           </label>
         </div>
 
-        <button id="generate-payment" class="button primary send" type="button" disabled>
+        <button id="generate-payment" class="button primary send" type="button">
           Generate payment QR <span aria-hidden="true">⌁</span>
         </button>
 
@@ -390,14 +383,12 @@
       <div id="tokens" class="token-list">
         <div class="empty">Connect your wallet to load balances.</div>
       </div>
-      <details class="portfolio-chart">
+      <details id="portfolio-chart" class="portfolio-chart" hidden>
         <summary>Portfolio allocation</summary>
         <p class="fine">Indicative Cauldron pool spot values in BCH; excludes tokens without a price and does not account for fees or price impact.</p>
         <div id="portfolio-chart-content" aria-live="polite">Connect a wallet to view allocation.</div>
       </details>
-      <p class="fine">
-        Scans the first 50 receive and 50 change addresses. NFT balances are not included.
-      </p>
+      <p class="fine">NFT balances are not included.</p>
     </section>
 
     <footer>
@@ -407,14 +398,6 @@
 
     <pre id="log" role="status"></pre>
   </main>
-
-  <dialog id="beer-dialog" class="notifications-dialog" aria-labelledby="beer-title">
-    <div class="notifications-heading">
-      <h2 id="beer-title">Beerware</h2>
-      <button id="beer-close" class="small-button close-notifications" type="button" aria-label="Close Beerware information" autofocus>×</button>
-    </div>
-    <p>Beerware is a lighthearted license idea: if you enjoy using the work, consider buying its creator a beer. No payment is required here.</p>
-  </dialog>
 
   <dialog id="notifications-dialog" class="notifications-dialog" aria-labelledby="notifications-title">
     <div class="notifications-heading">
