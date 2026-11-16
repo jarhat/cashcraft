@@ -89,7 +89,7 @@
         </div>
         <button id="notifications-toggle" class="theme-toggle notification-toggle" type="button" aria-label="Notifications" aria-controls="notifications-dialog" aria-describedby="notification-indicator" aria-haspopup="dialog">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9ZM10 20h4"/></svg>
-          <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread payment request</span></span>
+          <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread notification</span></span>
         </button>
       </div>
     <aside class="wizard-guide" aria-label="Wizard tutorial">
@@ -405,6 +405,7 @@
       <button id="notifications-close" class="small-button close-notifications" type="button" aria-label="Close notifications" autofocus>×</button>
     </div>
     <p id="notifications-empty" class="muted">No notifications yet.</p>
+    <div id="token-receipt-notifications" aria-live="polite"></div>
     <div id="shared-link-preview" class="shared-link-preview hidden">
       <p class="eyebrow">SHARED PAYMENT LINK</p>
       <p class="notification-message">You received a payment request.</p>

@@ -1,11 +1,10 @@
 services:
-  # Keep your existing bchn service unchanged.
   bchn:
     image: uphold/bitcoin-cash-node
     command:
       - -printtoconsole
       - -server=1
-      - -disablewallet=1
+      - -wallet=${BCH_WALLET:-token-sender}
       - -prune=${BCH_PRUNE_MIB:-10000}
       - -rpcbind=0.0.0.0
       - -rpcallowip=172.30.0.0/24
@@ -49,15 +48,17 @@ services:
       BCH_RPC_URL: http://bchn:8332/
       BCH_RPC_USER: ${BCH_RPC_USER:?Set BCH_RPC_USER in .env}
       BCH_RPC_PASSWORD: ${BCH_RPC_PASSWORD:?Set BCH_RPC_PASSWORD in .env}
+      BCH_WALLET: ${BCH_WALLET:-token-sender}
+      BCH_REWARD_CATEGORY: ${BCH_REWARD_CATEGORY:?Set BCH_REWARD_CATEGORY in .env}
 
       # Required: exact prefixed CashAddr expected as the source of every input.
-      #BCH_ALLOWED_SENDER: ${BCH_ALLOWED_SENDER:?Set BCH_ALLOWED_SENDER in .env}
+      BCH_ALLOWED_SENDER: ${BCH_ALLOWED_SENDER:?Set BCH_ALLOWED_SENDER in .env}
 
       # Comma-separated 64-character hexadecimal CashToken category IDs.
       BCH_ALLOWED_TOKEN_CATEGORIES: ${BCH_ALLOWED_TOKEN_CATEGORIES:?Set BCH_ALLOWED_TOKEN_CATEGORIES in .env}
 
       # Require this many confirmations before recording the address.
-      BCH_REQUIRED_CONFIRMATIONS: ${BCH_REQUIRED_CONFIRMATIONS:-1}
+      BCH_REQUIRED_CONFIRMATIONS: ${BCH_REQUIRED_CONFIRMATIONS:-0}
     volumes:
       - ./data:/data
     restart: unless-stopped

@@ -135,6 +135,90 @@ let paymentPriceSnapshot = null;
 let walletReceiveAddress = null;
 let tokenBalances = new Map();
 let pricedPortfolioBch = 0;
+let rewardCategory = null;
+let rewardCategoryPromise = null;
+let receiptWallet = null;
+
+async function loadRewardCategory() {
+  if (!rewardCategoryPromise) {
+    rewardCategoryPromise = fetch(`${API_BASE_URL}/api/token-reward`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Reward category API error (${response.status})`);
+        return response.json();
+      })
+      .then(({ category }) => {
+        if (typeof category !== 'string' || !/^[0-9a-f]{64}$/i.test(category)) {
+          throw new Error('Invalid reward category returned by the API.');
+        }
+        rewardCategory = category.toLowerCase();
+        return rewardCategory;
+      })
+      .catch((error) => {
+        rewardCategoryPromise = null;
+        throw error;
+      });
+  }
+  return rewardCategoryPromise;
+}
+
+function receiptStorageKey() {
+  return `ctf-token-receipts:${network}:${addressFor(0, 0)}`;
+}
+
+function readReceiptState() {
+  const saved = localStorage.getItem(receiptStorageKey());
+  if (!saved) return { seen: [], sent: [], messages: [], unread: false };
+  const state = JSON.parse(saved);
+  if (!Array.isArray(state.seen) || !Array.isArray(state.sent) || !Array.isArray(state.messages)) {
+    throw new Error('Invalid saved token notification state.');
+  }
+  return state;
+}
+
+function addReceiptNotice(message) {
+  const notice = document.createElement('p');
+  notice.className = 'notification-message';
+  notice.textContent = message;
+  $('token-receipt-notifications').prepend(notice);
+  $('notifications-empty').hidden = true;
+}
+
+function rememberSentTransaction(txid) {
+  const state = readReceiptState();
+  state.sent.push(txid.toLowerCase());
+  localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
+}
+
+function notifyTokenReceipts(scannedUtxos) {
+  const state = readReceiptState();
+  const wallet = receiptStorageKey();
+  if (receiptWallet !== wallet) {
+    $('token-receipt-notifications').replaceChildren();
+    for (const message of state.messages) addReceiptNotice(message);
+    if (state.unread) $('notification-indicator').hidden = false;
+    receiptWallet = wallet;
+  }
+  const seen = new Set(state.seen);
+  const sent = new Set(state.sent);
+  for (const utxo of scannedUtxos) {
+    if (!utxo.token || (!utxo.token.nft && BigInt(utxo.token.amount || 0) <= 0n)) continue;
+    const key = utxoKey(utxo);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (sent.has(utxo.txid.toLowerCase())) continue;
+
+    const category = String(utxo.token.category).toLowerCase();
+    const message = category === rewardCategory
+      ? 'Welcome! Your GAMBA token has arrived: enjoy your special diamond perk.'
+      : `CashToken received: ${category}${utxo.token.nft ? ' (NFT)' : ` · ${utxo.token.amount} base units`}.`;
+    addReceiptNotice(message);
+    state.messages.push(message);
+    state.unread = true;
+    $('notification-indicator').hidden = false;
+  }
+  state.seen = [...seen];
+  localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
+}
 
 function report(error) {
   console.error(error);
@@ -223,6 +307,12 @@ function clearWalletDisplay() {
   $('portfolio-chart').hidden = true;
   $('portfolio-chart').open = false;
   tokenBalances = new Map();
+  receiptWallet = null;
+  $('token-receipt-notifications').replaceChildren();
+  if ($('shared-link-preview').classList.contains('hidden')) {
+    $('notifications-empty').hidden = false;
+    $('notification-indicator').hidden = true;
+  }
   pricedPortfolioBch = 0;
   $('balance-tokens').textContent = 'Connect wallet to load tokens.';
   $('total-value').textContent = 'Total USD —';
@@ -897,6 +987,12 @@ async function refreshBalances({ quiet = false } = {}) {
     utxos = scanned.utxos;
     balanceSatoshis = utxos.reduce((sum, utxo) => sum + BigInt(utxo.satoshis), 0n);
     renderBalances(utxos);
+    try {
+      await loadRewardCategory();
+      if (walletReady && manager === scanManager) notifyTokenReceipts(utxos);
+    } catch (error) {
+      console.error('Token receipt notifications could not be updated:', error);
+    }
     if (!quiet && balanceSatoshis === 0n && !emptyBalanceNotified) {
       const notice = () => {
         if (walletReady && balanceSatoshis === 0n && !emptyBalanceNotified) {
@@ -1263,6 +1359,7 @@ async function sendFungibleTokens() {
     const txid = await provider.sendRawTransaction(
       signed.signedTransaction,
     );
+    rememberSentTransaction(txid);
 
     $('log').classList.remove('error');
     $('log').textContent = `Transaction ID: ${txid}`;
@@ -1784,3 +1881,19 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+
+function markReceiptNotificationsRead() {
+  if (!walletReady || receiptWallet !== receiptStorageKey()) return;
+  const state = readReceiptState();
+  state.unread = false;
+  localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
+}
+$('notifications-toggle').addEventListener('click', markReceiptNotificationsRead);
+notificationsDialog.addEventListener('close', markReceiptNotificationsRead);
+
+setInterval(() => {
+  if (!walletReady || refreshPromise) return;
+  refreshBalances({ quiet: true }).catch((error) => {
+    console.error('Automatic wallet refresh failed:', error);
+  });
+}, 30_000);
