@@ -4,6 +4,7 @@ import { createPaymentQrImage } from './payment-qr-image.js';
 import { setupScrollEffects } from './scroll-effects.js';
 import { loadTokenLogo } from './token-logo.js';
 import { submitCashAddress, API_BASE_URL } from './api.js';
+import { setupCommunity } from './community.js';
 import {
   SATOSHIS_PER_BCH,
   formatBch,
@@ -124,6 +125,8 @@ let addresses = [];
 let scanAddressRecords = [];
 let utxos = [];
 let bchUsd = null;
+let balanceSatoshis = null;
+let emptyBalanceNotified = false;
 
 function report(error) {
   console.error(error);
@@ -181,9 +184,16 @@ function setConnection(connected) {
   $('send').disabled = sending;
   $('copy-address').disabled = !connected;
   $('connect').disabled = connected || pairingInProgress;
+  const isSend = $('send-tab').getAttribute('aria-selected') === 'true';
+  $('send-tab').classList.toggle('active', connected && isSend);
+  $('receive-tab').classList.toggle('active', connected && !isSend);
+  $('top-send').classList.toggle('active', connected && isSend && !$('top-earn').classList.contains('active'));
+  $('top-receive').classList.toggle('active', connected && !isSend && !$('top-earn').classList.contains('active'));
 }
 
 function clearWalletDisplay() {
+  balanceSatoshis = null;
+  emptyBalanceNotified = false;
   addresses = [];
   scanAddressRecords = [];
   utxos = [];
@@ -278,6 +288,10 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
 
   try {
     await loadWalletDependencies();
+    if (manager) {
+      await manager.destroy();
+      manager = null;
+    }
     if (relay) {
       try {
         relay.cleanup();
@@ -287,11 +301,8 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
       relay = null;
     }
 
-    const stored = fresh ? null : loadSession();
-
-    if (fresh && manager) {
-      manager.clearStoredSession();
-    }
+    const saved = fresh ? null : loadSession();
+    const stored = saved?.walletPublicKey && saved?.paths?.length ? saved : null;
 
     $('status').textContent = restoring
       ? 'Restoring saved WizardConnect session…'
@@ -302,10 +313,15 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
           : 'Starting WizardConnect pairing…';
 
     manager = new DappConnectionManager('CTF CashTokens');
+    if (fresh || (saved && !stored)) manager.clearStoredSession();
+    if (stored) $('forget').hidden = false;
+    const connectionManager = manager;
+    let connectedAt = 0;
 
     manager.on('walletready', async (message) => {
       const sessionManager = manager;
       walletReady = true;
+      $('forget').hidden = false;
       updateReceiveAddress();
       setConnection(true);
       $('pairing').classList.add('hidden');
@@ -388,7 +404,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
           throw new Error('WizardConnect relay returned an incomplete payload.');
         }
 
-        manager.updateConnection(payload.client, payload.status);
+        connectionManager.updateConnection(payload.client, payload.status);
       } catch (error) {
         report(error);
         $('status').textContent = 'Relay update failed · see details below';
@@ -396,8 +412,11 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
       }
 
       if (payload?.status?.status === 'connected' && !walletReady) {
+        connectedAt = Date.now();
         $('status').textContent =
-          'Relay connected · waiting for wallet_ready handshake…';
+          'Waiting for wallet approval and handshake…';
+      } else if (payload?.status?.status === 'reconnecting' && !walletReady) {
+        $('status').textContent = 'Relay reconnecting · check your internet connection…';
       } else if (payload?.status?.status === 'error') {
         $('status').textContent = 'Relay error · see details below';
         $('log').textContent = JSON.stringify(payload.status);
@@ -410,8 +429,16 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         : initiateDappRelay(callback);
 
     manager.attachRelay(relay);
+    // Attach before the relay reports connected so an early wallet_ready is not missed.
+    connectionManager.updateConnection(relay.client, { status: 'connecting' });
+    relay.events.on('keyexchangecomplete', () => {
+      // The manager's initial handshake waits only 30 seconds for a scan.
+      if (connectedAt && Date.now() - connectedAt >= 29_000) {
+        connectionManager.updateConnection(relay.client, { status: 'connected' });
+      }
+    });
 
-    if ((!restoring || showPairingWhenReady) && !walletReady) {
+    if (!stored && (!restoring || showPairingWhenReady) && !walletReady) {
       await showPairingUri(relay.uri);
 
       if (!walletReady) {
@@ -420,6 +447,9 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
       }
     } else {
       $('pairing').classList.add('hidden');
+      if (stored && !walletReady) {
+        $('status').textContent = 'Reconnecting saved session. Open your wallet and approve the connection if prompted.';
+      }
     }
   } catch (error) {
     $('status').textContent = 'Could not start WizardConnect';
@@ -436,6 +466,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
   } finally {
     pairingInProgress = false;
     showPairingWhenReady = false;
+    $('connect').disabled = walletReady;
   }
 }
 
@@ -655,6 +686,18 @@ async function refreshBalances({ quiet = false } = {}) {
     addresses = scanned.addresses;
     utxos = scanned.utxos;
     renderBalances(utxos);
+    balanceSatoshis = utxos.reduce((sum, utxo) => sum + BigInt(utxo.satoshis), 0n);
+    if (!quiet && balanceSatoshis === 0n && !emptyBalanceNotified) {
+      const notice = () => {
+        if (walletReady && balanceSatoshis === 0n && !emptyBalanceNotified) {
+          emptyBalanceNotified = true;
+          showFundingDialog('Your wallet has no BCH. You need BCH for transaction fees.');
+        }
+      };
+      const openDialog = document.querySelector('dialog[open]');
+      if (openDialog) openDialog.addEventListener('close', notice, { once: true });
+      else notice();
+    }
 
     $('status').textContent = 'Wallet connected · balances refreshed';
 
@@ -1046,7 +1089,13 @@ async function sendFungibleTokens() {
   }
 }
 
-$('connect').addEventListener('click', () => startConnection());
+$('connect').addEventListener('click', () => {
+  if (!localStorage.getItem('ctf-connect-help-seen')) {
+    localStorage.setItem('ctf-connect-help-seen', '1');
+    openTutorial();
+  }
+  startConnection();
+});
 
 $('forget').addEventListener('click', async () => {
   if (
@@ -1092,20 +1141,30 @@ $('refresh').addEventListener('click', () => {
 
 $('send').addEventListener('click', () => {
   if (walletReady) {
+    if (balanceSatoshis === 0n) {
+      showFundingDialog('Your wallet has no BCH. You need BCH for transaction fees.');
+      return;
+    }
     sendFungibleTokens();
     return;
   }
+  showFundingDialog('Connect a compatible wallet before sending tokens.');
+});
+
+function showFundingDialog(message) {
+  $('funding-message').textContent = message;
+  $('funding-connect').hidden = walletReady;
+  if (!$('funding-dialog').open && !document.querySelector('dialog[open]')) $('funding-dialog').showModal();
+}
+$('funding-close').addEventListener('click', () => $('funding-dialog').close());
+$('funding-connect').addEventListener('click', () => {
+  $('funding-dialog').close();
   $('connection-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
   $('connect').focus({ preventScroll: true });
-  if ($('pairing').classList.contains('hidden')) {
-    if (relay?.uri) {
-      showPairingUri(relay.uri).catch(report);
-    } else if (pairingInProgress) {
-      showPairingWhenReady = true;
-    } else if (!pairingInProgress) {
-      startConnection();
-    }
-  }
+  if (pairingInProgress) showPairingWhenReady = true;
+  if (relay?.uri && !loadSession()?.paths?.length) showPairingUri(relay.uri).catch(report);
+  else if (!relay && !pairingInProgress) $('connect').click();
+  else if (pairingInProgress) openTutorial();
 });
 
 const notificationsDialog = $('notifications-dialog');
@@ -1177,10 +1236,10 @@ $('copy-uri').addEventListener('click', async () => {
 function setTransferTab(tabName) {
   const isSend = tabName === 'send';
 
-  $('send-tab').classList.toggle('active', isSend);
-  $('receive-tab').classList.toggle('active', !isSend);
-  $('top-send').classList.toggle('active', isSend);
-  $('top-receive').classList.toggle('active', !isSend);
+  $('send-tab').classList.toggle('active', walletReady && isSend);
+  $('receive-tab').classList.toggle('active', walletReady && !isSend);
+  $('top-send').classList.toggle('active', walletReady && isSend);
+  $('top-receive').classList.toggle('active', walletReady && !isSend);
   $('top-earn').classList.remove('active');
   $('send-tab').setAttribute('aria-selected', String(isSend));
   $('receive-tab').setAttribute('aria-selected', String(!isSend));
@@ -1205,6 +1264,7 @@ $('receive-tab').addEventListener('click', () => setTransferTab('receive'));
 $('top-send').addEventListener('click', () => {
   setTransferTab('send');
   $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!walletReady) showFundingDialog('Connect a compatible wallet before sending tokens.');
 });
 $('top-receive').addEventListener('click', () => {
   setTransferTab('receive');
@@ -1394,6 +1454,7 @@ function showTutorialStep() {
   panel.classList.add('tutorial-highlight');
   $('wizard-title').textContent = step.title;
   $('wizard-message').textContent = step.message;
+  $('wallet-help').hidden = tutorialStep !== 0;
   $('wizard-progress').textContent = `${tutorialStep + 1} / ${tutorialSteps.length}`;
   $('wizard-prev').disabled = tutorialStep === 0;
   $('wizard-next').textContent = tutorialStep === tutorialSteps.length - 1 ? 'Done' : 'Next';
@@ -1411,16 +1472,20 @@ function closeTutorial() {
   if (focused) $('wizard-toggle').focus({ preventScroll: true });
 }
 
-$('wizard-toggle').addEventListener('click', () => {
-  if (!$('wizard-dialog').hidden) {
-    closeTutorial();
-    return;
-  }
+function openTutorial() {
   tutorialStep = 0;
   $('wizard-dialog').hidden = false;
   document.querySelector('.wizard-guide').classList.add('walking');
   $('wizard-toggle').setAttribute('aria-expanded', 'true');
   showTutorialStep();
+}
+
+$('wizard-toggle').addEventListener('click', () => {
+  if (!$('wizard-dialog').hidden) {
+    closeTutorial();
+    return;
+  }
+  openTutorial();
 });
 $('wizard-prev').addEventListener('click', () => {
   if (tutorialStep > 0) {
@@ -1439,11 +1504,13 @@ $('wizard-next').addEventListener('click', () => {
 
 
 fetchBchUsd();
+setupCommunity(import.meta.env);
 
 const restoreSession = async () => {
   try {
     await loadWalletDependencies();
-    if (!pairingInProgress && !walletReady && loadSession()?.walletPublicKey) {
+    const stored = loadSession();
+    if (!pairingInProgress && !walletReady && stored?.walletPublicKey && stored?.paths?.length) {
       await startConnection({ restoring: true });
     }
   } catch (error) {

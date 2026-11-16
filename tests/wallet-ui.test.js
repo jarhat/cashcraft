@@ -59,7 +59,7 @@ test('wizard follows tutorial panels without entering or reflowing the panel gri
     };
     elements.set(id, panel);
   }
-  for (const id of ['wizard-toggle', 'wizard-dialog', 'wizard-title', 'wizard-message', 'wizard-progress', 'wizard-prev', 'wizard-next']) {
+  for (const id of ['wizard-toggle', 'wizard-dialog', 'wizard-title', 'wizard-message', 'wizard-progress', 'wizard-prev', 'wizard-next', 'wallet-help']) {
     elements.set(id, {
       hidden: id === 'wizard-dialog',
       addEventListener(type, handler) { this[type] = handler; },
@@ -175,56 +175,51 @@ test('notification can be dismissed outside and reopened with its request intact
   assert.equal(indicator.hidden, true);
 });
 
-function sendFixture({ connected = false, pairing = false, relay = null, inProgress = false } = {}) {
+function sendFixture({ connected = false, balance = null } = {}) {
   const calls = [];
   let handler;
   const nodes = {
     send: { addEventListener(type, fn) { handler = fn; } },
-    'connection-section': { scrollIntoView() { calls.push('scroll'); } },
-    connect: { focus() { calls.push('focus'); } },
-    pairing: { classList: { contains() { return !pairing; } } },
   };
   const start = source.indexOf("$('send').addEventListener('click'");
-  const end = source.indexOf('\nconst notificationsDialog', start);
+  const end = source.indexOf('\nfunction showFundingDialog', start);
   runInNewContext(source.slice(start, end), {
-    $: (id) => nodes[id], walletReady: connected, pairingInProgress: inProgress, relay,
+    $: (id) => nodes[id], walletReady: connected, balanceSatoshis: balance,
     sendFungibleTokens: () => calls.push('send'),
-    startConnection: () => calls.push('connect'),
-    showPairingUri: (uri) => { calls.push(uri); return Promise.resolve(); },
-    report: () => {},
+    showFundingDialog: () => calls.push('funding'),
   });
   handler();
   return calls;
 }
 
-test('review opens pairing when disconnected without sending a transaction', () => {
-  assert.deepEqual(sendFixture(), ['scroll', 'focus', 'connect']);
-  assert.deepEqual(sendFixture({ relay: { uri: 'wc:test' } }), ['scroll', 'focus', 'wc:test']);
-  assert.deepEqual(sendFixture({ pairing: true }), ['scroll', 'focus']);
-  assert.deepEqual(sendFixture({ inProgress: true }), ['scroll', 'focus']);
+test('review offers funding or connection without sending a transaction', () => {
+  assert.deepEqual(sendFixture(), ['funding']);
+  assert.deepEqual(sendFixture({ connected: true, balance: 0n }), ['funding']);
 });
 
 test('review uses the normal send flow when connected', () => {
   assert.deepEqual(sendFixture({ connected: true }), ['send']);
 });
 
-test('review during session restoration displays pairing after the relay is ready', async () => {
+test('connect during relay startup displays a fresh pairing after it is ready', async () => {
   let release;
   const dependencies = new Promise((resolve) => { release = resolve; });
   const calls = [];
-  let review;
+  let connect;
   const nodes = {
     connect: { focus() {}, disabled: false },
     log: { textContent: '' },
     pairing: { classList: { add() {}, contains() { return true; } } },
     'open-wallet': { removeAttribute() {} },
     status: { textContent: '' },
-    send: { addEventListener(type, handler) { review = handler; } },
+    'funding-connect': { addEventListener(type, handler) { connect = handler; } },
+    'funding-close': { addEventListener() {} },
+    'funding-dialog': { close() {} },
     'connection-section': { scrollIntoView() {} },
   };
   const connectionStart = source.indexOf('async function startConnection(');
   const connectionEnd = source.indexOf('\nasync function fetchBchUsd', connectionStart);
-  const sendStart = source.indexOf("$('send').addEventListener('click'");
+  const sendStart = source.indexOf('function showFundingDialog');
   const sendEnd = source.indexOf('\nconst notificationsDialog', sendStart);
   const context = {
     $: (id) => nodes[id], relay: null, manager: null,
@@ -232,20 +227,83 @@ test('review during session restoration displays pairing after the relay is read
     clearWalletDisplay() {}, setConnection() {},
     loadWalletDependencies: () => dependencies,
     loadSession: () => ({ walletPublicKey: 'saved' }),
-    DappConnectionManager: class { on() {} attachRelay() {} },
-    initiateDappRelay: () => ({ uri: 'wc:restored', cleanup() {} }),
+    DappConnectionManager: class { on() {} attachRelay() {} updateConnection() {} clearStoredSession() {} },
+    initiateDappRelay: () => ({ uri: 'wc:restored', cleanup() {}, client: {}, events: { on() {} } }),
     showPairingUri: async (uri) => { calls.push(uri); },
     sendFungibleTokens() { throw new Error('must not send'); },
     report(error) { throw error; },
+    openTutorial() {},
   };
   runInNewContext(`${source.slice(connectionStart, connectionEnd)}\n${source.slice(sendStart, sendEnd)}`, context);
   const restoring = context.startConnection({ restoring: true });
-  review();
+  connect();
   release();
   await restoring;
   assert.deepEqual(calls, ['wc:restored']);
   assert.equal(context.pairingInProgress, false);
   assert.equal(context.showPairingWhenReady, false);
+});
+
+test('transfer selection is highlighted only while connected', () => {
+  const nodes = new Map();
+  const element = (id) => {
+    if (!nodes.has(id)) nodes.set(id, {
+      attributes: {}, classes: new Set(),
+      setAttribute(name, value) { this.attributes[name] = value; },
+      classList: {
+        toggle(name, enabled) { enabled ? nodes.get(id).classes.add(name) : nodes.get(id).classes.delete(name); },
+        remove(name) { nodes.get(id).classes.delete(name); },
+      },
+    });
+    return nodes.get(id);
+  };
+  const start = source.indexOf('function setTransferTab(');
+  const end = source.indexOf('\nfunction updateReceiveAddress', start);
+  const context = { $: element, walletReady: false };
+  runInNewContext(source.slice(start, end), context);
+  context.setTransferTab('send');
+  assert.equal(element('send-tab').attributes['aria-selected'], 'true');
+  assert.equal(element('send-tab').classes.has('active'), false);
+  assert.equal(element('top-send').classes.has('active'), false);
+  context.walletReady = true;
+  context.setTransferTab('receive');
+  assert.equal(element('receive-tab').classes.has('active'), true);
+  assert.equal(element('top-receive').classes.has('active'), true);
+});
+
+test('late scans restart the manager handshake and attach the listener immediately', async () => {
+  let time = 1000;
+  let keyExchange;
+  let callback;
+  const statuses = [];
+  const element = () => ({
+    classList: { add() {}, remove() {} },
+    removeAttribute() {}, set textContent(value) {}, disabled: false, hidden: true,
+  });
+  const start = source.indexOf('async function startConnection(');
+  const end = source.indexOf('\nasync function fetchBchUsd', start);
+  const context = {
+    $: element, relay: null, manager: null, walletReady: false,
+    pairingInProgress: false, showPairingWhenReady: false,
+    Date: { now: () => time }, clearWalletDisplay() {}, setConnection() {},
+    loadWalletDependencies: async () => {}, loadSession: () => null,
+    DappConnectionManager: class {
+      on() {} attachRelay() {}
+      updateConnection(client, status) { statuses.push(status.status); }
+    },
+    initiateDappRelay: (fn) => {
+      callback = fn;
+      return { uri: 'wiz:test', client: {}, cleanup() {}, events: { on(event, handler) { keyExchange = handler; } } };
+    },
+    showPairingUri: async () => {}, report(error) { throw error; },
+  };
+  runInNewContext(source.slice(start, end), context);
+  await context.startConnection();
+  assert.deepEqual(statuses, ['connecting']);
+  callback({ client: {}, status: { status: 'connected' } });
+  time += 31_000;
+  keyExchange();
+  assert.deepEqual(statuses, ['connecting', 'connected', 'connected']);
 });
 
 test('portfolio abbreviates category IDs but copies the full ID', async () => {
