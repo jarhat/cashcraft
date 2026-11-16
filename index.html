@@ -59,6 +59,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18v4H3zM5 12v9h14v-9M12 8v13M12 8H8.5a2.5 2.5 0 1 1 2.3-3.5L12 8Zm0 0h3.5a2.5 2.5 0 1 0-2.3-3.5L12 8Z" /></svg>
           <span>Earn</span>
         </button>
+        <button id="beer-toggle" class="quick-action" type="button" aria-label="Beerware information" aria-controls="beer-dialog" aria-haspopup="dialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h11v11H5zM16 10h2a2 2 0 0 1 0 4h-2M7 8a3 3 0 0 1 5-3 3 3 0 0 1 4 3M9 11v5m3-5v5"/></svg>
+          <span>Beer</span>
+        </button>
       </nav>
       <div class="topbar-tools">
         <span class="network"><i></i><span id="network">CHIPNET</span></span>
@@ -88,6 +92,10 @@
         </button>
       </div>
     </header>
+
+    <div id="market-ticker" class="market-ticker" role="region" tabindex="0" aria-label="Top cryptocurrencies by market capitalization">
+      Loading market prices…
+    </div>
 
     <section class="hero">
       <div class="hero-copy">
@@ -314,6 +322,10 @@
               autocomplete="off"
             >
           </label>
+          <label class="full">
+            Sharing note (optional)
+            <textarea id="receive-note" rows="2" maxlength="280" placeholder="Add a note to the shared image"></textarea>
+          </label>
         </div>
 
         <button id="generate-payment" class="button primary send" type="button" disabled>
@@ -326,19 +338,21 @@
             <canvas id="payment-qr" aria-label="Token payment URL QR code"></canvas>
           </div>
           <div class="qr-actions">
-            <button id="share-payment-qr" class="small-button icon-button" type="button" aria-label="Share QR code" title="Share QR code">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M5 14v6h14v-6"/></svg>
-              <span>Share QR</span>
+            <button id="share-payment-qr" class="small-button icon-button" type="button" aria-label="Share" title="Share" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>
+              <span>Share</span>
             </button>
-            <button id="download-payment-qr" class="small-button icon-button" type="button" aria-label="Download QR code" title="Download QR code">
+            <button id="download-payment-qr" class="small-button icon-button" type="button" aria-label="Download QR code" title="Download QR code" disabled>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3"/></svg>
               <span>Download QR</span>
             </button>
           </div>
           <div class="payment-token">
-            <span class="token-icon" aria-hidden="true">◆</span>
+            <span id="payment-token-icon" class="token-icon" aria-hidden="true">◆</span>
             <div><strong id="payment-amount"></strong><code id="payment-category"></code></div>
           </div>
+          <p id="payment-logo-status" class="fine" aria-live="polite"></p>
+          <p id="payment-price" class="fine" aria-live="polite"></p>
 
           <div class="payment-url-line">
             <code id="payment-url"></code>
@@ -352,6 +366,7 @@
           The QR code contains a link to this site with the receive address,
           category ID, and requested amount.
         </p>
+        <p class="fine">The sharing note appears in the shared image and message, not in the payment link.</p>
       </div>
     </section>
 
@@ -383,6 +398,14 @@
 
     <pre id="log" role="status"></pre>
   </main>
+
+  <dialog id="beer-dialog" class="notifications-dialog" aria-labelledby="beer-title">
+    <div class="notifications-heading">
+      <h2 id="beer-title">Beerware</h2>
+      <button id="beer-close" class="small-button close-notifications" type="button" aria-label="Close Beerware information" autofocus>×</button>
+    </div>
+    <p>Beerware is a lighthearted license idea: if you enjoy using the work, consider buying its creator a beer. No payment is required here.</p>
+  </dialog>
 
   <dialog id="notifications-dialog" class="notifications-dialog" aria-labelledby="notifications-title">
     <div class="notifications-heading">

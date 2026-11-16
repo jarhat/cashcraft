@@ -273,6 +273,7 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   const end = source.indexOf('\nasync function refreshBalances', start);
   runInNewContext(`${source.slice(start, end)}\nrenderBalances(utxos);`, {
     $: element, walletReady: true, bchUsd: null, portfolioVersion: 0, mainnet: true, network: 'mainnet', SATOSHIS_PER_BCH: 100_000_000n,
+    loadTokenLogo: () => new Promise(() => {}),
     fetchTokenMetadata: () => new Promise(() => {}), fetchCauldronSpot: () => new Promise(() => {}),
     formatBch: () => '0.00001000', Option: class { constructor(text, value) { this.text = text; this.value = value; } },
     document: { createElement: () => new Element() },
@@ -284,8 +285,75 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   const categoryLine = summary.children[1].children[1];
   assert.equal(categoryLine.children[1].textContent, `${category.slice(0, 10)}…${category.slice(-8)}`);
   assert.match(categoryLine.children[2].innerHTML, /<svg/);
+  const metadata = summary.children[1].children[2];
+  assert.equal(metadata.hidden, true);
+  categoryLine.children[0].handler();
+  assert.equal(metadata.hidden, false);
+  assert.equal(summary.children[1].children[1], categoryLine);
   await categoryLine.children[2].handler();
   assert.equal(copied, category);
+});
+
+test('payment QR draws the loaded token logo and ignores a stale result', async () => {
+  const nodes = new Map();
+  const canvasDraws = [];
+  let handler;
+  const element = (id) => {
+    if (!nodes.has(id)) nodes.set(id, {
+      value: '', textContent: '',
+      classList: {
+        hidden: false,
+        add() { this.hidden = true; },
+        remove() { this.hidden = false; },
+        contains() { return this.hidden; },
+      },
+      addEventListener(type, fn) { if (id === 'generate-payment') handler = fn; },
+      replaceChildren(child) { this.child = child; },
+      getContext() { return { drawImage: (...args) => canvasDraws.push(args), fillRect() {} }; },
+    });
+    return nodes.get(id);
+  };
+  const category = 'a'.repeat(64);
+  element('receive-category').value = category;
+  element('receive-amount').value = '2';
+  let resolveLogo, rejectLogo, failPrice = false;
+  const logo = { cloneNode: () => ({}) };
+  const start = source.indexOf("$('generate-payment').addEventListener('click'");
+  const end = source.indexOf("\nfor (const id of ['receive-category'", start);
+  const helpers = source.slice(source.indexOf('function paymentQrImage()'), source.indexOf("\n$('download-payment-qr')"));
+  runInNewContext(`${source.slice(start, end)}\n${helpers}`, {
+    $: element, walletReady: true, mainnet: true, addressFor: () => 'bitcoincash:ztest',
+    network: 'mainnet', paymentGeneration: 0, paymentPriceSnapshot: null,
+    window: { location: { href: 'https://ctf.example/' } }, URL,
+    document: { createElement: () => ({ width: 512, getContext: () => ({ fillRect() {} }) }) },
+    QRCode: { toCanvas: async () => {} },
+    loadTokenLogo: () => new Promise((resolve, reject) => { resolveLogo = resolve; rejectLogo = reject; }),
+    fetchCauldronSpot: async () => { if (failPrice) throw new Error('offline'); return 0.001; },
+    translate: (text) => text, console: { warn() {} }, report(error) { throw error; },
+  });
+  await handler();
+  assert.equal(element('download-payment-qr').disabled, true);
+  resolveLogo(logo);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(canvasDraws.some(([image]) => image === logo));
+  assert.ok(element('payment-token-icon').child);
+  assert.equal(element('download-payment-qr').disabled, false);
+  assert.match(element('payment-price').textContent, /0\.001000 BCH \/ base unit · \d{4}-\d\d-\d\dT/);
+
+  await handler();
+  element('payment-result').classList.add('hidden');
+  const previousDraws = canvasDraws.length;
+  resolveLogo(logo);
+  await Promise.resolve();
+  assert.equal(canvasDraws.length, previousDraws);
+
+  failPrice = true;
+  await handler();
+  rejectLogo(new Error('offline'));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(element('payment-logo-status').textContent, 'Token logo unavailable.');
+  assert.equal(element('payment-price').textContent, 'Cauldron price unavailable.');
+  assert.equal(element('download-payment-qr').disabled, false);
 });
 
 test('wizard follows the panels in reading order and resets when closed', () => {

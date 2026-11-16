@@ -18,16 +18,7 @@ export async function fetchTokenMetadata(category) {
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) {
     throw new Error('BCMR token decimals are unavailable or invalid.');
   }
-  let icon = data.uris?.icon;
-  if (typeof icon === 'string') {
-    if (icon.startsWith('ipfs://')) icon = `https://ipfs.io/ipfs/${icon.slice(7)}`;
-    try {
-      if (new URL(icon).protocol !== 'https:') icon = null;
-    } catch {
-      icon = null;
-    }
-  } else icon = null;
-  return { name: data.name, description: data.description, symbol: data.token.symbol, decimals, icon };
+  return { name: data.name, description: data.description, symbol: data.token.symbol, decimals };
 }
 
 export async function fetchCauldronSpot(category, network) {

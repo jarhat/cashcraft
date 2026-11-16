@@ -2,14 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fetchCauldronSpot, fetchTokenMetadata } from '../src/portfolio-data.js';
 
-test('validates BCMR category and decimals and converts IPFS icons', async () => {
+test('validates BCMR category and decimals', async () => {
   const original = globalThis.fetch;
   const category = 'a'.repeat(64);
   let data = { name: 'Example', token: { category, symbol: 'EX', decimals: 2 }, uris: { icon: 'ipfs://cid/icon.png' } };
   globalThis.fetch = async () => ({ ok: true, json: async () => data });
   try {
     assert.deepEqual(await fetchTokenMetadata(category), {
-      name: 'Example', description: undefined, symbol: 'EX', decimals: 2, icon: 'https://ipfs.io/ipfs/cid/icon.png',
+      name: 'Example', description: undefined, symbol: 'EX', decimals: 2,
     });
     data = { token: { category: 'b'.repeat(64), decimals: 2 } };
     await assert.rejects(fetchTokenMetadata(category), /does not match/);
