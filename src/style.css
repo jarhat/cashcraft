@@ -8,9 +8,9 @@
   --ice: #a8e4ff;
   --mint: #a0f2cf;
   --panel: rgb(14 21 34 / 72%);
-  --glass-tint: rgb(22 28 40 / 72%);
-  --glass-border: rgb(206 222 239 / 20%);
-  --glass-glow: rgb(176 196 218 / 12%);
+  --glass-tint: rgb(9 11 15 / 88%);
+  --glass-border: rgb(210 222 235 / 16%);
+  --glass-glow: rgb(153 178 201 / 7%);
   --accent-soft: #d3e2ef;
   --glow-color: #55bfff;
   --page-base: #080c15;
@@ -1710,8 +1710,10 @@ textarea {
 .panel, .wizard-guide { scroll-margin-top: calc(var(--topbar-height, 100px) + 12px); }
 
 .market-ticker {
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
-  margin-top: 12px;
+  padding: 8px 0;
   color: var(--muted);
   font: .7rem var(--mono);
 }
@@ -1894,3 +1896,51 @@ footer span:first-child {
     font-size: clamp(2.35rem, 9vw, 4.5rem);
   }
 }
+
+  .market-strip {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 34px;
+    padding: 0 max(20px, calc((100% - 1040px) / 2));
+    border-bottom: 1px solid var(--glass-border);
+    background: #080a0d;
+    color: #b6c4d2;
+    font: .62rem var(--mono);
+  }
+
+  .market-label { flex: none; color: var(--ice); }
+  .holiday-flight { flex: none; width: 64px; height: 24px; image-rendering: pixelated; animation: sleigh-float 2s ease-in-out infinite alternate; }
+  @keyframes sleigh-float { to { transform: translateY(-3px); } }
+
+  .topbar { border: 1px solid var(--glass-border); }
+  #top-send svg { color: #6cd9a1; }
+  #top-receive svg { color: #70bdf5; }
+  #beer-toggle svg { color: #f5bb5d; }
+
+  .wallet-options, .funding-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .wallet-options a {
+    color: var(--ice);
+    text-decoration: none;
+  }
+  .wallet-options a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 9px;
+    border: 1px solid var(--glass-border);
+    border-radius: 9px;
+    background: rgb(255 255 255 / 5%);
+  }
+  .wallet-icon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: #fff; font-weight: 800; }
+  .selene-icon { background: #6251aa; }
+  .cashonize-icon { background: #31875d; }
+  .paytaca-icon { background: #dd7136; }
+  .funding-actions .button { width: auto; margin: 0; }
+  #wallet-help[hidden], #forget[hidden], #funding-connect[hidden] { display: none; }
+
+  @media (max-width: 680px) {
+    .market-strip { padding-inline: 13px; gap: 8px; }
+    .market-label { font-size: .52rem; }
+    .holiday-flight { width: 50px; }
+  }

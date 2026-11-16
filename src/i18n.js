@@ -475,6 +475,63 @@ const german = {
   'Wallet rejected the transaction or did not return a signed transaction.': 'Die Wallet hat die Transaktion abgelehnt oder keine signierte Transaktion zurückgegeben.',
 };
 
+Object.assign(spanish, {
+  'Beer': 'Cerveza',
+  'Waiting for wallet approval and handshake…': 'Esperando la aprobación y conexión de la cartera…',
+  'Relay reconnecting · check your internet connection…': 'Reconectando el relay · comprueba tu conexión a internet…',
+  'Reconnecting saved session. Open your wallet and approve the connection if prompted.': 'Reconectando la sesión guardada. Abre tu cartera y aprueba la conexión si se solicita.',
+  'New here? Install a compatible wallet, create or restore it, and safely back up your recovery phrase. Never share that phrase.': '¿Primera visita? Instala una cartera compatible, créala o restáurala y guarda tu frase de recuperación de forma segura. Nunca la compartas.',
+  'In your wallet, find WizardConnect, scan the QR below (or open the pairing link on this device), and approve the connection. Use a wallet on the same network shown above.': 'Busca WizardConnect en tu cartera, escanea el QR de abajo (o abre el enlace en este dispositivo) y aprueba la conexión. Usa la misma red indicada arriba.',
+  'Get ready to send': 'Prepárate para enviar',
+  'Connect wallet': 'Conectar cartera',
+  'Close': 'Cerrar',
+  'Connect a compatible wallet before sending tokens.': 'Conecta una cartera compatible antes de enviar tokens.',
+  'Your wallet has no BCH. You need BCH for transaction fees.': 'Tu cartera no tiene BCH. Necesitas BCH para las comisiones.',
+  'You can explore BCH at bch.now or use SideShift to swap. These independent services use mainnet, not chipnet. Check the network, fees and recipient address before proceeding.': 'Puedes explorar BCH en bch.now o intercambiar en SideShift. Estos servicios independientes usan mainnet, no chipnet. Comprueba la red, las comisiones y la dirección antes de continuar.',
+  'BCH community': 'Comunidad BCH',
+  'Gallery feed is not configured.': 'La galería no está configurada.',
+  'Gallery temporarily unavailable. Visit bch.now to explore.': 'Galería temporalmente no disponible. Visita bch.now para explorar.',
+  'Market prices temporarily unavailable': 'Precios temporalmente no disponibles',
+  'Loading market prices…': 'Cargando precios…',
+});
+Object.assign(french, {
+  'Beer': 'Bière',
+  'Waiting for wallet approval and handshake…': 'En attente de l’approbation et de la connexion du portefeuille…',
+  'Relay reconnecting · check your internet connection…': 'Reconnexion du relais · vérifiez votre connexion internet…',
+  'Reconnecting saved session. Open your wallet and approve the connection if prompted.': 'Reconnexion de la session enregistrée. Ouvrez votre portefeuille et approuvez la connexion si demandé.',
+  'New here? Install a compatible wallet, create or restore it, and safely back up your recovery phrase. Never share that phrase.': 'Nouveau ici ? Installez un portefeuille compatible, créez-le ou restaurez-le et sauvegardez votre phrase de récupération en lieu sûr. Ne la partagez jamais.',
+  'In your wallet, find WizardConnect, scan the QR below (or open the pairing link on this device), and approve the connection. Use a wallet on the same network shown above.': 'Dans votre portefeuille, trouvez WizardConnect, scannez le QR ci-dessous (ou ouvrez le lien sur cet appareil) et approuvez la connexion. Utilisez le même réseau que celui indiqué ci-dessus.',
+  'Get ready to send': 'Préparez votre envoi',
+  'Connect wallet': 'Connecter le portefeuille',
+  'Close': 'Fermer',
+  'Connect a compatible wallet before sending tokens.': 'Connectez un portefeuille compatible avant d’envoyer des jetons.',
+  'Your wallet has no BCH. You need BCH for transaction fees.': 'Votre portefeuille ne contient pas de BCH. Les frais de transaction nécessitent du BCH.',
+  'You can explore BCH at bch.now or use SideShift to swap. These independent services use mainnet, not chipnet. Check the network, fees and recipient address before proceeding.': 'Découvrez BCH sur bch.now ou échangez sur SideShift. Ces services indépendants utilisent mainnet, pas chipnet. Vérifiez le réseau, les frais et l’adresse du destinataire avant de continuer.',
+  'BCH community': 'Communauté BCH',
+  'Gallery feed is not configured.': 'La galerie n’est pas configurée.',
+  'Gallery temporarily unavailable. Visit bch.now to explore.': 'Galerie temporairement indisponible. Visitez bch.now pour explorer.',
+  'Market prices temporarily unavailable': 'Cours temporairement indisponibles',
+  'Loading market prices…': 'Chargement des cours…',
+});
+Object.assign(german, {
+  'Beer': 'Bier',
+  'Waiting for wallet approval and handshake…': 'Warten auf Bestätigung und Verbindung der Wallet…',
+  'Relay reconnecting · check your internet connection…': 'Relay verbindet erneut · prüfe deine Internetverbindung…',
+  'Reconnecting saved session. Open your wallet and approve the connection if prompted.': 'Gespeicherte Sitzung wird verbunden. Öffne deine Wallet und bestätige die Verbindung, falls du dazu aufgefordert wirst.',
+  'New here? Install a compatible wallet, create or restore it, and safely back up your recovery phrase. Never share that phrase.': 'Neu hier? Installiere eine kompatible Wallet, erstelle sie oder stelle sie wieder her und sichere deine Wiederherstellungsphrase. Gib sie niemals weiter.',
+  'In your wallet, find WizardConnect, scan the QR below (or open the pairing link on this device), and approve the connection. Use a wallet on the same network shown above.': 'Öffne WizardConnect in deiner Wallet, scanne den QR-Code unten (oder öffne den Link auf diesem Gerät) und bestätige die Verbindung. Verwende dasselbe Netzwerk wie oben angezeigt.',
+  'Get ready to send': 'Senden vorbereiten',
+  'Connect wallet': 'Wallet verbinden',
+  'Close': 'Schließen',
+  'Connect a compatible wallet before sending tokens.': 'Verbinde eine kompatible Wallet, bevor du Token sendest.',
+  'Your wallet has no BCH. You need BCH for transaction fees.': 'Deine Wallet enthält kein BCH. Für Transaktionsgebühren benötigst du BCH.',
+  'You can explore BCH at bch.now or use SideShift to swap. These independent services use mainnet, not chipnet. Check the network, fees and recipient address before proceeding.': 'Entdecke BCH auf bch.now oder tausche über SideShift. Diese unabhängigen Dienste nutzen Mainnet, nicht Chipnet. Prüfe Netzwerk, Gebühren und Empfängeradresse, bevor du fortfährst.',
+  'BCH community': 'BCH-Community',
+  'Gallery feed is not configured.': 'Der Galerie-Feed ist nicht konfiguriert.',
+  'Gallery temporarily unavailable. Visit bch.now to explore.': 'Galerie vorübergehend nicht verfügbar. Besuche bch.now.',
+  'Market prices temporarily unavailable': 'Marktpreise vorübergehend nicht verfügbar',
+  'Loading market prices…': 'Marktpreise werden geladen…',
+});
 const translations = { es: spanish, fr: french, de: german };
 let language = ['es', 'fr', 'de'].includes(localStorage.getItem('ctf-language')) ? localStorage.getItem('ctf-language') : 'en';
 const originals = new WeakMap();

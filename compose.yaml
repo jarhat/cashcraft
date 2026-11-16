@@ -70,6 +70,8 @@ services:
   cashtoken-wallet:
     build:
       context: .
+      args:
+        BCH_NETWORK: ${BCH_NETWORK:-mainnet}
     expose:
       - "8080"
     environment:
