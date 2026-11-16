@@ -1590,6 +1590,8 @@ function setTransferTab(tabName) {
   $('receive-panel').classList.toggle('hidden', isSend);
 }
 
+setTransferTab('receive');
+
 function updateReceiveAddress() {
   if (!walletReady) return;
 
