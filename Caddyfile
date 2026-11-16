@@ -1,7 +1,12 @@
 :8080 {
-  root * /srv
   encode gzip
-  templates
-  try_files {path} /index.html
-  file_server
+  handle /api/* {
+    reverse_proxy auth:3000
+  }
+  handle {
+    root * /srv
+    templates
+    try_files {path} /index.html
+    file_server
+  }
 }

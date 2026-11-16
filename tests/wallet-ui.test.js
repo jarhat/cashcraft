@@ -457,6 +457,11 @@ test('open in wallet remains available until an address is derived, including re
   let instance;
   let relayCallback;
   let keyAvailable = false;
+  let submissionFails = false;
+  let scanFails = false;
+  let scanPending = false;
+  let resolveScan;
+  let reported;
   const elements = new Map();
   const element = (id) => {
     if (!elements.has(id)) elements.set(id, {
@@ -476,7 +481,11 @@ test('open in wallet remains available until an address is derived, including re
       if (!keyAvailable) throw new Error('Public key missing');
       return 'token-address';
     },
-    submitCashAddress: async () => {}, refreshBalances: async () => {},
+    submitCashAddress: async () => { if (submissionFails) throw new Error('registration unavailable'); },
+    refreshBalances: async () => {
+      if (scanFails) throw new Error('scan unavailable');
+      if (scanPending) await new Promise((resolve) => { resolveScan = resolve; });
+    },
     loadWalletDependencies: async () => {},
     loadSession: () => ({ walletPublicKey: 'saved', paths: ['receive'] }),
     DappConnectionManager: class {
@@ -488,7 +497,7 @@ test('open in wallet remains available until an address is derived, including re
       relayCallback = callback;
       return { uri: 'wiz:restored', client: {}, cleanup() {}, events: { on() {} } };
     },
-    report() {}, logger: { info() {}, warn() {}, error() {} },
+    report(error) { reported = error; }, logger: { info() {}, warn() {}, error() {} },
   };
   runInNewContext(source.slice(start, end), context);
   await context.startConnection({ restoring: true });
@@ -501,6 +510,20 @@ test('open in wallet remains available until an address is derived, including re
   keyAvailable = true;
   await instance.handlers.walletready({});
   assert.equal(element('open-wallet').hidden, true);
+  submissionFails = true;
+  scanPending = true;
+  const pendingReady = instance.handlers.walletready({});
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(reported.message, /registration unavailable/);
+  assert.match(element('status').textContent, /address submission failed/);
+  resolveScan();
+  await pendingReady;
+  scanPending = false;
+  scanFails = true;
+  await instance.handlers.walletready({});
+  assert.match(reported.message, /registration unavailable/);
+  assert.match(reported.message, /scan unavailable/);
+  assert.match(element('status').textContent, /address submission and balance scan failed/);
   relayCallback({ client: {}, status: { status: 'reconnecting' } });
   assert.equal(element('open-wallet').hidden, false);
   relayCallback({ client: {}, status: { status: 'connected' } });

@@ -473,9 +473,23 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         $('log').textContent = '';
         $('address').textContent = address;
         addressReady = true;
-        const submission = submitCashAddress(address);
+        const submission = submitCashAddress(address).catch((error) => {
+          if (walletReady && manager === connectionManager) {
+            report(new Error(`Address submission failed: ${error?.message || error}`));
+            $('status').textContent = 'Wallet connected · address submission failed';
+          }
+          throw error;
+        });
         const [scanResult, submissionResult] = await Promise.allSettled([refreshBalances(), submission]);
         if (!walletReady || manager !== connectionManager) return;
+        if (scanResult.status === 'rejected' && submissionResult.status === 'rejected') {
+          report(new Error(
+            `Address submission failed: ${submissionResult.reason?.message || submissionResult.reason}\n` +
+            `Balance scan failed: ${scanResult.reason?.message || scanResult.reason}`,
+          ), { log: false });
+          $('status').textContent = 'Wallet connected · address submission and balance scan failed';
+          return;
+        }
         if (scanResult.status === 'rejected') throw scanResult.reason;
         if (submissionResult.status === 'rejected') {
           report(new Error(`Balances refreshed, but address submission failed: ${submissionResult.reason?.message || submissionResult.reason}`));
