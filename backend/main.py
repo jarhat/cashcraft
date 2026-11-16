@@ -65,9 +65,6 @@ if not BCH_WALLET:
 if not CATEGORY_RE.fullmatch(BCH_REWARD_CATEGORY):
     raise RuntimeError("Set BCH_REWARD_CATEGORY to a 64-character category ID.")
 
-if not BCH_ALLOWED_TOKEN_CATEGORIES:
-    raise RuntimeError("Set BCH_ALLOWED_TOKEN_CATEGORIES.")
-
 if any(not CATEGORY_RE.fullmatch(c) for c in BCH_ALLOWED_TOKEN_CATEGORIES):
     raise RuntimeError(
         "Each BCH_ALLOWED_TOKEN_CATEGORIES entry must be 64 hex characters."
@@ -601,6 +598,8 @@ def verify_confirmed_payment(txid: str) -> dict:
     sender_script = sender_info.get("scriptPubKey") if isinstance(sender_info, dict) else None
     if not isinstance(sender_info, dict) or not sender_info.get("isvalid") or not sender_script:
         raise RuntimeError("BCH_ALLOWED_SENDER is not a valid address.")
+    if not BCH_ALLOWED_TOKEN_CATEGORIES:
+        raise RuntimeError("BCH_ALLOWED_TOKEN_CATEGORIES is not configured.")
 
     try:
         tx = bch_rpc("getrawtransaction", [txid, 2])

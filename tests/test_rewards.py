@@ -95,6 +95,21 @@ class RewardTests(unittest.TestCase):
              patch.object(backend, "bch_rpc", side_effect=[{"isvalid": True, "scriptPubKey": "76abcd"}, tx]):
             self.assertEqual(backend.verify_confirmed_payment(txid)["confirmations"], 0)
 
+    def test_proof_configuration_is_not_required_for_address_rewards(self):
+        backend.save_cash_address("no-proof", "bitcoincash", 2)
+        with sqlite3.connect(backend.DB_PATH) as db:
+            self.assertEqual(
+                db.execute(
+                    "SELECT category FROM token_rewards WHERE cash_address = 'no-proof'"
+                ).fetchone(),
+                ("b" * 64,),
+            )
+        with patch.object(backend, "BCH_ALLOWED_SENDER", ""), \
+             patch.object(backend, "bch_rpc") as rpc:
+            with self.assertRaisesRegex(RuntimeError, "BCH_ALLOWED_SENDER"):
+                backend.verify_confirmed_payment("f" * 64)
+            rpc.assert_not_called()
+
     def test_unconfirmed_wallet_transaction_must_still_be_in_mempool(self):
         backend.save_cash_address("recipient", "bitcoincash", 2)
         with patch.object(backend, "build_reward_transaction", return_value=("abcd", "c" * 64)):
