@@ -1,4 +1,14 @@
 const spanish = {
+  'Automatic balance refresh failed · use Refresh balances to retry.': 'Falló la actualización automática del saldo · usa Actualizar saldos para volver a intentarlo.',
+  'Waiting for wallet to reconnect…': 'Esperando que la cartera se vuelva a conectar…',
+  'Wallet connected · relay ready': 'Cartera conectada · retransmisor listo',
+  'Wallet connection paused · return to this browser to reconnect.': 'Conexión de la cartera pausada · vuelve a este navegador para reconectar.',
+  'Choose Connect wallet below. Open your wallet or scan the code, approve the connection, then return to this browser. Use a wallet on the same network shown above.': 'Elige Conectar cartera abajo. Abre tu cartera o escanea el código, aprueba la conexión y vuelve a este navegador. Usa una cartera en la red indicada arriba.',
+  'Connect your wallet': 'Conecta tu cartera',
+  'On another device, scan this code with your wallet’s WizardConnect scanner.': 'En otro dispositivo, escanea este código con el escáner WizardConnect de tu cartera.',
+  'Choose Connect wallet, then open your wallet and approve the connection. Return to this browser to continue.': 'Elige Conectar cartera, abre tu cartera y aprueba la conexión. Vuelve a este navegador para continuar.',
+  'Open your wallet or scan the code, then approve and return here.': 'Abre tu cartera o escanea el código, aprueba la conexión y vuelve aquí.',
+  'NFT display is coming soon. NFTs are not included in the token balances above.': 'La visualización de NFT llegará pronto. Los NFT no están incluidos en los saldos de tokens de arriba.',
   'Sharing note': 'Nota para compartir',
   'Sharing note (optional)': 'Nota para compartir (opcional)',
   'Add a note to the shared image': 'Añade una nota a la imagen compartida',
@@ -158,6 +168,16 @@ const spanish = {
 };
 
 const french = {
+  'Automatic balance refresh failed · use Refresh balances to retry.': 'Actualisation automatique du solde échouée · utilisez Actualiser les soldes pour réessayer.',
+  'Waiting for wallet to reconnect…': 'En attente de la reconnexion du portefeuille…',
+  'Wallet connected · relay ready': 'Portefeuille connecté · relais prêt',
+  'Wallet connection paused · return to this browser to reconnect.': 'Connexion du portefeuille en pause · revenez dans ce navigateur pour vous reconnecter.',
+  'Choose Connect wallet below. Open your wallet or scan the code, approve the connection, then return to this browser. Use a wallet on the same network shown above.': 'Choisissez Connecter le portefeuille ci-dessous. Ouvrez votre portefeuille ou scannez le code, approuvez la connexion, puis revenez dans ce navigateur. Utilisez le réseau indiqué ci-dessus.',
+  'Connect your wallet': 'Connectez votre portefeuille',
+  'On another device, scan this code with your wallet’s WizardConnect scanner.': 'Sur un autre appareil, scannez ce code avec le scanner WizardConnect de votre portefeuille.',
+  'Choose Connect wallet, then open your wallet and approve the connection. Return to this browser to continue.': 'Choisissez Connecter le portefeuille, ouvrez votre portefeuille et approuvez la connexion. Revenez dans ce navigateur pour continuer.',
+  'Open your wallet or scan the code, then approve and return here.': 'Ouvrez votre portefeuille ou scannez le code, puis approuvez et revenez ici.',
+  'NFT display is coming soon. NFTs are not included in the token balances above.': 'L’affichage des NFT arrive bientôt. Les NFT ne sont pas inclus dans les soldes de jetons ci-dessus.',
   'Sharing note': 'Note à partager',
   'Sharing note (optional)': 'Note à partager (facultative)',
   'Add a note to the shared image': 'Ajouter une note à l’image partagée',
@@ -317,6 +337,16 @@ const french = {
 };
 
 const german = {
+  'Automatic balance refresh failed · use Refresh balances to retry.': 'Automatische Guthabenaktualisierung fehlgeschlagen · verwende Guthaben aktualisieren, um es erneut zu versuchen.',
+  'Waiting for wallet to reconnect…': 'Warte auf die erneute Verbindung der Wallet…',
+  'Wallet connected · relay ready': 'Wallet verbunden · Relay bereit',
+  'Wallet connection paused · return to this browser to reconnect.': 'Wallet-Verbindung pausiert · kehre zum erneuten Verbinden zu diesem Browser zurück.',
+  'Choose Connect wallet below. Open your wallet or scan the code, approve the connection, then return to this browser. Use a wallet on the same network shown above.': 'Wähle unten Wallet verbinden. Öffne deine Wallet oder scanne den Code, bestätige die Verbindung und kehre zu diesem Browser zurück. Verwende das oben angezeigte Netzwerk.',
+  'Connect your wallet': 'Verbinde deine Wallet',
+  'On another device, scan this code with your wallet’s WizardConnect scanner.': 'Scanne diesen Code auf einem anderen Gerät mit dem WizardConnect-Scanner deiner Wallet.',
+  'Choose Connect wallet, then open your wallet and approve the connection. Return to this browser to continue.': 'Wähle Wallet verbinden, öffne deine Wallet und bestätige die Verbindung. Kehre zum Fortfahren zu diesem Browser zurück.',
+  'Open your wallet or scan the code, then approve and return here.': 'Öffne deine Wallet oder scanne den Code, bestätige und kehre hierher zurück.',
+  'NFT display is coming soon. NFTs are not included in the token balances above.': 'Die NFT-Anzeige folgt in Kürze. NFTs sind nicht in den obigen Token-Guthaben enthalten.',
   'Sharing note': 'Geteilte Notiz',
   'Sharing note (optional)': 'Geteilte Notiz (optional)',
   'Add a note to the shared image': 'Notiz zum geteilten Bild hinzufügen',

@@ -631,8 +631,13 @@ def reward_worker() -> None:
         try:
             if process_one_reward():
                 continue
-        except (RuntimeError, sqlite3.Error, ValueError, KeyError, TypeError):
-            logger.exception("Could not process token reward; it will be retried.")
+        except RewardDatabaseError as exc:
+            logger.error("Could not process token reward: %s", exc)
+        except (RuntimeError, sqlite3.Error, ValueError, KeyError, TypeError) as exc:
+            logger.error(
+                "Could not process token reward (%s); it will be retried.",
+                type(exc).__name__,
+            )
         reward_stop.wait(30)
 
 

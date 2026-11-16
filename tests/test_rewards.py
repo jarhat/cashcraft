@@ -78,6 +78,16 @@ class RewardTests(unittest.TestCase):
         with sqlite3.connect(backend.DB_PATH) as db:
             self.assertEqual(db.execute("SELECT * FROM cash_addresses").fetchall(), [])
 
+    def test_worker_does_not_log_transaction_details_from_rpc_errors(self):
+        tx_detail = "sensitive transaction data"
+        with patch.object(backend.reward_stop, "is_set", side_effect=[False, True]), \
+             patch.object(backend.reward_stop, "wait"), \
+             patch.object(backend, "process_one_reward", side_effect=RuntimeError(tx_detail)), \
+             self.assertLogs(backend.logger, level="ERROR") as captured:
+            backend.reward_worker()
+        self.assertIn("RuntimeError", captured.output[0])
+        self.assertNotIn(tx_detail, "\n".join(captured.output))
+
     def test_unconfirmed_inputs_and_token_change_are_preserved(self):
         calls = []
         token = {"txid": "1" * 64, "vout": 1, "amount": 0.00001, "spendable": True, "confirmations": 0, "tokenData": {"category": "b" * 64, "amount": "5"}}
