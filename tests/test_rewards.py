@@ -42,6 +42,42 @@ class RewardTests(unittest.TestCase):
             self.assertEqual(rows, [("new", "b" * 64), ("proof", "b" * 64)])
             self.assertIsNone(db.execute("SELECT 1 FROM cash_addresses WHERE cash_address = 'failed'").fetchone())
 
+    def test_existing_database_is_migrated_without_queueing_old_addresses(self):
+        with sqlite3.connect(backend.DB_PATH) as db:
+            db.execute("INSERT INTO cash_addresses (cash_address, network, prefix, address_type) VALUES ('old', 'mainnet', 'bitcoincash', 2)")
+            db.execute("DROP TABLE token_rewards")
+        backend.init_db()
+        with sqlite3.connect(backend.DB_PATH) as db:
+            self.assertEqual(db.execute("SELECT cash_address FROM cash_addresses").fetchall(), [("old",)])
+            self.assertEqual(db.execute("SELECT * FROM token_rewards").fetchall(), [])
+        backend.save_cash_address("new", "bitcoincash", 2)
+        with sqlite3.connect(backend.DB_PATH) as db:
+            self.assertEqual(db.execute("SELECT cash_address FROM token_rewards").fetchall(), [("new",)])
+
+    def test_worker_rejects_missing_or_replaced_database(self):
+        backend.save_cash_address("recipient", "bitcoincash", 2)
+        original = backend.DB_PATH.with_name("original.sqlite3")
+        backend.DB_PATH.rename(original)
+        with self.assertRaisesRegex(backend.RewardDatabaseError, "missing"):
+            backend.process_one_reward()
+        self.assertFalse(backend.DB_PATH.exists())
+        with sqlite3.connect(backend.DB_PATH) as db:
+            db.execute("CREATE TABLE token_rewards (cash_address TEXT)")
+        with self.assertRaisesRegex(backend.RewardDatabaseError, "changed since startup"):
+            backend.process_one_reward()
+        with sqlite3.connect(original) as db:
+            self.assertEqual(db.execute("SELECT cash_address FROM token_rewards").fetchall(), [("recipient",)])
+
+    def test_missing_reward_table_fails_closed(self):
+        with sqlite3.connect(backend.DB_PATH) as db:
+            db.execute("DROP TABLE token_rewards")
+        with self.assertRaisesRegex(backend.RewardDatabaseError, "lost its token_rewards table"):
+            backend.process_one_reward()
+        with self.assertRaises(backend.RewardDatabaseError):
+            backend.save_cash_address("new", "bitcoincash", 2)
+        with sqlite3.connect(backend.DB_PATH) as db:
+            self.assertEqual(db.execute("SELECT * FROM cash_addresses").fetchall(), [])
+
     def test_unconfirmed_inputs_and_token_change_are_preserved(self):
         calls = []
         token = {"txid": "1" * 64, "vout": 1, "amount": 0.00001, "spendable": True, "confirmations": 0, "tokenData": {"category": "b" * 64, "amount": "5"}}
@@ -94,6 +130,21 @@ class RewardTests(unittest.TestCase):
         with patch.object(backend, "BCH_ALLOWED_SENDER", "bitcoincash:sender"), \
              patch.object(backend, "bch_rpc", side_effect=[{"isvalid": True, "scriptPubKey": "76abcd"}, tx]):
             self.assertEqual(backend.verify_confirmed_payment(txid)["confirmations"], 0)
+
+    def test_proof_configuration_is_not_required_for_address_rewards(self):
+        backend.save_cash_address("no-proof", "bitcoincash", 2)
+        with sqlite3.connect(backend.DB_PATH) as db:
+            self.assertEqual(
+                db.execute(
+                    "SELECT category FROM token_rewards WHERE cash_address = 'no-proof'"
+                ).fetchone(),
+                ("b" * 64,),
+            )
+        with patch.object(backend, "BCH_ALLOWED_SENDER", ""), \
+             patch.object(backend, "bch_rpc") as rpc:
+            with self.assertRaisesRegex(RuntimeError, "BCH_ALLOWED_SENDER"):
+                backend.verify_confirmed_payment("f" * 64)
+            rpc.assert_not_called()
 
     def test_unconfirmed_wallet_transaction_must_still_be_in_mempool(self):
         backend.save_cash_address("recipient", "bitcoincash", 2)

@@ -3,8 +3,10 @@ import re
 import sqlite3
 import logging
 import threading
+from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
+from typing import Iterator
 from urllib.parse import quote
 
 import httpx
@@ -65,9 +67,6 @@ if not BCH_WALLET:
 if not CATEGORY_RE.fullmatch(BCH_REWARD_CATEGORY):
     raise RuntimeError("Set BCH_REWARD_CATEGORY to a 64-character category ID.")
 
-if not BCH_ALLOWED_TOKEN_CATEGORIES:
-    raise RuntimeError("Set BCH_ALLOWED_TOKEN_CATEGORIES.")
-
 if any(not CATEGORY_RE.fullmatch(c) for c in BCH_ALLOWED_TOKEN_CATEGORIES):
     raise RuntimeError(
         "Each BCH_ALLOWED_TOKEN_CATEGORIES entry must be 64 hex characters."
@@ -91,6 +90,11 @@ app = FastAPI(title="CashToken-aware CashAddr receiver")
 logger = logging.getLogger(__name__)
 reward_stop = threading.Event()
 reward_thread = None
+db_identity = None
+
+
+class RewardDatabaseError(RuntimeError):
+    pass
 
 app.add_middleware(
     CORSMiddleware,
@@ -113,6 +117,7 @@ class CashAddressRequest(BaseModel):
 
 
 def init_db() -> None:
+    global db_identity
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     with sqlite3.connect(DB_PATH) as db:
@@ -136,6 +141,46 @@ def init_db() -> None:
                 FOREIGN KEY (cash_address) REFERENCES cash_addresses(cash_address)
             )
         """)
+    stat = DB_PATH.stat()
+    db_identity = (stat.st_dev, stat.st_ino)
+
+
+@contextmanager
+def open_db(timeout: int) -> Iterator[sqlite3.Connection]:
+    try:
+        stat = DB_PATH.stat()
+    except FileNotFoundError as exc:
+        raise RewardDatabaseError(
+            f"Database {DB_PATH} is missing; restore the original database and restart auth."
+        ) from exc
+    if db_identity is None or (stat.st_dev, stat.st_ino) != db_identity:
+        raise RewardDatabaseError(
+            f"Database {DB_PATH} changed since startup; restore the original database and restart auth."
+        )
+    db = sqlite3.connect(DB_PATH.resolve().as_uri() + "?mode=rw", uri=True, timeout=timeout)
+    try:
+        try:
+            stat = DB_PATH.stat()
+        except FileNotFoundError as exc:
+            raise RewardDatabaseError(
+                f"Database {DB_PATH} is missing; restore the original database and restart auth."
+            ) from exc
+        if (stat.st_dev, stat.st_ino) != db_identity:
+            raise RewardDatabaseError(
+                f"Database {DB_PATH} changed since startup; restore the original database and restart auth."
+            )
+        table = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'token_rewards'"
+        ).fetchone()
+        if table is None:
+            raise RewardDatabaseError(
+                f"Database {DB_PATH} lost its token_rewards table after startup; "
+                "restore the original database and restart auth."
+            )
+        with db:
+            yield db
+    finally:
+        db.close()
 
 
 @app.on_event("startup")
@@ -176,7 +221,7 @@ def _insert_cash_address(
 
 
 def save_cash_address(address: str, prefix: str, address_type: int) -> None:
-    with sqlite3.connect(DB_PATH, timeout=10) as db:
+    with open_db(timeout=10) as db:
         _insert_cash_address(db, address, prefix, address_type)
 
 
@@ -188,7 +233,7 @@ def save_cash_address_with_proof(
 ) -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    with sqlite3.connect(DB_PATH, timeout=10) as db:
+    with open_db(timeout=10) as db:
         db.execute("BEGIN IMMEDIATE")
 
         _insert_cash_address(db, address, prefix, address_type)
@@ -349,6 +394,9 @@ def receive_cash_address(
 
     try:
         save_cash_address(address, prefix, address_type)
+    except RewardDatabaseError as exc:
+        logger.exception("Could not save cash address.")
+        raise HTTPException(status_code=503, detail="Address database unavailable.") from exc
     except sqlite3.Error as exc:
         raise HTTPException(
             status_code=500,
@@ -393,6 +441,9 @@ def receive_cash_address_with_proof(
             address_type=address_type,
             txid=txid,
         )
+    except RewardDatabaseError as exc:
+        logger.exception("Could not save cash address and proof.")
+        raise HTTPException(status_code=503, detail="Address database unavailable.") from exc
     except sqlite3.IntegrityError as exc:
         raise HTTPException(
             status_code=409,
@@ -532,7 +583,7 @@ def build_reward_transaction(address: str, category: str) -> tuple[str, str]:
 
 
 def process_one_reward() -> bool:
-    with sqlite3.connect(DB_PATH, timeout=60) as db:
+    with open_db(timeout=60) as db:
         db.execute("BEGIN IMMEDIATE")
         row = db.execute(
             """SELECT cash_address, category, signed_tx, txid FROM token_rewards
@@ -601,6 +652,8 @@ def verify_confirmed_payment(txid: str) -> dict:
     sender_script = sender_info.get("scriptPubKey") if isinstance(sender_info, dict) else None
     if not isinstance(sender_info, dict) or not sender_info.get("isvalid") or not sender_script:
         raise RuntimeError("BCH_ALLOWED_SENDER is not a valid address.")
+    if not BCH_ALLOWED_TOKEN_CATEGORIES:
+        raise RuntimeError("BCH_ALLOWED_TOKEN_CATEGORIES is not configured.")
 
     try:
         tx = bch_rpc("getrawtransaction", [txid, 2])

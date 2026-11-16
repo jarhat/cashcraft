@@ -54,11 +54,11 @@ services:
       BCH_WALLET: ${BCH_WALLET:-token-sender}
       BCH_REWARD_CATEGORY: ${BCH_REWARD_CATEGORY:?Set BCH_REWARD_CATEGORY in .env}
 
-      # Required: exact prefixed CashAddr expected as the source of every input.
-      BCH_ALLOWED_SENDER: ${BCH_ALLOWED_SENDER:?Set BCH_ALLOWED_SENDER in .env}
+      # Optional: source address required only by /api/tx-proof.
+      BCH_ALLOWED_SENDER: ${BCH_ALLOWED_SENDER:-}
 
-      # Comma-separated 64-character hexadecimal CashToken category IDs.
-      BCH_ALLOWED_TOKEN_CATEGORIES: ${BCH_ALLOWED_TOKEN_CATEGORIES:?Set BCH_ALLOWED_TOKEN_CATEGORIES in .env}
+      # Optional: categories required only by /api/tx-proof.
+      BCH_ALLOWED_TOKEN_CATEGORIES: ${BCH_ALLOWED_TOKEN_CATEGORIES:-}
 
       # Require this many confirmations before recording the address.
       BCH_REQUIRED_CONFIRMATIONS: ${BCH_REQUIRED_CONFIRMATIONS:-0}
