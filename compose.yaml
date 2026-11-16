@@ -5,6 +5,7 @@ services:
       - -printtoconsole
       - -server=1
       - -wallet=${BCH_WALLET:-token-sender}
+      - -disablewallet=0
       - -prune=${BCH_PRUNE_MIB:-10000}
       - -rpcbind=0.0.0.0
       - -rpcallowip=172.30.0.0/24
@@ -12,6 +13,8 @@ services:
       - -rpcuser=${BCH_RPC_USER:?Set BCH_RPC_USER in .env}
       - -rpcpassword=${BCH_RPC_PASSWORD:?Set BCH_RPC_PASSWORD in .env}
       - -testnet=0
+    ports:
+      - "127.0.0.1:8332:8332"
     volumes:
       - bchn-data:/home/bitcoin/.bitcoin
     restart: unless-stopped

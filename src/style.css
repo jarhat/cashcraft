@@ -1686,6 +1686,10 @@ textarea {
   box-shadow: 0 0 8px var(--glow-color), 0 0 28px color-mix(in srgb, var(--glow-color) 45%, transparent);
 }
 
+#connect:not(:disabled) {
+  box-shadow: 0 0 16px var(--glow-color);
+}
+
 @property --glow-angle {
   syntax: "<angle>";
   initial-value: 0deg;
