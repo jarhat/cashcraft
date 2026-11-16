@@ -121,11 +121,11 @@
         <div id="wallet-help">
           <p>New here? Install a compatible wallet, create or restore it, and safely back up your recovery phrase. Never share that phrase.</p>
           <div class="wallet-options">
-            <a href="https://selene.cash" target="_blank" rel="noopener noreferrer"><span class="wallet-icon selene-icon" aria-hidden="true">S</span> Selene ↗</a>
-            <a href="https://cashonize.com" target="_blank" rel="noopener noreferrer"><span class="wallet-icon cashonize-icon" aria-hidden="true">C</span> Cashonize ↗</a>
-            <a href="https://www.paytaca.com" target="_blank" rel="noopener noreferrer"><span class="wallet-icon paytaca-icon" aria-hidden="true">P</span> Paytaca ↗</a>
+            <a href="https://selene.cash" target="_blank" rel="noopener noreferrer"><img class="wallet-icon" src="https://selene.cash/assets/logo-DwnTeMnn.svg" alt="" referrerpolicy="no-referrer"> Selene ↗</a>
+            <a href="https://cashonize.com" target="_blank" rel="noopener noreferrer"><img class="wallet-icon" src="https://raw.githubusercontent.com/cashonize/cashonize-wallet/ff731f9dacdc9b6ae0194292fa144da248f620b3/public/images/cashonize-icon.png" alt="" referrerpolicy="no-referrer"> Cashonize ↗</a>
+            <a href="https://www.paytaca.com" target="_blank" rel="noopener noreferrer"><img class="wallet-icon" src="https://raw.githubusercontent.com/paytaca/paytaca-app/f12d121932e98c41520ce0df37727bf826dd955d/public/icons/paytaca_logo.png" alt="" referrerpolicy="no-referrer"> Paytaca ↗</a>
           </div>
-          <p>In your wallet, find WizardConnect, scan the QR below (or open the pairing link on this device), and approve the connection. Use a wallet on the same network shown above.</p>
+          <p>Choose Connect wallet below. Open your wallet or scan the code, approve the connection, then return to this browser. Use a wallet on the same network shown above.</p>
         </div>
         <div class="wizard-controls">
           <button id="wizard-prev" class="small-button" type="button">Back</button>
@@ -144,16 +144,14 @@
           <span id="dot" class="dot"></span>
         </div>
 
-        <p id="status" class="status">Not connected</p>
+        <p id="status" class="status" role="status">Not connected</p>
 
         <div id="pairing" class="pairing hidden">
           <canvas id="qr"></canvas>
-          <p class="pair-title">Scan with your WizardConnect wallet</p>
+          <p class="pair-title">Connect your wallet</p>
           <p class="muted">
-            Open the wallet’s WizardConnect scanner, scan the code, then approve
-            the connection in the wallet.
+            On another device, scan this code with your wallet’s WizardConnect scanner.
           </p>
-          <a id="open-wallet" class="button secondary wallet-link">Open in wallet <span aria-hidden="true">↗</span></a>
           <details>
             <summary>Show pairing URI</summary>
             <div class="uri-line">
@@ -164,8 +162,12 @@
         </div>
 
         <button id="connect" class="button primary">
-          Connect / reconnect wallet <span>↗</span>
+          Connect wallet <span>↗</span>
         </button>
+        <button id="open-wallet" class="button secondary wallet-link" type="button" disabled>
+          Open in wallet <span aria-hidden="true">↗</span>
+        </button>
+        <p id="pairing-help" class="fine">Choose Connect wallet, then open your wallet and approve the connection. Return to this browser to continue.</p>
         <button id="forget" class="button secondary" hidden>
           Forget saved session and pair again
         </button>
@@ -191,6 +193,7 @@
         <div class="divider"></div>
         <p class="eyebrow">CASHTOKENS</p>
         <div id="balance-tokens" class="muted">Connect wallet to load tokens.</div>
+        <p class="fine">NFT display is coming soon. NFTs are not included in the token balances above.</p>
 
         <div class="divider"></div>
 

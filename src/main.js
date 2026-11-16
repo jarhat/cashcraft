@@ -5,6 +5,7 @@ import { setupScrollEffects } from './scroll-effects.js';
 import { fetchTokenMetadata, fetchCauldronSpot } from './portfolio-data.js';
 import { loadTokenLogo } from './token-logo.js';
 import { setupMarketTicker } from './market-ticker.js';
+import { createLogger } from './logger.js';
 import { submitCashAddress, API_BASE_URL } from './api.js';
 import {
   SATOSHIS_PER_BCH,
@@ -15,6 +16,9 @@ import {
 } from './utils.js';
 
 const network = (import.meta.env.VITE_BCH_NETWORK || 'mainnet').toLowerCase();
+const logger = createLogger(
+  import.meta.env.VITE_CONSOLE_LOG_LEVEL || (import.meta.env.DEV ? 'debug' : 'error'),
+);
 setupScrollEffects();
 
 for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
@@ -86,7 +90,7 @@ function fillFromUrl() {
 const mainnet = network === 'mainnet';
 const prefix = mainnet ? 'bitcoincash' : 'bchtest';
 const $ = (id) => document.getElementById(id);
-setupMarketTicker($('market-ticker'), translate);
+setupMarketTicker($('market-ticker'), translate, logger);
 let QRCode, decodeCashAddress, encodeCashAddress, hash160, initiateDappRelay;
 let DappConnectionManager, loadSession, sourceOutputToRelay, transactionToHex;
 let TransactionBuilder, placeholderP2PKHUnlocker, provider;
@@ -119,7 +123,6 @@ let manager = null;
 let relay = null;
 let walletReady = false;
 let pairingInProgress = false;
-let showPairingWhenReady = false;
 let sending = false;
 let transferInteracted = false;
 let refreshPromise = null;
@@ -133,6 +136,7 @@ let portfolioVersion = 0;
 let paymentGeneration = 0;
 let paymentPriceSnapshot = null;
 let walletReceiveAddress = null;
+let walletPairingUri = null;
 let tokenBalances = new Map();
 let pricedPortfolioBch = 0;
 let rewardCategory = null;
@@ -220,8 +224,8 @@ function notifyTokenReceipts(scannedUtxos) {
   localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
 }
 
-function report(error) {
-  console.error(error);
+function report(error, { log = true } = {}) {
+  if (log) logger.error(error);
   $('log').classList.add('error');
   $('log').textContent = `Action failed: ${error?.message || String(error)}\nCheck the status above, your inputs and wallet connection before retrying.`;
 }
@@ -384,7 +388,10 @@ async function showPairingUri(uri) {
   }
 
   $('pair-uri').textContent = uri;
-  $('open-wallet').href = uri;
+  walletPairingUri = uri;
+  $('open-wallet').disabled = false;
+  $('open-wallet').hidden = false;
+  $('pairing-help').hidden = false;
   $('pairing').classList.remove('hidden');
 
   await QRCode.toCanvas($('qr'), uri, {
@@ -404,7 +411,10 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
   walletReady = false;
   clearWalletDisplay();
   $('pairing').classList.add('hidden');
-  $('open-wallet').removeAttribute('href');
+  walletPairingUri = null;
+  $('open-wallet').disabled = true;
+  $('open-wallet').hidden = false;
+  $('pairing-help').hidden = false;
   setConnection(false);
 
   try {
@@ -439,6 +449,8 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
     if (stored) $('forget').hidden = false;
     const connectionManager = manager;
     let connectedAt = 0;
+    let relayConnected = false;
+    let relayInterrupted = false;
 
     manager.on('walletready', async (message) => {
       if (manager !== connectionManager) return;
@@ -451,6 +463,9 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         $('forget').hidden = false;
         setConnection(true);
         $('pairing').classList.add('hidden');
+        relayInterrupted = false;
+        $('open-wallet').hidden = true;
+        $('pairing-help').hidden = true;
         $('status').textContent =
           `Wallet handshake complete · ${
             message?.wallet_name || connectionManager.walletName || 'connected'
@@ -472,11 +487,13 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         if (!addressReady) {
           walletReady = false;
           setConnection(false);
+          $('open-wallet').hidden = false;
+          $('pairing-help').hidden = false;
           $('status').textContent = 'Wallet connected · could not derive address';
           report(error);
           return;
         }
-        report(error);
+        report(error, { log: false });
         $('status').textContent = 'Wallet connected · balance scan failed';
       }
     });
@@ -487,7 +504,10 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
       setConnection(false);
       clearWalletDisplay();
       $('pairing').classList.add('hidden');
-      $('open-wallet').removeAttribute('href');
+      walletPairingUri = null;
+      $('open-wallet').disabled = true;
+      $('open-wallet').hidden = false;
+      $('pairing-help').hidden = false;
       $('status').textContent =
         `Wallet disconnected · ${message || reason || 'connection closed'}`;
       report(
@@ -507,24 +527,31 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
     });
 
     manager.on('messagesent', (message) => {
-      console.info(
+      logger.info(
         '[WizardConnect] sent:',
         message?.action || 'protocol message',
       );
     });
 
     manager.on('messagereceived', (message) => {
-      console.info(
+      if (manager !== connectionManager) return;
+      logger.info(
         '[WizardConnect] received:',
         message?.action || 'protocol message',
       );
+      if (message?.action === 'pong' && walletReady && relayConnected) {
+        relayInterrupted = false;
+        $('open-wallet').hidden = true;
+        $('pairing-help').hidden = true;
+        $('status').textContent = 'Wallet connected · relay ready';
+      }
     });
 
     const callback = (payload) => {
       if (manager !== connectionManager) return;
-      console.info(
+      logger.info(
         '[WizardConnect relay]',
-        payload?.status?.status || payload?.status || payload,
+        payload?.status?.status || 'unknown',
       );
 
       try {
@@ -539,13 +566,35 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         return;
       }
 
-      if (payload?.status?.status === 'connected' && !walletReady) {
-        connectedAt = Date.now();
-        $('status').textContent =
-          'Waiting for wallet approval and handshake…';
+      if (payload?.status?.status === 'connected') {
+        relayConnected = true;
+        if (walletReady) {
+          if (!relayInterrupted) {
+            $('open-wallet').hidden = true;
+            $('pairing-help').hidden = true;
+          }
+          $('status').textContent = relayInterrupted
+            ? 'Waiting for wallet to reconnect…'
+            : 'Wallet connected · relay ready';
+        } else {
+          connectedAt = Date.now();
+          $('status').textContent = 'Waiting for wallet approval and handshake…';
+        }
       } else if (payload?.status?.status === 'reconnecting') {
+        relayConnected = false;
+        relayInterrupted = true;
+        $('open-wallet').hidden = false;
+        $('open-wallet').disabled = !walletPairingUri;
+        $('pairing-help').hidden = false;
         $('status').textContent = 'Relay reconnecting · check your internet connection…';
-        if (payload.status.error) console.warn('[WizardConnect] relay reconnecting:', payload.status.error);
+        if (payload.status.error) logger.warn('[WizardConnect] relay reconnecting:', payload.status.error);
+      } else if (payload?.status?.status === 'disconnected') {
+        relayConnected = false;
+        relayInterrupted = true;
+        $('open-wallet').hidden = false;
+        $('open-wallet').disabled = !walletPairingUri;
+        $('pairing-help').hidden = false;
+        $('status').textContent = 'Wallet connection paused · return to this browser to reconnect.';
       } else if (payload?.status?.status === 'error') {
         $('status').textContent = 'Relay error · see details below';
         report(new Error(`WizardConnect relay error: ${payload.status.message || 'Check your connection and reconnect.'}`));
@@ -568,17 +617,13 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
       }
     });
 
-    if (!stored && (!restoring || showPairingWhenReady) && !walletReady) {
+    if (!walletReady) {
       await showPairingUri(relay.uri);
 
       if (!walletReady) {
-        $('status').textContent =
-          'Scan the QR in your BCH wallet and approve the pairing.';
-      }
-    } else {
-      $('pairing').classList.add('hidden');
-      if (stored && !walletReady) {
-        $('status').textContent = 'Reconnecting saved session. Open your wallet and approve the connection if prompted.';
+        $('status').textContent = stored
+          ? 'Reconnecting saved session. Open your wallet and approve the connection if prompted.'
+          : 'Open your wallet or scan the code, then approve and return here.';
       }
     }
   } catch (error) {
@@ -588,14 +633,15 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
       try {
         relay.cleanup();
       } catch (cleanupError) {
-        console.warn('Could not clean up the relay:', cleanupError);
+        logger.warn('Could not clean up the relay:', cleanupError);
       }
       relay = null;
     }
+    walletPairingUri = null;
+    $('open-wallet').disabled = true;
     $('connect').disabled = false;
   } finally {
     pairingInProgress = false;
-    showPairingWhenReady = false;
     $('connect').disabled = walletReady;
   }
 }
@@ -618,7 +664,7 @@ async function fetchBchUsd() {
       if (walletReady && balanceSatoshis !== null) renderBalances(utxos);
     }
   } catch (error) {
-    console.warn('BCH/USD price unavailable:', error);
+    logger.warn('BCH/USD price unavailable:', error);
   }
 }
 
@@ -888,7 +934,7 @@ function renderBalances(scannedUtxos) {
         icon.replaceChildren(image);
         optionIcon.replaceChildren(image.cloneNode());
         amountIcon.replaceChildren(image.cloneNode());
-      }).catch((error) => console.warn(`Token logo unavailable for ${category}:`, error));
+      }).catch((error) => logger.warn(`Token logo unavailable for ${category}:`, error));
     }
     const metadataPromise = (mainnet
       ? fetchTokenMetadata(category)
@@ -910,7 +956,7 @@ function renderBalances(scannedUtxos) {
       const metadata = metadataResult.status === 'fulfilled' ? metadataResult.value : null;
       if (!metadata) {
         infoText.textContent = translate('BCMR metadata unavailable.');
-        console.warn(`BCMR metadata unavailable for ${category}:`, metadataResult.reason);
+        logger.warn(`BCMR metadata unavailable for ${category}:`, metadataResult.reason);
       }
       if (priceResult.status === 'fulfilled') {
         const spot = priceResult.value;
@@ -927,7 +973,7 @@ function renderBalances(scannedUtxos) {
         } else price.textContent = translate('Cauldron price unavailable.');
       } else {
         price.textContent = translate('Cauldron price unavailable.');
-        console.warn(`Cauldron price unavailable for ${category}:`, priceResult.reason);
+        logger.warn(`Cauldron price unavailable for ${category}:`, priceResult.reason);
       }
       if (metadata && !pricedTokens.some((item) => item.category === category)) {
         optionLabel.textContent = `${metadata.name || metadata.symbol || 'Token'} · ${amountElement.textContent} · price unavailable`;
@@ -1003,11 +1049,12 @@ async function refreshBalances({ quiet = false } = {}) {
     utxos = scanned.utxos;
     balanceSatoshis = utxos.reduce((sum, utxo) => sum + BigInt(utxo.satoshis), 0n);
     renderBalances(utxos);
+    let receiptError;
     try {
       await loadRewardCategory();
       if (walletReady && manager === scanManager) notifyTokenReceipts(utxos);
     } catch (error) {
-      console.error('Token receipt notifications could not be updated:', error);
+      receiptError = error;
     }
     if (!quiet && balanceSatoshis === 0n && !emptyBalanceNotified) {
       const notice = () => {
@@ -1025,6 +1072,9 @@ async function refreshBalances({ quiet = false } = {}) {
 
     if (!quiet) {
       $('log').textContent = '';
+    }
+    if (receiptError) {
+      $('log').textContent += `${$('log').textContent ? '\n' : ''}Token receipt notifications could not be updated: ${receiptError?.message || String(receiptError)}`;
     }
 
     return { addresses, utxos };
@@ -1064,6 +1114,7 @@ function validateRecipient(raw) {
 }
 
 async function refreshAfterApproval() {
+  let lastError;
   for (const delay of [1500, 3000]) {
     if (delay > 0) await wait(delay);
 
@@ -1073,12 +1124,13 @@ async function refreshAfterApproval() {
         'Transaction broadcast · balances rescanned; indexing may lag';
       return;
     } catch (error) {
-      console.warn('Balance refresh after broadcast failed:', error);
+      lastError = error;
     }
   }
 
   $('status').textContent =
     'Transaction broadcast · balance scan failed; network indexing may lag';
+  $('log').textContent += `\nBalance refresh failed: ${lastError?.message || String(lastError)}`;
 }
 
 async function sendFungibleTokens() {
@@ -1335,31 +1387,10 @@ async function sendFungibleTokens() {
       inputPaths,
     };
 
-    console.info('[WizardConnect signing request]', {
-      inputCount: transactionInputCount,
-      sourceOutputCount: relayTransaction.sourceOutputs.length,
-      inputPaths,
-      transactionHex: relayTransaction.transaction,
-    });
-
     $('status').textContent =
       'Transaction built · waiting for wallet review and approval…';
 
-    let signed;
-
-    try {
-      signed = await manager.signTransaction(signingRequest);
-    } catch (error) {
-      console.error('WizardConnect rejected the signing request', {
-        message: error?.message,
-        inputCount: transactionInputCount,
-        sourceOutputCount: relayTransaction.sourceOutputs.length,
-        inputPaths,
-        outpoints: inputs.map((utxo) => `${utxo.txid}:${utxo.vout}`),
-      });
-
-      throw error;
-    }
+    const signed = await manager.signTransaction(signingRequest);
 
     if (
       typeof signed?.signedTransaction !== 'string' ||
@@ -1375,7 +1406,12 @@ async function sendFungibleTokens() {
     const txid = await provider.sendRawTransaction(
       signed.signedTransaction,
     );
-    rememberSentTransaction(txid);
+    let receiptTrackingError = null;
+    try {
+      rememberSentTransaction(txid);
+    } catch (error) {
+      receiptTrackingError = error;
+    }
 
     $('log').classList.remove('error');
     $('log').textContent = `Transaction ID: ${txid}`;
@@ -1383,28 +1419,11 @@ async function sendFungibleTokens() {
       'Transaction broadcast · checking balances…';
 
     await refreshAfterApproval();
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/tx-proof`, {
-	method: "POST",
-	headers: { "Content-Type": "application/json" },
-	body: JSON.stringify({
-	  cash_address: addressFor(0,0),
-	  txid: txid,
-	  signed_transaction: signed.signedTransaction,
-	}),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail?.message ?? data.detail ?? "Submission failed");
-
-      console.log("Submitted BCH txid:", txid);
-    } catch (error) {
-      report(new Error(`Transaction ${txid} was broadcast, but proof submission failed: ${error?.message || String(error)}`));
-      $('status').textContent = 'Transaction broadcast · proof submission failed';
+    if (receiptTrackingError) {
+      $('log').textContent += `\nTransaction was broadcast, but receipt tracking could not be saved: ${receiptTrackingError?.message || String(receiptTrackingError)}`;
     }
   } catch (error) {
-    report(error);
+    report(error, { log: false });
     $('status').textContent = 'Transaction was not completed';
   } finally {
     sending = false;
@@ -1418,6 +1437,10 @@ $('connect').addEventListener('click', () => {
     openTutorial();
   }
   startConnection();
+});
+
+$('open-wallet').addEventListener('click', () => {
+  if (walletPairingUri && !walletReady) window.location.href = walletPairingUri;
 });
 
 $('forget').addEventListener('click', async () => {
@@ -1445,7 +1468,7 @@ $('forget').addEventListener('click', async () => {
             wait(2000).then(() => { throw new Error('Wallet disconnect timed out.'); }),
           ]);
         } catch (error) {
-          console.warn('Could not notify wallet of disconnection:', error);
+          logger.warn('Could not notify wallet of disconnection:', error);
         }
       }
       previousManager.clearStoredSession();
@@ -1459,6 +1482,10 @@ $('forget').addEventListener('click', async () => {
     }
 
     $('pairing').classList.add('hidden');
+    walletPairingUri = null;
+    $('open-wallet').disabled = true;
+    $('open-wallet').hidden = false;
+    $('pairing-help').hidden = false;
     clearWalletDisplay();
     $('status').textContent = 'Saved session cleared';
 
@@ -1470,7 +1497,7 @@ $('forget').addEventListener('click', async () => {
 
 $('refresh').addEventListener('click', () => {
   refreshBalances().catch((error) => {
-    report(error);
+    report(error, { log: false });
     $('status').textContent =
       'Balance refresh failed · previous balances retained';
   });
@@ -1498,7 +1525,6 @@ $('funding-connect').addEventListener('click', () => {
   $('funding-dialog').close();
   $('connection-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
   $('connect').focus({ preventScroll: true });
-  if (pairingInProgress) showPairingWhenReady = true;
   if (relay?.uri && !loadSession()?.paths?.length) showPairingUri(relay.uri).catch(report);
   else if (!relay && !pairingInProgress) $('connect').click();
   else if (pairingInProgress) openTutorial();
@@ -1692,7 +1718,7 @@ $('generate-payment').addEventListener('click', async () => {
       paymentPriceSnapshot = { spot, timestamp };
       $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;
     }).catch((error) => {
-      console.warn(`Cauldron price unavailable for ${category}:`, error);
+      logger.warn(`Cauldron price unavailable for ${category}:`, error);
       if (currentPayment()) $('payment-price').textContent = translate('Cauldron price unavailable.');
     });
 
@@ -1710,7 +1736,7 @@ $('generate-payment').addEventListener('click', async () => {
         $('payment-token-icon').replaceChildren(image);
         $('payment-logo-status').textContent = '';
       }).catch((error) => {
-        console.warn(`Token logo unavailable for ${category}:`, error);
+        logger.warn(`Token logo unavailable for ${category}:`, error);
         if (currentPayment()) $('payment-logo-status').textContent = translate('Token logo unavailable.');
       });
     }
@@ -1897,7 +1923,7 @@ const restoreSession = async () => {
       await startConnection({ restoring: true });
     }
   } catch (error) {
-    console.warn('Could not restore previous WizardConnect session:', error);
+    logger.warn('Could not restore previous WizardConnect session:', error);
   }
 };
 if ('requestIdleCallback' in window) {
@@ -1909,10 +1935,16 @@ if ('requestIdleCallback' in window) {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((error) => {
-      console.warn('Could not register the offline page:', error);
+      logger.warn('Could not register the offline page:', error);
     });
   });
 }
+
+document.querySelectorAll('.wallet-icon').forEach((image) => {
+  const hideFailedImage = () => { image.hidden = true; };
+  image.addEventListener('error', hideFailedImage, { once: true });
+  if (image.complete && !image.naturalWidth) hideFailedImage();
+});
 
 function markReceiptNotificationsRead() {
   if (!walletReady || receiptWallet !== receiptStorageKey()) return;
@@ -1926,6 +1958,7 @@ notificationsDialog.addEventListener('close', markReceiptNotificationsRead);
 setInterval(() => {
   if (!walletReady || refreshPromise) return;
   refreshBalances({ quiet: true }).catch((error) => {
-    console.error('Automatic wallet refresh failed:', error);
+    $('status').textContent = 'Automatic balance refresh failed · use Refresh balances to retry.';
+    report(error, { log: false });
   });
 }, 30_000);

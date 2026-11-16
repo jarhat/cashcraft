@@ -12,7 +12,7 @@ export async function fetchTopCoins() {
   return coins.slice(0, 20);
 }
 
-export function setupMarketTicker(container, translate) {
+export function setupMarketTicker(container, translate, logger = console) {
   async function refresh() {
     try {
       const coins = await fetchTopCoins();
@@ -38,7 +38,7 @@ export function setupMarketTicker(container, translate) {
       }
       container.replaceChildren(track);
     } catch (error) {
-      console.warn('Cryptocurrency market data unavailable:', error);
+      logger.warn('Cryptocurrency market data unavailable:', error);
       if (!container.querySelector('.market-ticker-track')) {
         container.textContent = translate('Market prices unavailable.');
       }

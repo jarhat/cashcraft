@@ -76,6 +76,7 @@ services:
       context: .
       args:
         BCH_NETWORK: ${BCH_NETWORK:-mainnet}
+        VITE_CONSOLE_LOG_LEVEL: ${VITE_CONSOLE_LOG_LEVEL:-error}
     expose:
       - "8080"
     environment:

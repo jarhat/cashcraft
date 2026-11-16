@@ -214,6 +214,7 @@ test('connect during relay startup displays a fresh pairing after it is ready', 
     log: { textContent: '' },
     pairing: { classList: { add() {}, contains() { return true; } } },
     'open-wallet': { removeAttribute() {} },
+    'pairing-help': { hidden: false },
     status: { textContent: '' },
     'funding-connect': { addEventListener(type, handler) { connect = handler; } },
     'funding-close': { addEventListener() {} },
@@ -244,7 +245,6 @@ test('connect during relay startup displays a fresh pairing after it is ready', 
   await restoring;
   assert.deepEqual(calls, ['wc:restored']);
   assert.equal(context.pairingInProgress, false);
-  assert.equal(context.showPairingWhenReady, false);
 });
 
 test('transfer selection is highlighted after an explicit selection', () => {
@@ -316,6 +316,7 @@ test('late scans restart the manager handshake and attach the listener immediate
     $: element, relay: null, manager: null, walletReady: false,
     pairingInProgress: false, showPairingWhenReady: false,
     Date: { now: () => time }, clearWalletDisplay() {}, setConnection() {},
+    logger: { info() {}, warn() {}, error() {} },
     loadWalletDependencies: async () => {}, loadSession: () => null,
     DappConnectionManager: class {
       on() {} attachRelay() {}
@@ -428,6 +429,8 @@ test('forgetting a pairing notifies the wallet before tearing down the relay', a
   const nodes = {
     forget: { addEventListener(_type, fn) { handler = fn; } },
     pairing: { classList: { add() {} } },
+    'open-wallet': { disabled: false, hidden: false },
+    'pairing-help': { hidden: false },
     status: { textContent: '' },
   };
   const start = source.indexOf("$('forget').addEventListener('click'");
@@ -448,6 +451,121 @@ test('forgetting a pairing notifies the wallet before tearing down the relay', a
   runInNewContext(source.slice(start, end), context);
   await handler();
   assert.deepEqual(calls, ['notify', 'clear', 'destroy', 'cleanup', 'fresh']);
+});
+
+test('open in wallet remains available until an address is derived, including restored sessions', async () => {
+  let instance;
+  let relayCallback;
+  let keyAvailable = false;
+  const elements = new Map();
+  const element = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      textContent: '', hidden: false, disabled: false,
+      classList: { add() {}, remove() {} },
+    });
+    return elements.get(id);
+  };
+  const start = source.indexOf('async function showPairingUri(');
+  const end = source.indexOf('\nasync function fetchBchUsd', start);
+  const context = {
+    $: element, relay: null, manager: null, walletPairingUri: null,
+    walletReady: false, pairingInProgress: false, showPairingWhenReady: false,
+    QRCode: { toCanvas: async () => {} }, clearWalletDisplay() {}, setConnection() {},
+    updateReceiveAddress() {},
+    addressFor() {
+      if (!keyAvailable) throw new Error('Public key missing');
+      return 'token-address';
+    },
+    submitCashAddress: async () => {}, refreshBalances: async () => {},
+    loadWalletDependencies: async () => {},
+    loadSession: () => ({ walletPublicKey: 'saved', paths: ['receive'] }),
+    DappConnectionManager: class {
+      constructor() { instance = this; this.handlers = {}; }
+      on(event, handler) { this.handlers[event] = handler; }
+      attachRelay() {} updateConnection() {}
+    },
+    initiateDappRelay: (callback) => {
+      relayCallback = callback;
+      return { uri: 'wiz:restored', client: {}, cleanup() {}, events: { on() {} } };
+    },
+    report() {}, logger: { info() {}, warn() {}, error() {} },
+  };
+  runInNewContext(source.slice(start, end), context);
+  await context.startConnection({ restoring: true });
+  assert.equal(element('open-wallet').hidden, false);
+  assert.equal(element('open-wallet').disabled, false);
+  assert.equal(context.walletPairingUri, 'wiz:restored');
+  await instance.handlers.walletready({});
+  assert.equal(element('open-wallet').hidden, false);
+  assert.equal(element('open-wallet').disabled, false);
+  keyAvailable = true;
+  await instance.handlers.walletready({});
+  assert.equal(element('open-wallet').hidden, true);
+  relayCallback({ client: {}, status: { status: 'reconnecting' } });
+  assert.equal(element('open-wallet').hidden, false);
+  relayCallback({ client: {}, status: { status: 'connected' } });
+  assert.equal(element('open-wallet').hidden, false);
+  instance.handlers.messagereceived({ action: 'pong' });
+  assert.equal(element('open-wallet').hidden, true);
+  instance.handlers.disconnect('closed');
+  assert.equal(element('open-wallet').hidden, false);
+  assert.equal(element('open-wallet').disabled, true);
+});
+
+test('token send signs and broadcasts without submitting a payment proof', async () => {
+  const category = 'a'.repeat(64);
+  const events = [];
+  const elements = new Map([
+    ['category', { value: category }], ['recipient', { value: 'recipient' }],
+    ['amount', { value: '3' }], ['status', { textContent: '' }],
+    ['log', { textContent: '', classList: { remove() {} } }],
+  ]);
+  const input = {
+    txid: 'b'.repeat(64), vout: 0, token: { category, amount: 5n },
+    satoshis: 20_000n, pathName: 'receive', addressIndex: 0, spendAddress: 'source',
+  };
+  class Builder {
+    addInput(utxo) { assert.equal(utxo, input); return this; }
+    addOutput(output) { events.push(['output', output.token.amount]); return this; }
+    addTokenChangeOutputIfNeeded() { return this; }
+    addBchChangeOutputIfNeeded() { return this; }
+    generateWcTransactionObject() {
+      return { transaction: { inputs: [{}], outputs: [], version: 2, locktime: 0 }, sourceOutputs: [{}] };
+    }
+  }
+  const start = source.indexOf('async function sendFungibleTokens()');
+  const end = source.indexOf("\n$('connect').addEventListener", start);
+  const context = {
+    $: (id) => elements.get(id), sending: false, walletReady: true, mainnet: false,
+    setConnection() {}, validateRecipient: (value) => value, translate: (text) => text,
+    refreshBalances: async () => ({ utxos: [input], addresses: [{}] }),
+    TOKEN_OUTPUT_SATOSHIS: 1000n, FEE_RESERVE_SATOSHIS: 10000n,
+    MAXIMUM_FEE_SATOSHIS: 10000n, TransactionBuilder: Builder,
+    placeholderP2PKHUnlocker: () => ({}), addressFor: () => 'change',
+    transactionToHex: () => 'unsigned', sourceOutputToRelay: (output) => output,
+    manager: { async signTransaction() { events.push('sign'); return { signedTransaction: 'signed' }; } },
+    provider: { async sendRawTransaction(hex) { events.push(['broadcast', hex]); return 'txid'; } },
+    rememberSentTransaction: (txid) => events.push(['remember', txid]),
+    refreshAfterApproval: async () => events.push('refresh'),
+    fetch() { throw new Error('Proof endpoint must not be called'); },
+    report(error) { throw error; }, console: { info() {}, error() {} },
+  };
+  runInNewContext(source.slice(start, end), context);
+  await context.sendFungibleTokens();
+  assert.deepEqual(events, [['output', 3n], 'sign', ['broadcast', 'signed'], ['remember', 'txid'], 'refresh']);
+  assert.equal(elements.get('log').textContent, 'Transaction ID: txid');
+
+  context.rememberSentTransaction = () => { throw new Error('Storage unavailable'); };
+  await context.sendFungibleTokens();
+  assert.match(elements.get('log').textContent, /Transaction ID: txid/);
+  assert.match(elements.get('log').textContent, /broadcast.*Storage unavailable/);
+
+  let reported;
+  context.report = (error, options) => { reported = { error, options }; };
+  context.manager.signTransaction = async () => { throw new Error('Wallet declined signing'); };
+  await context.sendFungibleTokens();
+  assert.equal(reported.error.message, 'Wallet declined signing');
+  assert.equal(reported.options.log, false);
 });
 
 test('portfolio abbreviates category IDs but copies the full ID', async () => {
@@ -577,7 +695,7 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
     QRCode: { toCanvas: async () => {} },
     loadTokenLogo: () => new Promise((resolve, reject) => { resolveLogo = resolve; rejectLogo = reject; }),
     fetchCauldronSpot: async () => { if (failPrice) throw new Error('offline'); return 0.001; },
-    translate: (text) => text, console: { warn() {} }, report(error) { throw error; },
+    translate: (text) => text, logger: { warn() {} }, report(error) { throw error; },
   });
   await handler();
   assert.equal(element('download-payment-qr').disabled, false);

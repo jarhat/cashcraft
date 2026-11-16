@@ -600,6 +600,16 @@ textarea::placeholder {
   text-align: center;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .pairing:not(.hidden) {
+    animation: pairing-appear 220ms ease-out;
+  }
+  @keyframes pairing-appear {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
 .hidden {
   display: none;
 }
@@ -1948,12 +1958,12 @@ footer span:first-child {
     border-radius: 9px;
     background: rgb(255 255 255 / 5%);
   }
-  .wallet-icon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: #fff; font-weight: 800; }
-  .selene-icon { background: #6251aa; }
-  .cashonize-icon { background: #31875d; }
-  .paytaca-icon { background: #dd7136; }
+  .wallet-icon { width: 24px; height: 24px; object-fit: contain; border-radius: 50%; }
+  .wallet-icon[hidden] { display: none; }
   .funding-actions .button { width: auto; margin: 0; }
-  #wallet-help[hidden], #forget[hidden], #funding-connect[hidden] { display: none; }
+  #wallet-help[hidden], #forget[hidden], #funding-connect[hidden],
+  #open-wallet[hidden], #pairing-help[hidden] { display: none; }
+  #open-wallet:disabled::after { display: none; }
 
   @media (max-width: 680px) {
     .market-strip { padding-inline: 13px; gap: 8px; }
