@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 18px/1.55 "IBM Plex Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   color: #e9f4ff;
   background: #060910;
   --muted: #8c9bae;
@@ -17,7 +17,7 @@
   --page-halo: rgb(65 112 157 / 24%);
   --page-halo-secondary: rgb(55 90 125 / 14%);
   --hero-art: rgb(149 218 255 / 24%);
-  --mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --mono: "IBM Plex Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   --chart-1: #55bfff;
   --chart-2: #a0f2cf;
   --chart-3: #ffbc77;
@@ -1958,13 +1958,13 @@ footer span:first-child {
   }
 
 .topbar {
-  grid-template-columns: auto auto 1fr auto;
+  grid-template-columns: auto 1fr auto;
   gap: 10px;
 }
 .brand { grid-column: 1; grid-row: 1; }
-.wizard-guide { grid-column: 2; grid-row: 1; margin: 0; }
-.quick-nav { grid-column: 3; grid-row: 1; justify-self: center; }
-.topbar-tools { grid-column: 4; grid-row: 1; }
+.wizard-guide { margin: 0 0 16px; }
+.quick-nav { grid-column: 2; grid-row: 1; justify-self: center; }
+.topbar-tools { grid-column: 3; grid-row: 1; }
 .wizard-toggle { min-height: 38px; padding: 3px 8px; }
 .wizard-toggle svg { width: 23px; height: 30px; }
 .wizard-dialog {
@@ -2010,9 +2010,44 @@ footer span:first-child {
   .brand { grid-column: 1; grid-row: 1; }
   .topbar-tools { grid-column: 2; grid-row: 1; flex-wrap: wrap; max-width: 260px; }
   .topbar-tools .total-value { order: 5; flex-basis: 100%; text-align: right; }
-  .wizard-guide { grid-column: 1; grid-row: 2; }
-  .quick-nav { grid-column: 2; grid-row: 2; justify-self: end; width: auto; }
+  .quick-nav { grid-column: 1 / -1; grid-row: 2; justify-self: center; width: 100%; }
 }
-@media (max-width: 360px) {
-  .wizard-toggle span { display: none; }
+
+#top-iso svg { color: #ffae67; }
+.iso-disc, .iso-download-icon {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  fill: none;
+  stroke: #ffae67;
+  stroke-width: 1.5;
+}
+.iso-download-icon { width: 20px; height: 20px; }
+#iso-section[hidden], #transfer-section[hidden], .iso-progress[hidden] { display: none; }
+.iso-progress {
+  height: 10px;
+  margin: 22px 0 12px;
+  overflow: hidden;
+  border: 1px solid rgb(255 174 103 / 35%);
+  border-radius: 20px;
+  background: rgb(255 174 103 / 12%);
+  box-shadow: 0 0 20px rgb(255 119 67 / 25%);
+}
+.iso-progress span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, #ffae67, #fff2c7);
+  box-shadow: 0 0 18px #ff8e4d;
+  animation: iso-loading 1.5s ease-in-out infinite alternate;
+}
+@keyframes iso-loading {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+.iso-downloads { display: flex; flex-wrap: wrap; gap: 10px; }
+.iso-downloads .button { width: auto; margin: 0; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) {
+  .iso-progress span { animation: none; width: 100%; }
 }

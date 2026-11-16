@@ -6,6 +6,7 @@ import { fetchTokenMetadata, fetchCauldronSpot } from './portfolio-data.js';
 import { loadTokenLogo } from './token-logo.js';
 import { setupMarketTicker } from './market-ticker.js';
 import { submitCashAddress, API_BASE_URL } from './api.js';
+import { buildIso } from './iso-build.js';
 import {
   SATOSHIS_PER_BCH,
   formatBch,
@@ -201,8 +202,8 @@ function setConnection(connected) {
   const isSend = $('send-tab').getAttribute('aria-selected') === 'true';
   $('send-tab').classList.toggle('active', (connected || transferInteracted) && isSend);
   $('receive-tab').classList.toggle('active', (connected || transferInteracted) && !isSend);
-  $('top-send').classList.toggle('active', (connected || transferInteracted) && isSend);
-  $('top-receive').classList.toggle('active', (connected || transferInteracted) && !isSend);
+  $('top-send').classList.toggle('active', $('iso-section').hidden && (connected || transferInteracted) && isSend);
+  $('top-receive').classList.toggle('active', $('iso-section').hidden && (connected || transferInteracted) && !isSend);
 }
 
 function clearWalletDisplay() {
@@ -1449,6 +1450,10 @@ $('copy-uri').addEventListener('click', async () => {
 function setTransferTab(tabName) {
   const isSend = tabName === 'send';
   transferInteracted = true;
+  $('iso-section').hidden = true;
+  $('transfer-section').hidden = false;
+  $('top-iso').classList.remove('active');
+  $('top-iso').setAttribute('aria-expanded', 'false');
 
   $('send-tab').classList.toggle('active', isSend);
   $('receive-tab').classList.toggle('active', !isSend);
@@ -1473,6 +1478,60 @@ function updateReceiveAddress() {
   }
   $('copy-receive-address').disabled = false;
 }
+
+function showIsoPanel() {
+  $('transfer-section').hidden = true;
+  $('iso-section').hidden = false;
+  $('top-send').classList.remove('active');
+  $('top-receive').classList.remove('active');
+  $('top-iso').classList.add('active');
+  $('top-iso').setAttribute('aria-expanded', 'true');
+}
+
+$('top-iso').addEventListener('click', () => {
+  showIsoPanel();
+  $('iso-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+$('iso-build').addEventListener('click', async () => {
+  $('iso-build').disabled = true;
+  $('iso-progress').hidden = false;
+  $('iso-downloads').replaceChildren();
+  $('iso-status').textContent = translate('Starting ISO build…');
+  try {
+    const result = await buildIso(API_BASE_URL, (status) => {
+      $('iso-status').textContent = `${translate('Build status')}: ${status}`;
+    });
+    $('iso-status').textContent = translate(result.status === 'completed'
+      ? 'Build completed.'
+      : 'Build failed. Any successful profiles are available below.');
+    if (result.status === 'completed' && result.downloads.length === 0) {
+      $('iso-status').textContent = translate('Build completed without downloadable ISOs.');
+    }
+    for (const download of result.downloads) {
+      if (typeof download.path !== 'string' || !download.path.startsWith('/api/iso/download/')) {
+        throw new Error('Invalid ISO download.');
+      }
+      const link = document.createElement('a');
+      link.className = 'button secondary';
+      link.href = `${API_BASE_URL}${download.path}`;
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      icon.setAttribute('viewBox', '0 0 24 24');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.classList.add('iso-download-icon');
+      const disc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      disc.setAttribute('d', 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z');
+      icon.append(disc);
+      link.append(icon, document.createTextNode(`${translate('Download ISO')}: ${download.profile} / ${download.filename}`));
+      $('iso-downloads').append(link);
+    }
+  } catch (error) {
+    $('iso-status').textContent = `${translate('ISO build error')}: ${error.message}`;
+  } finally {
+    $('iso-progress').hidden = true;
+    $('iso-build').disabled = false;
+  }
+});
 
 $('send-tab').addEventListener('click', () => setTransferTab('send'));
 $('receive-tab').addEventListener('click', () => setTransferTab('receive'));
@@ -1700,12 +1759,19 @@ const tutorialSteps = [
     title: 'Explore your portfolio',
     message: 'Your fungible token balances and category IDs appear here after the wallet scan.',
   },
+  {
+    id: 'iso-section',
+    title: 'Build an ISO',
+    message: 'Start a build using the profiles configured on the ISO server, then download the finished images.',
+  },
 ];
 let tutorialStep = 0;
 
 function showTutorialStep() {
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
   const step = tutorialSteps[tutorialStep];
+  if (step.id === 'iso-section') showIsoPanel();
+  else if (!$('iso-section').hidden) setTransferTab('send');
   const panel = $(step.id);
   panel.classList.add('tutorial-highlight');
   $('wizard-title').textContent = step.title;

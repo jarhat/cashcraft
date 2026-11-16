@@ -29,6 +29,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
+COPY iso_api.py .
 COPY --from=contract-build /artifacts/HodlVault.json /app/artifacts/HodlVault.json
 
 USER app

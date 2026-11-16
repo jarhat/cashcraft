@@ -7,6 +7,7 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from iso_api import router as iso_router
 
 NETWORK = os.getenv("BCH_NETWORK", "chipnet").strip().lower()
 
@@ -79,6 +80,7 @@ _GENERATORS = (
 _HASH_LENGTHS = (20, 24, 28, 32, 40, 48, 56, 64)
 
 app = FastAPI(title="CashToken-aware CashAddr receiver")
+app.include_router(iso_router)
 
 app.add_middleware(
     CORSMiddleware,

@@ -33,6 +33,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:3001:3000"
     environment:
@@ -58,6 +60,8 @@ services:
 
       # Require this many confirmations before recording the address.
       BCH_REQUIRED_CONFIRMATIONS: ${BCH_REQUIRED_CONFIRMATIONS:-1}
+      ISO_BUILD_API_URL: ${ISO_BUILD_API_URL:-}
+      ISO_BUILD_API_KEY: ${ISO_BUILD_API_KEY:-}
     volumes:
       - ./data:/data
     restart: unless-stopped

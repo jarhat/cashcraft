@@ -63,6 +63,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 19h16" /></svg>
           <span>Receive</span>
         </button>
+        <button id="top-iso" class="quick-action" type="button" aria-controls="iso-section" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c-4.4 0-7-2.8-7-6.5 0-3.1 1.8-5.3 4-7.5-.2 2 1 3.1 1.8 3.5C10.8 7.8 13 5 14 2c1 3 5 6.7 5 12.5 0 4.5-2.8 7.5-7 7.5Zm0 0c-2 0-3-1.3-3-3 0-1.5 1-3 3-4.5 0 1.6 3 2.4 3 4.5 0 1.7-1 3-3 3Z"/></svg>
+          <span>Burn / ISO</span>
+        </button>
       </nav>
       <div class="topbar-tools">
         <span id="total-value" class="total-value">Total USD —</span>
@@ -92,12 +96,6 @@
           <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread payment request</span></span>
         </button>
       </div>
-    <aside class="wizard-guide" aria-label="Wizard tutorial">
-      <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
-        <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true"><path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/><path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/><path fill="#f0c7ae" d="M13 18h10v8H13z"/><path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/><path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/><path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/><path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/><path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/><path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/></svg>
-        <span>Wizard help</span>
-      </button>
-    </aside>
     </header>
 
     <section class="hero">
@@ -114,6 +112,13 @@
         </p>
       </div>
     </section>
+
+    <aside class="wizard-guide" aria-label="Wizard tutorial">
+      <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
+        <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true"><path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/><path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/><path fill="#f0c7ae" d="M13 18h10v8H13z"/><path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/><path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/><path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/><path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/><path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/><path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/></svg>
+        <span>Wizard help</span>
+      </button>
+    </aside>
 
       <div id="wizard-dialog" class="wizard-dialog" hidden>
         <strong id="wizard-title"></strong>
@@ -370,6 +375,19 @@
         </p>
         <p class="fine">The sharing note appears in the shared image and message, not in the payment link.</p>
       </div>
+    </section>
+
+    <section id="iso-section" class="panel section" hidden>
+      <div class="heading">
+        <div><p class="eyebrow">ARCHUSERISO</p><h2>Burn / ISO</h2></div>
+        <svg class="iso-disc" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2"/><path d="M5.6 8.5a7.3 7.3 0 0 1 4-3M18.4 15.5a7.3 7.3 0 0 1-4 3"/></svg>
+      </div>
+      <p>Build an ISO from the profiles configured on your archuseriso build server.</p>
+      <p class="fine">Customize profiles on the build server before starting. The build may take up to five minutes.</p>
+      <button id="iso-build" class="button primary send" type="button">Build ISO</button>
+      <div id="iso-progress" class="iso-progress" role="progressbar" aria-label="Building ISO" hidden><span></span></div>
+      <p id="iso-status" role="status" aria-live="polite"></p>
+      <div id="iso-downloads" class="iso-downloads"></div>
     </section>
 
     <section id="earn-section" class="panel section">

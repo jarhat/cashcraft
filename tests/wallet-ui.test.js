@@ -46,8 +46,9 @@ test('wizard highlights and scrolls to each tutorial panel without moving the na
     assert.equal(node, guide);
     guidePosition = 'hero';
   } };
-  for (const id of ['connection-section', 'balance-section', 'earn-section', 'transfer-section']) {
+  for (const id of ['connection-section', 'balance-section', 'earn-section', 'transfer-section', 'iso-section']) {
     const panel = {
+      hidden: id === 'iso-section',
       ...target(id),
       scrollIntoView() { scrolled = id; },
       closest(selector) {
@@ -74,17 +75,25 @@ test('wizard highlights and scrolls to each tutorial panel without moving the na
   };
   const start = source.indexOf('const tutorialSteps =');
   const end = source.indexOf('\n\nfetchBchUsd();', start);
-  runInNewContext(source.slice(start, end), { document, $: (id) => elements.get(id) });
+  runInNewContext(source.slice(start, end), {
+    document, $: (id) => elements.get(id),
+    showIsoPanel() { elements.get('iso-section').hidden = false; },
+    setTransferTab() { elements.get('iso-section').hidden = true; },
+  });
 
   elements.get('wizard-toggle').click();
   assert.equal(guidePosition, 'hero');
   assert.equal(scrolled, 'connection-section');
-  assert.equal(elements.get('wizard-progress').textContent, '1 / 4');
+  assert.equal(elements.get('wizard-progress').textContent, '1 / 5');
   elements.get('wizard-next').click();
   assert.equal(scrolled, 'balance-section');
   elements.get('wizard-next').click();
   assert.equal(scrolled, 'transfer-section');
   elements.get('wizard-next').click();
+  assert.equal(scrolled, 'earn-section');
+  elements.get('wizard-next').click();
+  assert.equal(scrolled, 'iso-section');
+  elements.get('wizard-prev').click();
   assert.equal(scrolled, 'earn-section');
   elements.get('wizard-prev').click();
   assert.equal(scrolled, 'transfer-section');
@@ -497,7 +506,7 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   let walking = false;
   const element = (id) => {
     if (!nodes.has(id)) nodes.set(id, {
-      hidden: id === 'wizard-dialog', listeners: {},
+      hidden: id === 'wizard-dialog' || id === 'iso-section', listeners: {},
       style: { removeProperty(name) { delete this[name]; } },
       classList: {
         add(name) { if (name === 'tutorial-highlight') highlighted.add(id); if (name === 'walking') walking = true; },
@@ -526,7 +535,11 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   };
   const start = source.indexOf('const tutorialSteps =');
   const end = source.indexOf('\n\nfetchBchUsd();', start);
-  runInNewContext(source.slice(start, end), { $, document });
+  runInNewContext(source.slice(start, end), {
+    $, document,
+    showIsoPanel() { element('iso-section').hidden = false; },
+    setTransferTab() { element('iso-section').hidden = true; },
+  });
   function $ (id) { return element(id); }
   element('wizard-toggle').listeners.click();
   assert.deepEqual([...highlighted], ['connection-section']);
@@ -542,8 +555,11 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   assert.deepEqual([...highlighted], ['earn-section']);
   assert.equal(guidePosition, 'earn-section');
   element('wizard-next').listeners.click();
+  assert.deepEqual([...highlighted], ['iso-section']);
+  assert.equal(guidePosition, 'iso-section');
+  element('wizard-next').listeners.click();
   assert.equal(element('wizard-dialog').hidden, true);
   assert.equal(highlighted.size, 0);
-  assert.equal(guidePosition, 'earn-section');
+  assert.equal(guidePosition, 'iso-section');
   assert.equal(walking, false);
 });
