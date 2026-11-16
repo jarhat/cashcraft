@@ -330,7 +330,8 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   const start = source.indexOf('function renderBalances(');
   const end = source.indexOf('\nasync function refreshBalances', start);
   runInNewContext(`${source.slice(start, end)}\nrenderBalances(utxos);`, {
-    $: element, walletReady: true, bchUsd: null, SATOSHIS_PER_BCH: 100_000_000n,
+    $: element, walletReady: true, bchUsd: null, portfolioVersion: 0, mainnet: true, network: 'mainnet', SATOSHIS_PER_BCH: 100_000_000n,
+    fetchTokenMetadata: () => new Promise(() => {}), fetchCauldronSpot: () => new Promise(() => {}),
     formatBch: () => '0.00001000', Option: class { constructor(text, value) { this.text = text; this.value = value; } },
     document: { createElement: () => new Element() },
     navigator: { clipboard: { writeText: async (value) => { copied = value; } } },
@@ -339,9 +340,9 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   });
   const summary = element('tokens').children[0].children[0];
   const categoryLine = summary.children[1].children[1];
-  assert.equal(categoryLine.children[0].textContent, `${category.slice(0, 10)}…${category.slice(-8)}`);
-  assert.match(categoryLine.children[1].innerHTML, /<svg/);
-  await categoryLine.children[1].handler();
+  assert.equal(categoryLine.children[1].textContent, `${category.slice(0, 10)}…${category.slice(-8)}`);
+  assert.match(categoryLine.children[2].innerHTML, /<svg/);
+  await categoryLine.children[2].handler();
   assert.equal(copied, category);
 });
 

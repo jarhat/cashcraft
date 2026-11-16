@@ -338,19 +338,20 @@
         </button>
 
         <div id="payment-result" class="payment-result hidden">
+          <p class="pair-title">Scan to open the payment link</p>
           <div class="qr-frame">
             <canvas id="payment-qr" aria-label="Token payment URL QR code"></canvas>
           </div>
-          <button id="download-payment-qr" class="small-button icon-button" type="button" aria-label="Download QR code" title="Download QR code">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3"/></svg>
-            <span>Download QR</span>
-          </button>
-          <button id="share-payment-qr" class="small-button icon-button" type="button" aria-label="Share QR code" title="Share QR code">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M5 14v6h14v-6"/></svg>
-            <span>Share QR</span>
-          </button>
-
-          <p class="pair-title">Scan to open the payment link</p>
+          <div class="qr-actions">
+            <button id="share-payment-qr" class="small-button icon-button" type="button" aria-label="Share QR code" title="Share QR code">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M5 14v6h14v-6"/></svg>
+              <span>Share QR</span>
+            </button>
+            <button id="download-payment-qr" class="small-button icon-button" type="button" aria-label="Download QR code" title="Download QR code">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3"/></svg>
+              <span>Download QR</span>
+            </button>
+          </div>
           <div class="payment-token">
             <span class="token-icon" aria-hidden="true">◆</span>
             <div><strong id="payment-amount"></strong><code id="payment-category"></code></div>
@@ -382,6 +383,11 @@
       <div id="tokens" class="token-list">
         <div class="empty">Connect your wallet to load balances.</div>
       </div>
+      <details class="portfolio-chart">
+        <summary>Portfolio allocation</summary>
+        <p class="fine">Indicative Cauldron pool spot values in BCH; excludes tokens without a price and does not account for fees or price impact.</p>
+        <div id="portfolio-chart-content" aria-live="polite">Connect a wallet to view allocation.</div>
+      </details>
       <p class="fine">
         Scans the first 50 receive and 50 change addresses. NFT balances are not included.
       </p>
