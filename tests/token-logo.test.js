@@ -18,7 +18,7 @@ test('loads a BCMR icon with CORS enabled and converts IPFS URLs', async () => {
     };
   };
   globalThis.Image = class {
-    set src(value) { this.url = value; this.onload(); }
+    set src(value) { this.url = value; this.onload?.(); }
   };
   try {
     const image = await loadTokenLogo(category);
@@ -72,8 +72,8 @@ test('falls back to full BCMR metadata and another IPFS gateway', async () => {
   globalThis.Image = class {
     set src(value) {
       this.url = value;
-      if (value.includes('ipfs.io')) this.onerror();
-      else this.onload();
+      if (value.includes('ipfs.io')) this.onerror?.();
+      else this.onload?.();
     }
   };
   try {
@@ -101,10 +101,36 @@ test('rejects invalid IPFS paths and untrusted registry categories', async () =>
       ? authchainResponse(category)
       : metadataResponse('b'.repeat(64), { uris: { icon: 'ipfs://cid/logo.png' } }),
   });
+
   try {
     await assert.rejects(loadTokenLogo(category), (error) =>
       error.errors.every((cause) => /does not match/.test(cause.message)));
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test('does not wait for a stalled IPFS gateway before trying another', async () => {
+  const originalFetch = globalThis.fetch;
+  const OriginalImage = globalThis.Image;
+  const category = '9'.repeat(64);
+  globalThis.fetch = async (url) => ({
+    ok: true,
+    json: async () => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
+      ? authchainResponse(category)
+      : metadataResponse(category, { uris: { icon: 'ipfs://cid/icon.png' } }),
+  });
+  globalThis.Image = class {
+    set src(value) {
+      this.url = value;
+      if (value.includes('ipfs.io')) queueMicrotask(() => this.onload?.());
+    }
+  };
+  try {
+    const image = await loadTokenLogo(category);
+    assert.match(image.url, /ipfs\.io/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.Image = OriginalImage;
   }
 });

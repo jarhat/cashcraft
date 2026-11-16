@@ -476,6 +476,14 @@ const german = {
 };
 
 Object.assign(spanish, {
+  'Total USD —': 'Total en USD —',
+  'Addresses per receive and change path': 'Direcciones por ruta de recepción y cambio',
+  'Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.': 'Al actualizar se examina este número de direcciones desde el índice 0 en cada ruta. Los límites mayores tardan más.',
+  'Choose an available token': 'Elegir un token disponible',
+  'Connect wallet to load tokens.': 'Conecta una cartera para cargar los tokens.',
+  'No fungible tokens found.': 'No se encontraron tokens fungibles.',
+  'NFT balances are not included.': 'Los saldos de NFT no están incluidos.',
+  'Enter whole base units. Select a token to see its decimals and available balance.': 'Introduce unidades base enteras. Selecciona un token para ver sus decimales y saldo disponible.',
   'Beer': 'Cerveza',
   'Waiting for wallet approval and handshake…': 'Esperando la aprobación y conexión de la cartera…',
   'Relay reconnecting · check your internet connection…': 'Reconectando el relay · comprueba tu conexión a internet…',
@@ -495,6 +503,14 @@ Object.assign(spanish, {
   'Loading market prices…': 'Cargando precios…',
 });
 Object.assign(french, {
+  'Total USD —': 'Total en USD —',
+  'Addresses per receive and change path': 'Adresses par chemin de réception et de monnaie',
+  'Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.': 'L’actualisation analyse ce nombre d’adresses à partir de l’indice 0 sur chaque chemin. Une limite plus élevée prend plus de temps.',
+  'Choose an available token': 'Choisir un jeton disponible',
+  'Connect wallet to load tokens.': 'Connectez un portefeuille pour charger les jetons.',
+  'No fungible tokens found.': 'Aucun jeton fongible trouvé.',
+  'NFT balances are not included.': 'Les soldes de NFT ne sont pas inclus.',
+  'Enter whole base units. Select a token to see its decimals and available balance.': 'Saisissez des unités de base entières. Sélectionnez un jeton pour voir ses décimales et son solde disponible.',
   'Beer': 'Bière',
   'Waiting for wallet approval and handshake…': 'En attente de l’approbation et de la connexion du portefeuille…',
   'Relay reconnecting · check your internet connection…': 'Reconnexion du relais · vérifiez votre connexion internet…',
@@ -514,6 +530,14 @@ Object.assign(french, {
   'Loading market prices…': 'Chargement des cours…',
 });
 Object.assign(german, {
+  'Total USD —': 'Gesamtwert in USD —',
+  'Addresses per receive and change path': 'Adressen pro Empfangs- und Wechselgeldpfad',
+  'Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.': 'Beim Aktualisieren wird diese Anzahl Adressen ab Index 0 auf jedem Pfad geprüft. Höhere Grenzen dauern länger.',
+  'Choose an available token': 'Verfügbaren Token auswählen',
+  'Connect wallet to load tokens.': 'Wallet verbinden, um Token zu laden.',
+  'No fungible tokens found.': 'Keine fungiblen Token gefunden.',
+  'NFT balances are not included.': 'NFT-Guthaben sind nicht enthalten.',
+  'Enter whole base units. Select a token to see its decimals and available balance.': 'Ganze Basiseinheiten eingeben. Einen Token auswählen, um Dezimalstellen und verfügbares Guthaben zu sehen.',
   'Beer': 'Bier',
   'Waiting for wallet approval and handshake…': 'Warten auf Bestätigung und Verbindung der Wallet…',
   'Relay reconnecting · check your internet connection…': 'Relay verbindet erneut · prüfe deine Internetverbindung…',
@@ -558,7 +582,7 @@ export function translate(text) {
     fr: [
       [/^(\d+) token base units$/, '$1 unités de base de jetons'],
       [/^(\d+) base units$/, '$1 unités de base'],
-      [/^(\d+) fungible-token categories?$/, (_, count) => `${count} catégorie${count === '1' ? '' : 's'} de jetons fongibles`],
+      [/^(\d+) fungible-token (?:category|categories)$/, (_, count) => `${count} catégorie${count === '1' ? '' : 's'} de jetons fongibles`],
       [/^Wallet handshake complete · (.+)$/, 'Connexion au portefeuille établie · $1'],
       [/^Wallet disconnected · (.+)$/, 'Portefeuille déconnecté · $1'],
       [/^Transaction ID: (.+)$/, 'Identifiant de transaction : $1'],
@@ -571,7 +595,7 @@ export function translate(text) {
     de: [
       [/^(\d+) token base units$/, '$1 Token-Basiseinheiten'],
       [/^(\d+) base units$/, '$1 Basiseinheiten'],
-      [/^(\d+) fungible-token categories?$/, (_, count) => `${count} Kategorie${count === '1' ? '' : 'n'} fungibler Token`],
+      [/^(\d+) fungible-token (?:category|categories)$/, (_, count) => `${count} Kategorie${count === '1' ? '' : 'n'} fungibler Token`],
       [/^Wallet handshake complete · (.+)$/, 'Wallet-Verbindung hergestellt · $1'],
       [/^Wallet disconnected · (.+)$/, 'Wallet getrennt · $1'],
       [/^Transaction ID: (.+)$/, 'Transaktions-ID: $1'],

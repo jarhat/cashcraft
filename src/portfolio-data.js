@@ -17,7 +17,8 @@ export async function fetchTokenMetadata(category) {
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) {
     throw new Error('BCMR token decimals are unavailable or invalid.');
   }
-  return { name: data.name, description: data.description, symbol: data.token.symbol, decimals };
+  return { name: data.name, description: data.description, symbol: data.token.symbol, decimals,
+    uris: data.uris, extensions: data.extensions };
 }
 
 export async function fetchCauldronSpot(category, network) {

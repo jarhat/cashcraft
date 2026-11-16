@@ -30,36 +30,45 @@ export function tokenIconUrls(uri) {
   return [...new Set(original ? [original, ...gateways] : gateways)];
 }
 
-function loadImage(url) {
+function loadImage(url, signal) {
   return new Promise((resolve, reject) => {
     const image = new Image();
-    const timer = setTimeout(() => {
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', cancel);
       image.onload = image.onerror = null;
+    };
+    const cancel = () => {
+      cleanup();
+      image.src = '';
+      reject(new Error('The BCMR token logo request was cancelled.'));
+    };
+    const timer = setTimeout(() => {
+      cleanup();
       image.src = '';
       reject(new Error('The BCMR token logo timed out.'));
     }, 5000);
+    signal.addEventListener('abort', cancel, { once: true });
     image.crossOrigin = 'anonymous';
-    image.onload = () => { clearTimeout(timer); resolve(image); };
-    image.onerror = () => { clearTimeout(timer); reject(new Error('The BCMR token logo could not be loaded.')); };
+    image.onload = () => { cleanup(); resolve(image); };
+    image.onerror = () => { cleanup(); reject(new Error('The BCMR token logo could not be loaded.')); };
     image.src = url;
   });
 }
 
 export async function loadTokenLogo(category) {
-  const errors = [];
   try {
     const metadata = await getBcmrMetadata(category);
     const uri = metadata.uris?.image ?? metadata.uris?.icon;
     const urls = tokenIconUrls(uri);
-    for (const url of urls) {
-      try {
-        return await loadImage(url);
-      } catch (error) {
-        errors.push(error);
-      }
+    const controller = new AbortController();
+    try {
+      return await Promise.any(urls.map((url) => loadImage(url, controller.signal)));
+    } finally {
+      controller.abort();
     }
   } catch (error) {
-    errors.push(error);
+    throw new AggregateError(error instanceof AggregateError ? error.errors : [error],
+      `No BCMR token logo could be loaded for ${category}.`);
   }
-  throw new AggregateError(errors, `No BCMR token logo could be loaded for ${category}.`);
 }

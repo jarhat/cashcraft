@@ -28,7 +28,7 @@ test('validates BCMR category and decimals', async () => {
   });
   try {
     assert.deepEqual(await fetchTokenMetadata(category), {
-      name: 'Example', description: undefined, symbol: 'EX', decimals: 2,
+      name: 'Example', description: undefined, symbol: 'EX', decimals: 2, uris: undefined, extensions: undefined,
     });
     await assert.rejects(fetchTokenMetadata(mismatchedCategory), /does not match/);
     await assert.rejects(fetchTokenMetadata(invalidDecimalsCategory), /decimals/);
