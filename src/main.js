@@ -4,8 +4,8 @@ import { createPaymentQrImage } from './payment-qr-image.js';
 import { setupScrollEffects } from './scroll-effects.js';
 import { fetchTokenMetadata, fetchCauldronSpot } from './portfolio-data.js';
 import { loadTokenLogo } from './token-logo.js';
+import { setupMarketTicker } from './market-ticker.js';
 import { submitCashAddress, API_BASE_URL } from './api.js';
-import { setupCommunity } from './community.js';
 import {
   SATOSHIS_PER_BCH,
   formatBch,
@@ -86,6 +86,7 @@ function fillFromUrl() {
 const mainnet = network === 'mainnet';
 const prefix = mainnet ? 'bitcoincash' : 'bchtest';
 const $ = (id) => document.getElementById(id);
+setupMarketTicker($('market-ticker'), translate);
 let QRCode, decodeCashAddress, encodeCashAddress, hash160, initiateDappRelay;
 let DappConnectionManager, loadSession, sourceOutputToRelay, transactionToHex;
 let TransactionBuilder, placeholderP2PKHUnlocker, provider;
@@ -129,6 +130,8 @@ let bchUsd = null;
 let balanceSatoshis = null;
 let emptyBalanceNotified = false;
 let portfolioVersion = 0;
+let paymentGeneration = 0;
+let paymentPriceSnapshot = null;
 
 function report(error) {
   console.error(error);
@@ -165,7 +168,12 @@ for (const name of ['theme', 'language']) {
     const button = event.target.closest('button');
     if (!button) return;
     if (name === 'theme') setTheme(button.dataset.themeOption);
-    else setLanguage(button.dataset.languageOption);
+    else {
+      setLanguage(button.dataset.languageOption);
+      if (paymentPriceSnapshot) {
+        $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;
+      }
+    }
     close();
     toggle.focus();
   });
@@ -189,8 +197,8 @@ function setConnection(connected) {
   const isSend = $('send-tab').getAttribute('aria-selected') === 'true';
   $('send-tab').classList.toggle('active', connected && isSend);
   $('receive-tab').classList.toggle('active', connected && !isSend);
-  $('top-send').classList.toggle('active', connected && isSend && !$('top-earn').classList.contains('active'));
-  $('top-receive').classList.toggle('active', connected && !isSend && !$('top-earn').classList.contains('active'));
+  $('top-send').classList.toggle('active', connected && isSend);
+  $('top-receive').classList.toggle('active', connected && !isSend);
 }
 
 function clearWalletDisplay() {
@@ -659,16 +667,24 @@ function renderBalances(scannedUtxos) {
     });
     const categoryLine = document.createElement('div');
     categoryLine.className = 'category-line';
-    const info = document.createElement('details');
-    info.className = 'metadata-info';
-    const infoToggle = document.createElement('summary');
+    const infoToggle = document.createElement('button');
+    infoToggle.type = 'button';
+    infoToggle.className = 'metadata-info-toggle';
     infoToggle.textContent = 'ⓘ';
     infoToggle.setAttribute('aria-label', translate('Token metadata'));
+    infoToggle.setAttribute('aria-expanded', 'false');
+    infoToggle.setAttribute('aria-controls', `metadata-${category}`);
     const infoText = document.createElement('p');
+    infoText.id = `metadata-${category}`;
+    infoText.className = 'metadata-info';
+    infoText.hidden = true;
     infoText.textContent = translate('Loading token metadata…');
-    info.append(infoToggle, infoText);
-    categoryLine.append(info, categoryElement, copyCategory);
-    details.append(title, categoryLine);
+    infoToggle.addEventListener('click', () => {
+      infoText.hidden = !infoText.hidden;
+      infoToggle.setAttribute('aria-expanded', String(!infoText.hidden));
+    });
+    categoryLine.append(infoToggle, categoryElement, copyCategory);
+    details.append(title, categoryLine, infoText);
     const price = document.createElement('div');
     price.className = 'token-metadata';
     price.textContent = translate('Loading Cauldron price…');
@@ -681,6 +697,13 @@ function renderBalances(scannedUtxos) {
     row.append(summary);
     tokens.append(row);
 
+    if (mainnet) {
+      loadTokenLogo(category).then((image) => {
+        if (version !== portfolioVersion) return;
+        image.alt = '';
+        icon.replaceChildren(image);
+      }).catch((error) => console.warn(`Token logo unavailable for ${category}:`, error));
+    }
     const metadataPromise = mainnet
       ? fetchTokenMetadata(category)
       : Promise.reject(new Error('BCMR metadata is only available for mainnet.'));
@@ -690,14 +713,6 @@ function renderBalances(scannedUtxos) {
       if (metadata) {
         title.textContent = metadata.name || metadata.symbol || translate('Fungible token');
         infoText.textContent = [metadata.symbol, metadata.description, `${metadata.decimals} decimals`].filter(Boolean).join(' · ');
-        if (metadata.icon) {
-          const image = document.createElement('img');
-          image.alt = '';
-          image.referrerPolicy = 'no-referrer';
-          image.addEventListener('error', () => { icon.textContent = '◆'; });
-          image.src = metadata.icon;
-          icon.replaceChildren(image);
-        }
       } else {
         infoText.textContent = translate('BCMR metadata unavailable.');
         console.warn(`BCMR metadata unavailable for ${category}:`, metadataResult.reason);
@@ -1268,6 +1283,8 @@ $('notifications-toggle').addEventListener('click', () => {
   markNotificationsRead();
 });
 $('notifications-close').addEventListener('click', () => notificationsDialog.close());
+$('beer-toggle').addEventListener('click', () => $('beer-dialog').showModal());
+$('beer-close').addEventListener('click', () => $('beer-dialog').close());
 notificationsDialog.addEventListener('click', (event) => {
   const rect = notificationsDialog.getBoundingClientRect();
   if (event.clientX < rect.left || event.clientX > rect.right ||
@@ -1332,7 +1349,6 @@ function setTransferTab(tabName) {
   $('receive-tab').classList.toggle('active', walletReady && !isSend);
   $('top-send').classList.toggle('active', walletReady && isSend);
   $('top-receive').classList.toggle('active', walletReady && !isSend);
-  $('top-earn').classList.remove('active');
   $('send-tab').setAttribute('aria-selected', String(isSend));
   $('receive-tab').setAttribute('aria-selected', String(!isSend));
 
@@ -1362,14 +1378,8 @@ $('top-receive').addEventListener('click', () => {
   setTransferTab('receive');
   $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
-$('top-earn').addEventListener('click', () => {
-  $('top-send').classList.remove('active');
-  $('top-receive').classList.remove('active');
-  $('top-earn').classList.add('active');
-  $('earn-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-});
-
 $('generate-payment').addEventListener('click', async () => {
+  const generation = ++paymentGeneration;
   try {
     $('payment-result').classList.add('hidden');
     if (!walletReady) {
@@ -1419,7 +1429,7 @@ $('generate-payment').addEventListener('click', async () => {
     }
 
     if (
-      !walletReady ||
+      generation !== paymentGeneration || !walletReady ||
       addressFor(0, 0, 'p2pkhWithTokens') !== address ||
       $('receive-category').value.trim().toLowerCase() !== category ||
       $('receive-amount').value.trim() !== amount
@@ -1431,21 +1441,54 @@ $('generate-payment').addEventListener('click', async () => {
     canvas.getContext('2d').drawImage(qr, 0, 0);
     $('payment-amount').textContent = `${amount} token base units`;
     $('payment-category').textContent = category;
+    $('payment-token-icon').textContent = '◆';
+    $('payment-logo-status').textContent = translate(mainnet ? 'Loading token logo…' : 'Token logo unavailable.');
+    paymentPriceSnapshot = null;
+    $('payment-price').textContent = translate('Loading Cauldron price…');
+    $('share-payment-qr').disabled = true;
+    $('download-payment-qr').disabled = true;
     $('payment-result').classList.remove('hidden');
 
+    const currentPayment = () => generation === paymentGeneration &&
+      !$('payment-result').classList.contains('hidden') &&
+      $('payment-url').textContent === paymentUrl.toString() &&
+      walletReady && addressFor(0, 0, 'p2pkhWithTokens') === address;
+    const pricePromise = fetchCauldronSpot(category, network).then((spot) => {
+      if (!Number.isFinite(spot) || spot <= 0) throw new Error('Invalid Cauldron spot price.');
+      if (!currentPayment()) return;
+      const timestamp = new Date().toISOString();
+      paymentPriceSnapshot = { spot, timestamp };
+      $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;
+    }).catch((error) => {
+      console.warn(`Cauldron price unavailable for ${category}:`, error);
+      if (currentPayment()) $('payment-price').textContent = translate('Cauldron price unavailable.');
+    });
+
+    let logoPromise = Promise.resolve();
     if (mainnet) {
-      loadTokenLogo(category).then((logo) => {
-        if ($('payment-result').classList.contains('hidden') ||
-            $('payment-url').textContent !== paymentUrl.toString() ||
-            !walletReady || addressFor(0, 0, 'p2pkhWithTokens') !== address) return;
+      logoPromise = loadTokenLogo(category).then((logo) => {
+        if (!currentPayment()) return;
         const context = canvas.getContext('2d');
         const size = canvas.width * 0.09;
         const start = (canvas.width - size) / 2;
         context.fillStyle = '#ffffff';
         context.fillRect(start - 4, start - 4, size + 8, size + 8);
         context.drawImage(logo, start, start, size, size);
-      }).catch((error) => console.warn(`Token logo unavailable for ${category}:`, error));
+        const image = logo.cloneNode();
+        image.alt = '';
+        $('payment-token-icon').replaceChildren(image);
+        $('payment-logo-status').textContent = '';
+      }).catch((error) => {
+        console.warn(`Token logo unavailable for ${category}:`, error);
+        if (currentPayment()) $('payment-logo-status').textContent = translate('Token logo unavailable.');
+      });
     }
+    Promise.all([logoPromise, pricePromise]).then(() => {
+      if (currentPayment()) {
+        $('share-payment-qr').disabled = false;
+        $('download-payment-qr').disabled = false;
+      }
+    });
   } catch (error) {
     report(error);
   }
@@ -1485,10 +1528,16 @@ function paymentQrImage() {
   const url = new URL($('payment-url').textContent);
   return createPaymentQrImage(
     $('payment-qr'),
-    url.searchParams.get('amount'),
-    url.searchParams.get('category'),
+    { amount: url.searchParams.get('amount'), category: url.searchParams.get('category'),
+      address: url.searchParams.get('addr'), price: formatPaymentPrice(),
+      note: $('receive-note').value.trim() },
     translate,
   );
+}
+
+function formatPaymentPrice() {
+  if (!paymentPriceSnapshot) return null;
+  return `${paymentPriceSnapshot.spot.toPrecision(4)} BCH / ${translate('base unit')} · ${paymentPriceSnapshot.timestamp}`;
 }
 
 $('download-payment-qr').addEventListener('click', () => {
@@ -1505,16 +1554,22 @@ $('download-payment-qr').addEventListener('click', () => {
 $('share-payment-qr').addEventListener('click', async () => {
   try {
     const url = $('payment-url').textContent;
+    const paymentUrl = new URL(url);
+    const note = $('receive-note').value.trim();
+    const text = `${translate('Amount')}: ${translate(`${paymentUrl.searchParams.get('amount')} token base units`)}\n` +
+      `${translate('Recipient address')}: ${paymentUrl.searchParams.get('addr')}` +
+      (paymentPriceSnapshot ? `\n${translate('Indicative token price')}: ${formatPaymentPrice()}` : '') +
+      (note ? `\n${translate('Sharing note')}: ${note}` : '');
     if (!navigator.share) {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(`${text}\n${url}`);
       $('share-payment-qr').querySelector('span').textContent = 'Copied';
-      setTimeout(() => { $('share-payment-qr').querySelector('span').textContent = 'Share QR'; }, 1200);
+      setTimeout(() => { $('share-payment-qr').querySelector('span').textContent = 'Share'; }, 1200);
       return;
     }
     const encoded = paymentQrImage().toDataURL('image/png').split(',')[1];
     const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
     const file = new File([bytes], 'cashtoken-payment-qr.png', { type: 'image/png' });
-    const data = { title: 'CTF Cash', url };
+    const data = { title: 'CTF Cash', url, text };
     if (navigator.canShare?.({ files: [file] })) data.files = [file];
     await navigator.share(data);
   } catch (error) {
@@ -1607,7 +1662,6 @@ $('wizard-next').addEventListener('click', () => {
 
 
 fetchBchUsd();
-setupCommunity(import.meta.env);
 
 const restoreSession = async () => {
   try {
