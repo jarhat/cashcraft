@@ -410,8 +410,9 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
   try {
     await loadWalletDependencies();
     if (manager) {
-      await manager.destroy();
+      const previousManager = manager;
       manager = null;
+      await previousManager.destroy();
     }
     if (relay) {
       try {
@@ -440,22 +441,26 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
     let connectedAt = 0;
 
     manager.on('walletready', async (message) => {
-      const sessionManager = manager;
-      walletReady = true;
-      $('forget').hidden = false;
-      updateReceiveAddress();
-      setConnection(true);
-      $('pairing').classList.add('hidden');
-      $('status').textContent =
-        `Wallet handshake complete · ${
-          message?.wallet_name || manager.walletName || 'connected'
-        }`;
-      $('log').textContent = '';
+      if (manager !== connectionManager) return;
 
+      let addressReady = false;
       try {
-        $('address').textContent = addressFor(0, 0);
-        const submission = submitCashAddress(addressFor(0, 0));
+        walletReady = true;
+        const address = addressFor(0, 0);
+        updateReceiveAddress();
+        $('forget').hidden = false;
+        setConnection(true);
+        $('pairing').classList.add('hidden');
+        $('status').textContent =
+          `Wallet handshake complete · ${
+            message?.wallet_name || connectionManager.walletName || 'connected'
+          }`;
+        $('log').textContent = '';
+        $('address').textContent = address;
+        addressReady = true;
+        const submission = submitCashAddress(address);
         const [scanResult, submissionResult] = await Promise.allSettled([refreshBalances(), submission]);
+        if (!walletReady || manager !== connectionManager) return;
         if (scanResult.status === 'rejected') throw scanResult.reason;
         if (submissionResult.status === 'rejected') {
           report(new Error(`Balances refreshed, but address submission failed: ${submissionResult.reason?.message || submissionResult.reason}`));
@@ -463,13 +468,21 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
             'Wallet connected · balances refreshed; address submission failed';
         }
       } catch (error) {
-        if (!walletReady || manager !== sessionManager) return;
+        if (manager !== connectionManager) return;
+        if (!addressReady) {
+          walletReady = false;
+          setConnection(false);
+          $('status').textContent = 'Wallet connected · could not derive address';
+          report(error);
+          return;
+        }
         report(error);
         $('status').textContent = 'Wallet connected · balance scan failed';
       }
     });
 
     manager.on('disconnect', (reason, message) => {
+      if (manager !== connectionManager) return;
       walletReady = false;
       setConnection(false);
       clearWalletDisplay();
@@ -508,6 +521,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
     });
 
     const callback = (payload) => {
+      if (manager !== connectionManager) return;
       console.info(
         '[WizardConnect relay]',
         payload?.status?.status || payload?.status || payload,
@@ -529,8 +543,9 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         connectedAt = Date.now();
         $('status').textContent =
           'Waiting for wallet approval and handshake…';
-      } else if (payload?.status?.status === 'reconnecting' && !walletReady) {
+      } else if (payload?.status?.status === 'reconnecting') {
         $('status').textContent = 'Relay reconnecting · check your internet connection…';
+        if (payload.status.error) console.warn('[WizardConnect] relay reconnecting:', payload.status.error);
       } else if (payload?.status?.status === 'error') {
         $('status').textContent = 'Relay error · see details below';
         report(new Error(`WizardConnect relay error: ${payload.status.message || 'Check your connection and reconnect.'}`));
@@ -546,6 +561,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
     // Attach before the relay reports connected so an early wallet_ready is not missed.
     connectionManager.updateConnection(relay.client, { status: 'connecting' });
     relay.events.on('keyexchangecomplete', () => {
+      if (manager !== connectionManager) return;
       // The manager's initial handshake waits only 30 seconds for a scan.
       if (connectedAt && Date.now() - connectedAt >= 29_000) {
         connectionManager.updateConnection(relay.client, { status: 'connected' });
@@ -1414,19 +1430,33 @@ $('forget').addEventListener('click', async () => {
   }
 
   try {
-    if (manager) {
-      manager.clearStoredSession();
-    }
-
-    try {
-      relay?.cleanup();
-    } catch {
-      // Cleanup is best-effort.
-    }
-
+    const previousManager = manager;
+    const previousRelay = relay;
+    const wasReady = walletReady;
     manager = null;
     relay = null;
     walletReady = false;
+
+    if (previousManager) {
+      if (wasReady) {
+        try {
+          await Promise.race([
+            previousManager.sendDisconnect(),
+            wait(2000).then(() => { throw new Error('Wallet disconnect timed out.'); }),
+          ]);
+        } catch (error) {
+          console.warn('Could not notify wallet of disconnection:', error);
+        }
+      }
+      previousManager.clearStoredSession();
+      await previousManager.destroy();
+    }
+
+    try {
+      previousRelay?.cleanup();
+    } catch {
+      // Cleanup is best-effort.
+    }
 
     $('pairing').classList.add('hidden');
     clearWalletDisplay();

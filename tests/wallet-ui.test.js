@@ -336,6 +336,120 @@ test('late scans restart the manager handshake and attach the listener immediate
   assert.deepEqual(statuses, ['connecting', 'connected', 'connected']);
 });
 
+test('stale wallet callbacks cannot disconnect a newer session', async () => {
+  const managers = [];
+  const relays = [];
+  let submissions = 0;
+  const nodes = new Map();
+  const element = (id) => {
+    if (!nodes.has(id)) nodes.set(id, {
+      textContent: '', hidden: false, disabled: false,
+      classList: { add() {}, remove() {} }, removeAttribute() {},
+    });
+    return nodes.get(id);
+  };
+  class Manager {
+    constructor() { this.handlers = {}; managers.push(this); }
+    on(name, callback) { this.handlers[name] = callback; }
+    attachRelay() {}
+    updateConnection() {}
+    clearStoredSession() {}
+    async destroy() {}
+  }
+  const start = source.indexOf('async function startConnection(');
+  const end = source.indexOf('\nasync function fetchBchUsd', start);
+  const context = {
+    $: element, relay: null, manager: null, walletReady: false,
+    pairingInProgress: false, showPairingWhenReady: false,
+    clearWalletDisplay() {}, setConnection() {}, updateReceiveAddress() {},
+    addressFor: () => 'recipient', submitCashAddress: async () => { submissions++; },
+    refreshBalances: async () => {}, loadWalletDependencies: async () => {},
+    loadSession: () => null, DappConnectionManager: Manager,
+    initiateDappRelay: (callback) => {
+      const instance = { uri: 'wiz:test', client: {}, cleanupCount: 0,
+        cleanup() { this.cleanupCount++; }, events: { on() {} }, callback };
+      relays.push(instance);
+      return instance;
+    },
+    showPairingUri: async () => {}, report(error) { throw error; },
+    console: { info() {} },
+  };
+  runInNewContext(source.slice(start, end), context);
+  await context.startConnection();
+  await context.startConnection({ fresh: true });
+  managers[0].handlers.disconnect('old connection');
+  await managers[0].handlers.walletready({});
+  relays[0].callback({ client: {}, status: { status: 'connected' } });
+  assert.equal(relays[1].cleanupCount, 0);
+  assert.equal(submissions, 0);
+  await managers[1].handlers.walletready({ wallet_name: 'Selene' });
+  assert.equal(submissions, 1);
+  assert.equal(context.walletReady, true);
+});
+
+test('missing wallet public key reports failure instead of appearing connected', async () => {
+  let managerInstance;
+  let reported;
+  const nodes = new Map();
+  const element = (id) => {
+    if (!nodes.has(id)) nodes.set(id, {
+      textContent: '', hidden: false, disabled: false,
+      classList: { add() {}, remove() {} }, removeAttribute() {},
+    });
+    return nodes.get(id);
+  };
+  const start = source.indexOf('async function startConnection(');
+  const end = source.indexOf('\nasync function fetchBchUsd', start);
+  const context = {
+    $: element, relay: null, manager: null, walletReady: false,
+    pairingInProgress: false, showPairingWhenReady: false,
+    clearWalletDisplay() {}, setConnection() {},
+    addressFor() { throw new Error('Wallet public key is not available'); },
+    loadWalletDependencies: async () => {}, loadSession: () => null,
+    DappConnectionManager: class {
+      constructor() { managerInstance = this; this.handlers = {}; }
+      on(name, callback) { this.handlers[name] = callback; }
+      attachRelay() {} updateConnection() {}
+    },
+    initiateDappRelay: () => ({ uri: 'wiz:test', client: {}, cleanup() {}, events: { on() {} } }),
+    showPairingUri: async () => {}, report(error) { reported = error; },
+  };
+  runInNewContext(source.slice(start, end), context);
+  await context.startConnection();
+  await managerInstance.handlers.walletready({});
+  assert.match(reported.message, /public key/);
+  assert.equal(context.walletReady, false);
+  assert.match(element('status').textContent, /could not derive address/);
+});
+
+test('forgetting a pairing notifies the wallet before tearing down the relay', async () => {
+  const calls = [];
+  let handler;
+  const nodes = {
+    forget: { addEventListener(_type, fn) { handler = fn; } },
+    pairing: { classList: { add() {} } },
+    status: { textContent: '' },
+  };
+  const start = source.indexOf("$('forget').addEventListener('click'");
+  const end = source.indexOf("\n$('refresh').addEventListener", start);
+  const context = {
+    $: (id) => nodes[id], window: { confirm: () => true }, translate: (text) => text,
+    walletReady: true,
+    manager: {
+      async sendDisconnect() { calls.push('notify'); },
+      clearStoredSession() { calls.push('clear'); },
+      async destroy() { calls.push('destroy'); },
+    },
+    relay: { cleanup() { calls.push('cleanup'); } },
+    wait: () => new Promise(() => {}), clearWalletDisplay() {},
+    async startConnection(options) { calls.push(options.fresh ? 'fresh' : 'restore'); },
+    report(error) { throw error; },
+  };
+  runInNewContext(source.slice(start, end), context);
+  await handler();
+  assert.deepEqual(calls, ['notify', 'clear', 'destroy', 'cleanup', 'fresh']);
+});
+
 test('portfolio abbreviates category IDs but copies the full ID', async () => {
   class Element {
     constructor() {
