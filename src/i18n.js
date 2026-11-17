@@ -1,4 +1,7 @@
 const spanish = {
+  'About circulating supply': 'Sobre la oferta circulante',
+  'Circulating supply is not verified here. Estimates depend on identifying reserved and burned tokens.': 'La oferta circulante no se verifica aquí. Las estimaciones dependen de identificar los tokens reservados y quemados.',
+  'Explore supply and verification ↗': 'Consultar oferta y verificación ↗',
   'Have BTC? You can swap it for BCH with': '¿Tienes BTC? Puedes cambiarlo por BCH con',
   '. This independent service uses mainnet; check the rate, fees and recipient address.': '. Este servicio independiente usa mainnet; comprueba el tipo de cambio, las comisiones y la dirección de destino.',
   'Wallet connection': 'Conexión de la cartera',
@@ -200,6 +203,9 @@ const spanish = {
 };
 
 const french = {
+  'About circulating supply': 'À propos de la quantité en circulation',
+  'Circulating supply is not verified here. Estimates depend on identifying reserved and burned tokens.': 'La quantité en circulation n’est pas vérifiée ici. Les estimations dépendent de l’identification des jetons réservés et détruits.',
+  'Explore supply and verification ↗': 'Consulter la quantité et sa vérification ↗',
   'Have BTC? You can swap it for BCH with': 'Vous avez des BTC ? Vous pouvez les échanger contre des BCH avec',
   '. This independent service uses mainnet; check the rate, fees and recipient address.': '. Ce service indépendant utilise le réseau principal ; vérifiez le taux, les frais et l’adresse du destinataire.',
   'Wallet connection': 'Connexion du portefeuille',
@@ -401,6 +407,9 @@ const french = {
 };
 
 const german = {
+  'About circulating supply': 'Über die Umlaufmenge',
+  'Circulating supply is not verified here. Estimates depend on identifying reserved and burned tokens.': 'Die Umlaufmenge wird hier nicht überprüft. Schätzungen hängen davon ab, reservierte und verbrannte Token zu erkennen.',
+  'Explore supply and verification ↗': 'Umlaufmenge und Prüfung ansehen ↗',
   'Have BTC? You can swap it for BCH with': 'Du hast BTC? Tausche sie gegen BCH mit',
   '. This independent service uses mainnet; check the rate, fees and recipient address.': '. Dieser unabhängige Dienst nutzt das Mainnet; prüfe Kurs, Gebühren und Empfängeradresse.',
   'Wallet connection': 'Wallet-Verbindung',

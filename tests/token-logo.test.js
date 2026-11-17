@@ -1,28 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadTokenLogo, tokenIconUrls } from '../src/token-logo.js';
-import { authchainResponse, metadataResponse } from './bcmr-fixtures.js';
+import { authchainResponse, metadataResponse, registryResponse } from './bcmr-fixtures.js';
 
 test('loads a BCMR icon with CORS enabled and converts IPFS URLs', async () => {
   const originalFetch = globalThis.fetch;
   const OriginalImage = globalThis.Image;
   const category = 'a'.repeat(64);
-  let endpoint;
+  const registry = metadataResponse(category, { uris: { icon: 'ipfs://cid/icon.png' } });
   globalThis.fetch = async (url) => {
-    endpoint = url;
-    return {
-      ok: true,
-      json: async () => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
-        ? authchainResponse(category)
-        : metadataResponse(category, { uris: { icon: 'ipfs://cid/icon.png' } }),
-    };
+    return url === 'https://gql.chaingraph.pat.mn/v1/graphql'
+      ? { ok: true, json: async () => authchainResponse(category, undefined, registry) }
+      : registryResponse(registry);
   };
   globalThis.Image = class {
     set src(value) { this.url = value; this.onload?.(); }
   };
   try {
     const image = await loadTokenLogo(category);
-    assert.equal(endpoint, 'https://ipfs.filebase.io/ipfs/registry/metadata.json');
     assert.equal(image.crossOrigin, 'anonymous');
     assert.equal(image.url, 'https://ipfs.filebase.io/ipfs/cid/icon.png');
   } finally {
@@ -35,20 +30,16 @@ test('rejects missing or insecure registry icons', async () => {
   const originalFetch = globalThis.fetch;
   const category = 'b'.repeat(64);
   try {
-    globalThis.fetch = async (url) => ({
-      ok: true,
-      json: async () => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
-        ? authchainResponse(category)
-        : metadataResponse(category),
-    });
+    const registry = metadataResponse(category);
+    globalThis.fetch = async (url) => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
+      ? { ok: true, json: async () => authchainResponse(category, undefined, registry) }
+      : registryResponse(registry);
     await assert.rejects(loadTokenLogo(category), /No BCMR token logo/);
     const insecureCategory = 'd'.repeat(64);
-    globalThis.fetch = async (url) => ({
-      ok: true,
-      json: async () => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
-        ? authchainResponse(insecureCategory)
-        : metadataResponse(insecureCategory, { uris: { icon: 'http://example.com/icon.png' } }),
-    });
+    const insecureRegistry = metadataResponse(insecureCategory, { uris: { icon: 'http://example.com/icon.png' } });
+    globalThis.fetch = async (url) => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
+      ? { ok: true, json: async () => authchainResponse(insecureCategory, undefined, insecureRegistry) }
+      : registryResponse(insecureRegistry);
     await assert.rejects(loadTokenLogo(insecureCategory), (error) => error.errors.some((cause) => /must use HTTPS/.test(cause.message)));
   } finally {
     globalThis.fetch = originalFetch;
@@ -60,14 +51,12 @@ test('falls back to full BCMR metadata and another IPFS gateway', async () => {
   const OriginalImage = globalThis.Image;
   const category = 'c'.repeat(64);
   const requests = [];
+  const registry = metadataResponse(category, { uris: { icon: 'ipfs://ipfs/bafy123/logo.png' } });
   globalThis.fetch = async (url) => {
     requests.push(url);
-    return {
-      ok: true,
-      json: async () => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
-        ? authchainResponse(category)
-        : metadataResponse(category, { uris: { icon: 'ipfs://ipfs/bafy123/logo.png' } }),
-    };
+    return url === 'https://gql.chaingraph.pat.mn/v1/graphql'
+      ? { ok: true, json: async () => authchainResponse(category, undefined, registry) }
+      : registryResponse(registry);
   };
   globalThis.Image = class {
     set src(value) {
@@ -78,7 +67,7 @@ test('falls back to full BCMR metadata and another IPFS gateway', async () => {
   };
   try {
     const image = await loadTokenLogo(category);
-    assert.equal(requests.length, 2);
+    assert.equal(requests.length, 4);
     assert.equal(image.url, 'https://ipfs.filebase.io/ipfs/bafy123/logo.png');
     assert.equal(image.crossOrigin, 'anonymous');
   } finally {
@@ -95,12 +84,10 @@ test('rejects invalid IPFS paths and untrusted registry categories', async () =>
   assert.equal(tokenIconUrls('https://bafy123.ipfs.example/logo.png')[1], 'https://ipfs.filebase.io/ipfs/bafy123/logo.png');
   const originalFetch = globalThis.fetch;
   const category = 'e'.repeat(64);
-  globalThis.fetch = async (url) => ({
-    ok: true,
-    json: async () => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
-      ? authchainResponse(category)
-      : metadataResponse('b'.repeat(64), { uris: { icon: 'ipfs://cid/logo.png' } }),
-  });
+  const registry = metadataResponse('b'.repeat(64), { uris: { icon: 'ipfs://cid/logo.png' } });
+  globalThis.fetch = async (url) => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
+    ? { ok: true, json: async () => authchainResponse(category, undefined, registry) }
+    : registryResponse(registry);
 
   try {
     await assert.rejects(loadTokenLogo(category), (error) =>
@@ -114,12 +101,10 @@ test('does not wait for a stalled IPFS gateway before trying another', async () 
   const originalFetch = globalThis.fetch;
   const OriginalImage = globalThis.Image;
   const category = '9'.repeat(64);
-  globalThis.fetch = async (url) => ({
-    ok: true,
-    json: async () => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
-      ? authchainResponse(category)
-      : metadataResponse(category, { uris: { icon: 'ipfs://cid/icon.png' } }),
-  });
+  const registry = metadataResponse(category, { uris: { icon: 'ipfs://cid/icon.png' } });
+  globalThis.fetch = async (url) => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
+    ? { ok: true, json: async () => authchainResponse(category, undefined, registry) }
+    : registryResponse(registry);
   globalThis.Image = class {
     set src(value) {
       this.url = value;

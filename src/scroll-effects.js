@@ -7,11 +7,12 @@ export function updatePanelFades(topbar, panels) {
   const bottom = Math.max(0, topbar.getBoundingClientRect().bottom);
   const updates = [...panels].map((panel) => {
     const bounds = panel.getBoundingClientRect();
-    const fade = bounds.height && bounds.top < bottom + 16 && bounds.bottom > 0
-      && !panel.querySelector('.token-options[open]') ? `${bottom - bounds.top}px` : '';
-    return { panel, fade };
+    const fade = bounds.height && bounds.top < bottom + 16 && bounds.bottom > 0 ? `${bottom - bounds.top}px` : '';
+    const openMenu = fade && bounds.top < bottom ? panel.querySelector('.token-options[open]') : null;
+    return { panel, fade, openMenu };
   });
-  for (const { panel, fade } of updates) {
+  for (const { panel, fade, openMenu } of updates) {
+    if (openMenu) openMenu.open = false;
     if (fade) {
       if (panel.style.getPropertyValue('--fade-under-bar') !== fade) {
         panel.style.setProperty('--fade-under-bar', fade);

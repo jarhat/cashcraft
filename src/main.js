@@ -945,13 +945,29 @@ function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
     const amountPrice = document.createElement('small');
     amountPrice.className = 'token-amount-price';
     amountValues.append(amountElement, amountPrice);
+    const supplyInfo = document.createElement('details');
+    supplyInfo.className = 'supply-info';
+    const supplyToggle = document.createElement('summary');
+    supplyToggle.textContent = 'ⓘ';
+    supplyToggle.setAttribute('aria-label', translate('About circulating supply'));
+    const supplyText = document.createElement('p');
+    supplyText.textContent = translate('Circulating supply is not verified here. Estimates depend on identifying reserved and burned tokens.');
+    supplyInfo.append(supplyToggle, supplyText);
+    if (mainnet) {
+      const supplyLink = document.createElement('a');
+      supplyLink.href = `https://tokenexplorer.cash/?tokenId=${category}`;
+      supplyLink.target = '_blank';
+      supplyLink.rel = 'noopener noreferrer';
+      supplyLink.textContent = translate('Explore supply and verification ↗');
+      supplyInfo.append(supplyLink);
+    }
     if (spendableAmount < amount) {
       const attached = document.createElement('small');
       attached.className = 'token-amount-price';
       attached.textContent = `${amount - spendableAmount} base units attached to NFTs; unavailable for sending.`;
       amountValues.append(attached);
     }
-    amountGroup.append(amountValues);
+    amountGroup.append(amountValues, supplyInfo);
     summary.append(icon, details, amountGroup);
     row.append(summary);
     tokens.append(row);

@@ -23,8 +23,8 @@ test('only panels crossing the sticky header are masked and the mask follows its
   const panel = {
     bounds: { top: 150, bottom: 300, height: 150 },
     getBoundingClientRect() { return this.bounds; },
-    menuOpen: false,
-    querySelector(selector) { return selector === '.token-options[open]' && this.menuOpen ? {} : null; },
+    menu: { open: false },
+    querySelector(selector) { return selector === '.token-options[open]' && this.menu.open ? this.menu : null; },
     style: {
       setProperty(name, value) { this[name] = value; },
       getPropertyValue(name) { return this[name] || ''; },
@@ -47,12 +47,9 @@ test('only panels crossing the sticky header are masked and the mask follows its
   updatePanelFades(bar, [panel]);
   assert.equal(panel.style['--fade-under-bar'], '39.5px');
   assert.equal(panel.classList.values.has('under-topbar'), true);
-  panel.menuOpen = true;
+  panel.menu.open = true;
   updatePanelFades(bar, [panel]);
-  assert.equal(panel.classList.values.has('under-topbar'), false);
-  assert.equal(panel.style['--fade-under-bar'], undefined);
-  panel.menuOpen = false;
-  updatePanelFades(bar, [panel]);
+  assert.equal(panel.menu.open, false);
   assert.equal(panel.classList.values.has('under-topbar'), true);
   panel.bounds = { top: -160, bottom: -10, height: 150 };
   updatePanelFades(bar, [panel]);

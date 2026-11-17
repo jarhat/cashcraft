@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fetchCauldronSpot, fetchTokenMetadata } from '../src/portfolio-data.js';
-import { authchainResponse, metadataResponse } from './bcmr-fixtures.js';
+import { authchainResponse, metadataResponse, registryResponse } from './bcmr-fixtures.js';
 
 test('validates BCMR category and decimals', async () => {
   const original = globalThis.fetch;
@@ -15,17 +15,14 @@ test('validates BCMR category and decimals', async () => {
       token: { category: invalidDecimalsCategory, decimals: -1 },
     })],
   ]);
-  globalThis.fetch = async (url, options) => ({
-    ok: true,
-    json: async () => {
-      if (url === 'https://gql.chaingraph.pat.mn/v1/graphql') {
-        const requestedCategory = JSON.parse(options.body).variables.tokenId.slice(2);
-        return authchainResponse(requestedCategory, `ipfs://registry/${requestedCategory}.json`);
-      }
-      const requestedCategory = new URL(url).pathname.split('/').at(-1).replace('.json', '');
-      return metadataByCategory.get(requestedCategory);
-    },
-  });
+  globalThis.fetch = async (url, options) => {
+    if (url === 'https://gql.chaingraph.pat.mn/v1/graphql') {
+      const requestedCategory = JSON.parse(options.body).variables.tokenId.slice(2);
+      return { ok: true, json: async () => authchainResponse(requestedCategory, `ipfs://registry/${requestedCategory}.json`, metadataByCategory.get(requestedCategory)) };
+    }
+    const requestedCategory = new URL(url).pathname.split('/').at(-1).replace('.json', '');
+    return registryResponse(metadataByCategory.get(requestedCategory));
+  };
   try {
     assert.deepEqual(await fetchTokenMetadata(category), {
       name: 'Example', description: undefined, symbol: 'EX', decimals: 2, uris: undefined, extensions: undefined,
@@ -38,7 +35,8 @@ test('validates BCMR category and decimals', async () => {
 test('uses the latest BCMR publication in the token authchain', async () => {
   const original = globalThis.fetch;
   const category = 'f'.repeat(64);
-  const latest = authchainResponse(category, 'ipfs://registry/latest.json');
+  const latestRegistry = metadataResponse(category, { name: 'Latest' });
+  const latest = authchainResponse(category, 'ipfs://registry/latest.json', latestRegistry);
   const migrations = authchainResponse(category, 'ipfs://registry/old.json').data.transaction[0].authchains[0].migrations;
   migrations.push({
     transaction: [{
@@ -47,20 +45,90 @@ test('uses the latest BCMR publication in the token authchain', async () => {
     }],
   });
   let metadataUrl;
-  globalThis.fetch = async (url) => ({
-    ok: true,
-    json: async () => {
-      if (url === 'https://gql.chaingraph.pat.mn/v1/graphql') {
-        return { data: { transaction: [{ authchains: [{ migrations }] }] } };
-      }
-      metadataUrl = url;
-      return metadataResponse(category, { name: url.endsWith('/latest.json') ? 'Latest' : 'Old' });
-    },
-  });
+  globalThis.fetch = async (url) => {
+    if (url === 'https://gql.chaingraph.pat.mn/v1/graphql') {
+      return { ok: true, json: async () => ({ data: { transaction: [{ authchains: [{ migrations }] }] } }) };
+    }
+    metadataUrl = url;
+    return registryResponse(latestRegistry);
+  };
   try {
     assert.equal((await fetchTokenMetadata(category)).name, 'Latest');
-    assert.equal(metadataUrl, 'https://ipfs.filebase.io/ipfs/registry/latest.json');
+    assert.match(metadataUrl, /\/ipfs\/registry\/latest\.json$/);
   } finally { globalThis.fetch = original; }
+});
+
+test('uses a responsive gateway and rejects metadata with a mismatched on-chain hash', async () => {
+  const original = globalThis.fetch;
+  const category = '8'.repeat(64);
+  const registry = metadataResponse(category, { name: 'Verified' });
+  let mode = 'fallback';
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    if (url === 'https://gql.chaingraph.pat.mn/v1/graphql') {
+      return { ok: true, json: async () => authchainResponse(category, undefined, registry) };
+    }
+    requests.push(url);
+    if (mode === 'fallback' && url.includes('filebase')) {
+      return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+    }
+    return registryResponse(mode === 'fallback' ? registry : metadataResponse(category, { name: 'Tampered' }));
+  };
+  try {
+    assert.equal((await fetchTokenMetadata(category)).name, 'Verified');
+    assert.ok(requests.some((url) => url.includes('ipfs.io')));
+    const badCategory = '7'.repeat(64);
+    mode = 'mismatch';
+    globalThis.fetch = async (url) => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
+      ? { ok: true, json: async () => authchainResponse(badCategory) }
+      : registryResponse(metadataResponse(badCategory, { name: 'Tampered' }));
+    await assert.rejects(fetchTokenMetadata(badCategory), /on-chain hash/);
+  } finally { globalThis.fetch = original; }
+});
+
+test('tries alternative IPFS gateways for an HTTPS publication', async () => {
+  const original = globalThis.fetch;
+  const category = '5'.repeat(64);
+  const registry = metadataResponse(category);
+  const requests = [];
+  globalThis.fetch = async (url) => {
+    requests.push(url);
+    if (url === 'https://gql.chaingraph.pat.mn/v1/graphql') {
+      return { ok: true, json: async () => authchainResponse(category, 'https://gateway.example/ipfs/cid/registry.json', registry) };
+    }
+    return url.includes('gateway.example') ? { ok: false, status: 503 } : registryResponse(registry);
+  };
+  try {
+    assert.equal((await fetchTokenMetadata(category)).name, 'Example');
+    assert.ok(requests.includes('https://ipfs.io/ipfs/cid/registry.json'));
+  } finally { globalThis.fetch = original; }
+});
+
+test('shares metadata lookups and refreshes them after the cache expires', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalNow = Date.now;
+  const category = '6'.repeat(64);
+  const registry = metadataResponse(category);
+  let now = 1_800_000_000_000;
+  let queries = 0;
+  Date.now = () => now;
+  globalThis.fetch = async (url) => {
+    if (url === 'https://gql.chaingraph.pat.mn/v1/graphql') {
+      queries++;
+      return { ok: true, json: async () => authchainResponse(category, undefined, registry) };
+    }
+    return registryResponse(registry);
+  };
+  try {
+    await Promise.all([fetchTokenMetadata(category), fetchTokenMetadata(category)]);
+    assert.equal(queries, 1);
+    now += 5 * 60 * 1000;
+    await fetchTokenMetadata(category);
+    assert.equal(queries, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    Date.now = originalNow;
+  }
 });
 
 test('prices from the deepest valid matching Cauldron pool in BCH per base unit', async () => {

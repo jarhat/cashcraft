@@ -866,6 +866,9 @@ test('priced metadata updates balances, token choices and allocation', async () 
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(element('portfolio-chart').hidden, false);
   assert.match(element('tokens').children[0].children[0].children[2].children[0].children[0].textContent, /1\.25 EX/);
+  const supply = element('tokens').children[0].children[0].children[2].children[1];
+  assert.match(supply.children[1].textContent, /not verified/);
+  assert.equal(supply.children[2].href, `https://tokenexplorer.cash/?tokenId=${category}`);
   assert.match(element('token-options-list').children[0].children[1].textContent, /Example.*\$2\.000/);
   assert.match(element('amount-help').textContent, /2 decimals.*Entered: 1\.25 EX/);
   const metadata = element('tokens').children[0].children[0].children[1].children[2];

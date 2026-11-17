@@ -1,10 +1,13 @@
-export function authchainResponse(category, uri = 'ipfs://registry/metadata.json') {
+import { createHash } from 'node:crypto';
+
+export function authchainResponse(category, uri = 'ipfs://registry/metadata.json', registry = metadataResponse(category)) {
   const uriHex = Array.from(new TextEncoder().encode(uri), (byte) => byte.toString(16).padStart(2, '0')).join('');
   const uriLength = uriHex.length / 2;
   const uriPush = uriLength <= 75
     ? `${uriLength.toString(16).padStart(2, '0')}${uriHex}`
     : `4c${uriLength.toString(16).padStart(2, '0')}${uriHex}`;
-  const bytecode = `6a0442434d5220${'11'.repeat(32)}${uriPush}`;
+  const hash = createHash('sha256').update(JSON.stringify(registry)).digest('hex');
+  const bytecode = `6a0442434d5220${hash}${uriPush}`;
   return {
     data: {
       transaction: [{
@@ -19,6 +22,11 @@ export function authchainResponse(category, uri = 'ipfs://registry/metadata.json
       }],
     },
   };
+}
+
+export function registryResponse(registry) {
+  const bytes = new TextEncoder().encode(JSON.stringify(registry));
+  return { ok: true, arrayBuffer: async () => bytes };
 }
 
 export function metadataResponse(category, metadata = {}) {
