@@ -2,8 +2,9 @@ const games = {
   netcraft: { title: 'Netcraft', url: '/games/netcraft/craftw.html' },
   pk2: { title: 'Pekka Kana 2', url: '/games/pk2/index.html' },
 };
+const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 
-export function setupGames($, { claimBeer, translate }) {
+export function setupGames($, { claimBeer, translate, getRewardAddress = () => null }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   let generation = 0;
@@ -32,7 +33,14 @@ export function setupGames($, { claimBeer, translate }) {
         frame.title = game.title;
         frame.classList.remove('game-shift-in');
         void frame.offsetWidth;
-        frame.src = game.url;
+        const address = id === 'netcraft' ? getRewardAddress() : null;
+        if (id === 'netcraft' && (address || netcraftServer !== '-')) {
+          const args = [netcraftServer, '4080'];
+          if (address) args.push(address);
+          frame.src = `${game.url}#${args.map(encodeURIComponent).join('+')}`;
+        } else {
+          frame.src = game.url;
+        }
         activeGame = id;
         frame.classList.add('game-shift-in');
         for (const key of Object.keys(games)) {
@@ -47,7 +55,22 @@ export function setupGames($, { claimBeer, translate }) {
     $(`switch-${id}`).addEventListener('click', open);
   }
   $('game-close').addEventListener('click', () => dialog.close());
+  $('game-wallet').addEventListener('click', () => $('connection-open').click());
+  $('game-notifications').addEventListener('click', () => $('notifications-toggle').click());
+  $('game-fullscreen').addEventListener('click', async () => {
+    try {
+      if (document.fullscreenElement === dialog) await document.exitFullscreen();
+      else await dialog.requestFullscreen();
+    } catch (error) {
+      $('game-dialog-status').textContent = translate('Fullscreen is unavailable.');
+    }
+  });
   dialog.addEventListener('close', () => {
+    if (document.fullscreenElement === dialog) {
+      document.exitFullscreen().catch((error) => {
+        console.error('Could not exit fullscreen:', error);
+      });
+    }
     generation++;
     activeGame = null;
     frame.removeAttribute('src');

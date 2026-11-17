@@ -4,7 +4,8 @@ import { setupGames } from '../src/games.js';
 
 test('game buttons open mounted shells and unload them on close', async (t) => {
   const originalFetch = globalThis.fetch;
-  t.after(() => { globalThis.fetch = originalFetch; });
+  const originalDocument = globalThis.document;
+  t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; });
   const elements = new Map();
   const $ = (id) => {
     if (!elements.has(id)) elements.set(id, {
@@ -14,6 +15,7 @@ test('game buttons open mounted shells and unload them on close', async (t) => {
       showModal() { this.open = true; }, close() { this.open = false; this.listeners.close(); },
       removeAttribute(name) { delete this[name]; },
     });
+
     return elements.get(id);
   };
   let url, beer = 0;
@@ -22,10 +24,32 @@ test('game buttons open mounted shells and unload them on close', async (t) => {
     return { ok: true, headers: { get: () => 'text/html' }, text: async () => '<html>game</html>' };
   };
   setupGames($, { claimBeer: () => { beer++; }, translate: (text) => text });
+  let wallet = 0, notifications = 0;
+  $('connection-open').click = () => { wallet++; };
+  $('notifications-toggle').click = () => { notifications++; };
+  $('game-wallet').listeners.click();
+  $('game-notifications').listeners.click();
+  assert.equal(wallet, 1);
+  assert.equal(notifications, 1);
+  globalThis.document = {
+    fullscreenElement: null,
+    async exitFullscreen() { this.fullscreenElement = null; },
+  };
+  $('game-dialog').requestFullscreen = async () => { document.fullscreenElement = $('game-dialog'); };
+  await $('game-fullscreen').listeners.click();
+  assert.equal(document.fullscreenElement, $('game-dialog'));
+  await $('game-fullscreen').listeners.click();
+  assert.equal(document.fullscreenElement, null);
+  $('game-dialog').requestFullscreen = async () => { throw new Error('denied'); };
+  await $('game-fullscreen').listeners.click();
+  assert.match($('game-dialog-status').textContent, /unavailable/);
   await $('game-netcraft').listeners.click();
   assert.equal(url, '/games/netcraft/craftw.html');
   assert.equal($('game-frame').src, url);
+  $('game-dialog').requestFullscreen = async () => { document.fullscreenElement = $('game-dialog'); };
+  await $('game-fullscreen').listeners.click();
   $('game-close').listeners.click();
+  assert.equal(document.fullscreenElement, null);
   assert.equal($('game-frame').src, undefined);
   await $('game-pk2').listeners.click();
   assert.equal(url, '/games/pk2/index.html');
@@ -56,7 +80,26 @@ test('game buttons open mounted shells and unload them on close', async (t) => {
     ok: true, headers: { get: () => 'text/html' },
     text: async () => '<button id="game-netcraft">fallback</button>',
   });
+
   await $('game-netcraft').listeners.click();
   assert.match($('game-status').textContent, /unavailable/);
   assert.equal($('game-dialog').open, false);
+});
+
+test('NetCraft receives the connected token address when launched', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const elements = new Map();
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; },
+      setAttribute() {}, classList: { add() {}, remove() {} },
+      showModal() { this.open = true; },
+    });
+    return elements.get(id);
+  };
+  globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
+  setupGames($, { claimBeer() {}, translate: (text) => text, getRewardAddress: () => 'bitcoincash:ztest' });
+  await $('game-netcraft').listeners.click();
+  assert.equal($('game-frame').src, '/games/netcraft/craftw.html#-+4080+bitcoincash%3Aztest');
 });

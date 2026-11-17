@@ -58,7 +58,6 @@ int client_sendall(int sd, char *data, int length) {
             return -1;
         }
         count += n;
-        length -= n;
         bytes_sent += n;
     }
     return 0;
@@ -162,16 +161,31 @@ void client_talk(const char *text) {
 
 #ifdef __EMSCRIPTEN__
 void client_message(int fd, void *userData) {
+    static char pending[65536];
+    static size_t used = 0;
     char buf[16384];
-    int len = recv(fd, &buf, sizeof(buf), 0);
-
-    //fprintf(stderr, "read %d bytes\n", len);
-    if (len == -1) return;
-
-    buf[len] = 0;
-
-    void (*parse_buffer)(char *, int) = (void (*)(char *, int))userData;
-    parse_buffer(buf, len);
+    int len;
+    while ((len = recv(fd, buf, sizeof(buf), 0)) > 0) {
+        if (used + (size_t)len >= sizeof(pending)) {
+            fprintf(stderr, "Server packet exceeds receive buffer\n");
+            client_disable();
+            close(fd);
+            used = 0;
+            return;
+        }
+        memcpy(pending + used, buf, (size_t)len);
+        used += (size_t)len;
+        size_t complete = used;
+        while (complete && pending[complete - 1] != '\n') complete--;
+        if (!complete) continue;
+        char next = pending[complete];
+        pending[complete] = '\0';
+        void (*parse_buffer)(char *, int) = (void (*)(char *, int))userData;
+        parse_buffer(pending, (int)complete);
+        pending[complete] = next;
+        memmove(pending, pending + complete, used - complete);
+        used -= complete;
+    }
 }
 #else
 char *client_recv() {
@@ -286,7 +300,7 @@ void client_connect(char *hostname, int port) {
                 Module['websocket']['url'] = host;
             } else {
                 // hostname
-                Module['websocket']['url'] = ws + host + ':' + port + '/craftws';
+                Module['websocket']['url'] = (document.location.protocol === 'https:' ? wss : ws) + host + ':' + port + '/craftws';
             }
             console.log('websocket url:', Module['websocket']['url']);
         }, hostname, port);

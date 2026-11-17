@@ -81,6 +81,10 @@ if any(not CATEGORY_RE.fullmatch(c) for c in BCH_ALLOWED_TOKEN_CATEGORIES):
 
 
 DB_PATH = Path(os.getenv("CASHADDR_DB_PATH", "/data/cash-addresses.sqlite3"))
+NETCRAFT_DB_PATH = os.getenv("NETCRAFT_DB_PATH", "").strip()
+NETCRAFT_MINING_REWARDS_ENABLED = os.getenv("NETCRAFT_MINING_REWARDS_ENABLED", "false")
+if NETCRAFT_MINING_REWARDS_ENABLED not in ("true", "false"):
+    raise RuntimeError("NETCRAFT_MINING_REWARDS_ENABLED must be true or false.")
 
 _CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 _CHARSET_MAP = {char: index for index, char in enumerate(_CHARSET)}
@@ -917,6 +921,57 @@ def process_one_reward() -> bool:
         return True
 
 
+def process_one_mining_reward() -> bool:
+    if NETCRAFT_MINING_REWARDS_ENABLED != "true" or not NETCRAFT_DB_PATH:
+        return False
+    with sqlite3.connect(
+        Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=rw",
+        uri=True,
+        timeout=10,
+    ) as db:
+        row = db.execute(
+            """SELECT id, cash_address, category, signed_tx, txid FROM mining_rewards
+               WHERE sent_at IS NULL ORDER BY signed_tx IS NULL, id LIMIT 1"""
+        ).fetchone()
+        if not row:
+            return False
+        reward_id, address, category, signed_tx, txid = row
+        validate_token_aware_cashaddr(address)
+        if not CATEGORY_RE.fullmatch(category):
+            raise RuntimeError("Invalid mining reward category.")
+        if not signed_tx:
+            candidate, candidate_txid = build_reward_transaction(address, category)
+            db.execute(
+                """UPDATE mining_rewards SET signed_tx = ?, txid = ?
+                   WHERE id = ? AND signed_tx IS NULL AND sent_at IS NULL""",
+                (candidate, candidate_txid, reward_id),
+            )
+            db.commit()
+            return True
+        try:
+            result = bch_rpc("sendrawtransaction", [signed_tx])
+        except RuntimeError as broadcast_error:
+            try:
+                known = bch_rpc("gettransaction", [txid], wallet=True)
+            except RuntimeError:
+                raise broadcast_error
+            if not isinstance(known, dict) or known.get("confirmations", 0) < 0:
+                raise broadcast_error
+            if known.get("confirmations", 0) == 0:
+                try:
+                    bch_rpc("getmempoolentry", [txid])
+                except RuntimeError:
+                    raise broadcast_error
+        else:
+            if not isinstance(result, str) or result.lower() != txid:
+                raise RuntimeError("BCHN returned a mismatched broadcast transaction ID.")
+        db.execute(
+            "UPDATE mining_rewards SET sent_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (reward_id,),
+        )
+        return True
+
+
 def reward_worker() -> None:
     while not reward_stop.is_set():
         try:
@@ -925,6 +980,8 @@ def reward_worker() -> None:
             logger.error("Could not purge short links: %s", type(exc).__name__)
         try:
             if process_one_reward():
+                continue
+            if process_one_mining_reward():
                 continue
         except RewardDatabaseError as exc:
             logger.error("Could not process token reward: %s", exc)

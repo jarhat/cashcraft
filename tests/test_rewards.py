@@ -30,6 +30,33 @@ class RewardTests(unittest.TestCase):
         self.addCleanup(self.path.stop)
         backend.init_db()
 
+    def test_mining_reward_retries_the_same_transaction(self):
+        path = Path(self.tmp.name) / "netcraft.sqlite3"
+        address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
+        with sqlite3.connect(path) as db:
+            db.execute("""CREATE TABLE mining_rewards (
+                id INTEGER PRIMARY KEY, cash_address TEXT, category TEXT,
+                signed_tx TEXT, txid TEXT, sent_at TEXT
+            )""")
+            db.execute("INSERT INTO mining_rewards (cash_address, category) VALUES (?, ?)", (address, "a" * 64))
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path)), \
+             patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
+             patch.object(backend, "build_reward_transaction", return_value=("abcd", "c" * 64)) as build:
+            self.assertTrue(backend.process_one_mining_reward())
+            with patch.object(backend, "bch_rpc", side_effect=[RuntimeError("timeout"), RuntimeError("unavailable")]):
+                with self.assertRaises(RuntimeError):
+                    backend.process_one_mining_reward()
+            with patch.object(backend, "bch_rpc", return_value="c" * 64) as rpc:
+                self.assertTrue(backend.process_one_mining_reward())
+                rpc.assert_called_once_with("sendrawtransaction", ["abcd"])
+            self.assertFalse(backend.process_one_mining_reward())
+            build.assert_called_once_with(address, "a" * 64)
+
+    def test_mining_rewards_disabled_do_not_open_database(self):
+        with patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "false"), \
+             patch.object(backend, "NETCRAFT_DB_PATH", str(Path(self.tmp.name) / "missing.sqlite3")):
+            self.assertFalse(backend.process_one_mining_reward())
+
     def test_chain_status_uses_cached_node_data_and_reports_sync(self):
         info = {
             "chain": "main", "blocks": 800000, "headers": 800002,

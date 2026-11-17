@@ -1849,7 +1849,11 @@ function claimBeerReward() {
   }
 }
 
-setupGames($, { claimBeer: claimBeerReward, translate });
+setupGames($, {
+  claimBeer: claimBeerReward,
+  translate,
+  getRewardAddress: () => walletReady ? addressFor(0, 0) : null,
+});
 
 $('show-nfts').addEventListener('change', () => {
   portfolioPage = 0;

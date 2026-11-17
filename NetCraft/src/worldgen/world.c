@@ -1,7 +1,6 @@
 #include "../config.h"
 #include "../item.h"
 #include "noise.h"
-#include "../util.h"
 #include "world.h"
 #include "base_terrain.h"
 #include "biome_temperate.h"

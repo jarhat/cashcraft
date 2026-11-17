@@ -2,8 +2,8 @@ NetCraft
 ========
 
 Voxel game for modern web browsers (Chrome, Firefox, Safari) and desktop operating systems (Windows, macOS, Linux).
-Just a few thousand lines of C using modern OpenGL (shaders). Online multiplayer support is included using a Python-based server
-or through [WebSandboxMC](https://github.com/satoshinm/WebSandboxMC/).
+The C client uses OpenGL/WebGL shaders and connects to the included Rust
+multiplayer server through TCP or WebSockets.
 
 **Live demo: https://satoshinm.github.io/NetCraft/**
 
@@ -171,29 +171,40 @@ In the web-based version, you can pass command-line arguments after `#` in the U
 
 #### Server
 
-You can run your own server or connect to mine. The server is written in Python
-but requires a compiled DLL so it can perform the terrain generation just like
-the client.
+Run `cargo run --release --manifest-path server/Cargo.toml` to listen on TCP
+port 4080. `NETCRAFT_LISTEN` and `NETCRAFT_DB` override the listen address and
+SQLite database. The server compiles the same terrain generator as the client.
+Clients generate baseline terrain locally and request persisted edits, so both
+must use matching builds. Python-server worlds created with a custom seed
+cannot be migrated by copying the database alone.
 
-    gcc -std=c99 -O3 -fPIC -shared -o world -I src -I deps/noise deps/noise/noise.c src/world.c
-    python server.py [HOST [PORT]]
+The repository's Compose setup runs the Rust server behind websockify and an
+ACME-enabled HTTPS proxy. Set `NETCRAFT_WS_DOMAIN` to a public DNS name pointing
+at the proxy, configure the other required values in `.env`, build the WASM
+client into `NETCRAFT_BUILD_PATH`, and start Compose. The frontend is built with
+`wss://<NETCRAFT_WS_DOMAIN>/craftws` and connects automatically when NetCraft
+opens. Rebuild the frontend after changing the domain. The local client can
+also use `/online` and a full WebSocket URL.
 
-Multiplayer is supported in both the native and web clients. To connect to a server
-from the web client, the server must support WebSockets; the Python server can be bridged
-using [websockify](https://github.com/novnc/websockify) as follows:
+Compose enables mining rewards by default. A connected token-aware address
+receives one base unit for a naturally generated, previously unedited block;
+placed blocks do not earn another reward. `NETCRAFT_BLOCK_CATEGORY_<id>`
+overrides `BCH_REWARD_CATEGORY` for each block type; fund the BCHN wallet with
+those categories and BCH for transaction fees. Set
+`NETCRAFT_MINING_REWARDS_ENABLED=false` to stop new rewards and payouts. Pending
+rewards remain in the database and resume when enabled again. Back up the
+world database and BCHN wallet together. Run only one payout worker.
 
-    ./websockify.py 4081 localhost:4080
-
-Or for an alternative Java-based Bukkit plugin WebSocket server, check out:
-
-    https://github.com/satoshinm/WebSandboxMC/
-
-The web-based client will connect to WebSockets at the path `/craftws` by default. Full
-URLs can be given in place of the hostname to connect at other paths, or to use SSL (wss://).
-`/online localhost` is equivalent to `/online ws://localhost:4081/craftws`. The special
-hostname "-" can be used to connect to the same server the page is served from.
+The protocol does not authenticate players or prevent automated mining, and
+there is no payout cap. A public server can spend all configured tokens and
+BCH available for fees. Standalone server and backend processes default to
+rewards disabled unless `NETCRAFT_MINING_REWARDS_ENABLED=true`.
 
 ### Controls
+
+On touch devices, use the joystick to move, drag the game view to look, and use
+the on-screen buttons to jump, mine, build, and change blocks. The Sound button
+enables synthesized block sounds; the game dialog also has a fullscreen button.
 
 Mouse:
 

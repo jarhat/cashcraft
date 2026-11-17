@@ -1,5 +1,8 @@
 :8080 {
   encode gzip
+  handle /craftws {
+    reverse_proxy netcraft-websockify:4081
+  }
   handle /api/* {
     reverse_proxy auth:3000 {
       header_up X-Preview-Origin {scheme}://{host}

@@ -1394,7 +1394,7 @@ void load_chunk(WorkerItem *item) {
 
 void request_chunk(int p, int q) {
     int key = db_get_key(p, q);
-    client_chunk(p, q, key);
+    client_chunk(p, q, key ? key : -1);
 }
 
 void init_chunk(Chunk *chunk, int p, int q) {
@@ -1422,12 +1422,13 @@ void create_chunk(Chunk *chunk, int p, int q) {
 
 #ifdef __EMSCRIPTEN__
     if (get_client_enabled()) {
-        /* Stream the center chunk and its 8 neighbors. */
-        for (int dz = -1; dz <= 1; ++dz) {
-            for (int dx = -1; dx <= 1; ++dx) {
-                request_chunk(p + dx, q + dz);
-            }
-        }
+        WorkerItem item = {0};
+        item.p = p;
+        item.q = q;
+        item.block_maps[1][1] = &chunk->map;
+        item.light_maps[1][1] = &chunk->lights;
+        load_chunk(&item);
+        request_chunk(p, q);
     } else {
         WorkerItem item = {0};
         item.p = chunk->p;
@@ -1534,7 +1535,11 @@ void check_workers() {
 #define NEAR_RADIUS             2
 #define AHEAD_DISTANCE          6
 #define AHEAD_HALF_WIDTH        2
+#ifdef __EMSCRIPTEN__
+#define MAX_NEW_CHUNKS_FRAME    1
+#else
 #define MAX_NEW_CHUNKS_FRAME    8
+#endif
 #define MAX_CANDIDATE_CHUNKS    256
 
 typedef struct {
@@ -1629,6 +1634,17 @@ void force_chunks(Player *player) {
         }
     }
 
+#ifdef __EMSCRIPTEN__
+    /* Browser builds do not use pthread workers; fill the rest incrementally. */
+    for (int dp = -g->create_radius; dp <= g->create_radius; ++dp) {
+        for (int dq = -g->create_radius; dq <= g->create_radius; ++dq) {
+            add_chunk_candidate(candidates, &candidate_count,
+                center_p + dp, center_q + dq,
+                sqrtf((float)(dp * dp + dq * dq)));
+        }
+    }
+#endif
+
     /*
      * Add chunks ahead of the crosshair. The small forward bias makes
      * forward chunks load before equally distant side/rear chunks.
@@ -1678,8 +1694,9 @@ void force_chunks(Player *player) {
              * do this when a chunk becomes visible or dirty rather than
              * rebuilding every frame.
              */
-            if (chunk->dirty) {
+            if (chunk->dirty && created < MAX_NEW_CHUNKS_FRAME) {
                 gen_chunk_buffer(chunk);
+                ++created;
             }
             continue;
         }
@@ -1786,13 +1803,13 @@ void ensure_chunks_worker(Player *player, Worker *worker) {
              * Online: ask the server for this chunk. Do not run load_chunk()
              * or compute an empty chunk before the response arrives.
              */
-            request_chunk(best_a, best_b);
-            return;
+            load = true;
+        } else {
+            load = true;
         }
-#endif
-
-        /* Offline Emscripten/native: generate the chunk locally. */
+#else
         load = true;
+#endif
     }
 
     WorkerItem *item = &worker->item;
@@ -1851,12 +1868,15 @@ void ensure_chunks(Player *player) {
         return;
     }
 
+#ifndef __EMSCRIPTEN__
     /* Finish completed jobs before selecting or scheduling more chunks. */
     check_workers();
+#endif
 
     /* Update the desired nearby and crosshair-forward chunk set. */
     force_chunks(player);
 
+#ifndef __EMSCRIPTEN__
     /* Dispatch available work to idle workers. */
     for (int i = 0; i < WORKERS; ++i) {
         Worker *worker = g->workers + i;
@@ -1865,6 +1885,7 @@ void ensure_chunks(Player *player) {
         if (worker->state == WORKER_IDLE) {
             ensure_chunks_worker(player, worker);
         }
+#endif
         mtx_unlock(&worker->mtx);
     }
 }
@@ -2324,6 +2345,9 @@ void add_message(const char *text) {
 
 static char username[128] = {0};
 static char access_token[128] = {0};
+#ifdef __EMSCRIPTEN__
+static char reward_address[128] = {0};
+#endif
 static bool have_access_token = false;
 
 void set_access_token(char *username_in, char *access_token_in) {
@@ -2727,8 +2751,11 @@ int get_targeted_block(int *x, int *y, int *z, int *face) {
 void on_mine() {
     int hx, hy, hz, face;
     int hw = get_targeted_block(&hx, &hy, &hz, &face);
-    if (hy < 256 && is_destructable(hw)) {
+    if (hw && hy > 0 && hy < 256 && is_destructable(hw)) {
         set_block(hx, hy, hz, 0);
+#ifdef __EMSCRIPTEN__
+        EM_ASM(if (Module.playBlockSound) Module.playBlockSound(0););
+#endif
 
         //struct ItemStack stack = { .type = hw, .count = 1 };
         //inventory_add(hotbar, HOTBAR_INVENTORY_SIZE, &stack);
@@ -2744,27 +2771,19 @@ void on_build() {
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(true, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (hy < 256) {
+    if (hw && hy > 0 && hy < 256) {
         if (!is_obstacle(hw)) {
             hw = hit_test(false, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
+            if (!hw) return;
         }
 
         if (!player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
-            int hw;
-            if (is_creative) {
-                hw = hotbar_items[g->item_index];
-            } else {
-                //hw = hotbar[g->item_index % HOTBAR_INVENTORY_SIZE].type;
-                //struct ItemStack stack = { .type = hw, .count = 1 };
-                //int missing = inventory_subtract(hotbar, HOTBAR_INVENTORY_SIZE, &stack);
-		int missing = 0;
-                if (missing) {
-                    add_message("Out of blocks to build, go mine some");
-                    return;
-                }
-            }
+            int hw = hotbar_items[g->item_index];
 
             set_block(hx, hy, hz, hw);
+#ifdef __EMSCRIPTEN__
+            EM_ASM(if (Module.playBlockSound) Module.playBlockSound(1););
+#endif
             record_block(hx, hy, hz, hw);
         }
     }
@@ -3112,6 +3131,12 @@ void on_file_drop(GLFWwindow *window, int count, const char **paths) {
 }
 
 
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE void touch_next_item(void) {
+    on_key(g->window, CRAFT_KEY_ITEM_NEXT, 0, GLFW_PRESS, 0);
+}
+#endif
+
 void create_window() {
     g->window = glfwCreateWindow(
         WINDOW_WIDTH, WINDOW_HEIGHT, "Craft", NULL, NULL);
@@ -3195,6 +3220,8 @@ void handle_movement(double dt) {
         if (glfwGetKey(g->window, CRAFT_KEY_BACKWARD)) sz++;
         if (glfwGetKey(g->window, CRAFT_KEY_LEFT)) sx--;
         if (glfwGetKey(g->window, CRAFT_KEY_RIGHT)) sx++;
+        sx += touch_move_x;
+        sz += touch_move_z;
         if (glfwGetKey(g->window, GLFW_KEY_LEFT)) s->rx -= m;
         if (glfwGetKey(g->window, GLFW_KEY_RIGHT)) s->rx += m;
         if (glfwGetKey(g->window, GLFW_KEY_UP)) s->ry += m;
@@ -3202,6 +3229,7 @@ void handle_movement(double dt) {
 
         joystick_apply_move(&sx, &sz);
     }
+
     float vx, vy = 0, vz;
     get_motion_vector(g->flying, sz, sx, s->rx, s->ry, &vx, &vy, &vz);
 
@@ -3625,6 +3653,11 @@ int main(int argc, char **argv) {
         g->server_port = (argc == 3 && strcmp(argv[2], "-") != 0 && strlen(argv[2]) != 0) ? atoi(argv[2]) : DEFAULT_PORT;
         set_db_path();
 
+#ifdef __EMSCRIPTEN__
+        if (argc == 4) {
+            snprintf(reward_address, sizeof(reward_address), "%s", argv[3]);
+        }
+#endif
         if (argc > 4) {
             set_access_token(argv[3], argv[4]);
         }
@@ -3639,6 +3672,7 @@ int main(int argc, char **argv) {
     g->delete_radius = DELETE_CHUNK_RADIUS;
     g->sign_radius = RENDER_SIGN_RADIUS;
 
+#ifndef __EMSCRIPTEN__
     // INITIALIZE WORKER THREADS
     for (int i = 0; i < WORKERS; i++) {
         Worker *worker = g->workers + i;
@@ -3648,6 +3682,7 @@ int main(int argc, char **argv) {
         cnd_init(&worker->cnd);
         thrd_create(&worker->thrd, worker_run, worker);
     }
+#endif
 
     // OUTER LOOP //
     g->running = true;
@@ -3683,6 +3718,13 @@ void client_opened(int fd, void *userData) {
     client_start();
     client_version(1);
     login();
+#ifdef __EMSCRIPTEN__
+    if (reward_address[0]) {
+        char message[160];
+        snprintf(message, sizeof(message), "W,%s\n", reward_address);
+        client_send(message);
+    }
+#endif
     main_inited();
 }
 
@@ -3877,7 +3919,6 @@ void one_iter() {
         emscripten_push_main_loop_blocker(main_init, NULL);
         emscripten_set_main_loop(one_iter, 0, 1);
 	handle_movement(dt);
-	request_visible_chunks(s->x, s->z);
     }
 #endif
 }

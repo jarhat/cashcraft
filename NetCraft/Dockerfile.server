@@ -1,0 +1,10 @@
+FROM rust:1.85-bookworm AS build
+WORKDIR /app
+COPY . .
+RUN cargo build --locked --release --manifest-path server/Cargo.toml
+
+FROM debian:bookworm-slim
+COPY --from=build /app/server/target/release/netcraft-server /usr/local/bin/netcraft-server
+ENV NETCRAFT_LISTEN=0.0.0.0:4080 NETCRAFT_DB=/data/netcraft.db
+EXPOSE 4080
+ENTRYPOINT ["netcraft-server"]
