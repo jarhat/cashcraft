@@ -334,6 +334,9 @@ Textures are based on:
 * Pixeludi Pack by Wojtek Mroczek, Creative Commons CC-BY-SA, 2011, as used in [TrueCraft](https://github.com/SirCmpwn/TrueCraft/).
 * [Piehole Plain](http://piehole.alexvoelk.de) by Alex Voelk, CC-BY-SA 3.0
 
+The wallet's Mina theme uses enlarged grass and plank tiles derived from
+`textures/texture.png`; the source texture credits and licenses above apply.
+
 Custom textures can be loaded from the server, or by dragging-and-dropping a .zip file or .png texture atlas
 onto the game. NetCraft uses its own texture format, although there is some interoperability provided.
 To customize textures you can start with [/textures/texture.png](/textures/texture.png), or (may not work

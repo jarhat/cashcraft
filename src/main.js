@@ -283,7 +283,7 @@ function setTheme(theme) {
   });
 }
 const migratedTheme = { dark: 'frost', blue: 'frost', green: 'aurora', bch: 'aurora', 'bch-sunrise': 'aurora' }[savedTheme] || savedTheme;
-setTheme(['frost', 'aurora'].includes(migratedTheme) ? migratedTheme : 'aurora');
+setTheme(['frost', 'aurora', 'mina'].includes(migratedTheme) ? migratedTheme : 'aurora');
 
 for (const name of ['theme', 'language']) {
   const toggle = $(`${name}-toggle`);
@@ -1921,7 +1921,7 @@ $('notifications-toggle').addEventListener('click', () => {
 $('notifications-close').addEventListener('click', () => notificationsDialog.close());
 notificationsDialog.addEventListener('close', () => {
   markNotificationsRead();
-  $('notifications-toggle').focus({ preventScroll: true });
+  ($('game-dialog').open ? $('game-notifications') : $('notifications-toggle')).focus({ preventScroll: true });
 });
 
 let notificationAudio;

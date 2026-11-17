@@ -7,6 +7,7 @@ const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 export function setupGames($, { claimBeer, translate, getRewardAddress = () => null }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
+  const stage = $('game-stage');
   let generation = 0;
   let activeGame = null;
   for (const [id, game] of Object.entries(games)) {
@@ -57,16 +58,23 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
   $('game-close').addEventListener('click', () => dialog.close());
   $('game-wallet').addEventListener('click', () => $('connection-open').click());
   $('game-notifications').addEventListener('click', () => $('notifications-toggle').click());
+  document.addEventListener('fullscreenchange', () => {
+    const active = document.fullscreenElement === stage;
+    const label = translate(active ? 'Exit fullscreen' : 'Enter fullscreen');
+    $('game-fullscreen').setAttribute('aria-pressed', String(active));
+    $('game-fullscreen').setAttribute('aria-label', label);
+    $('game-fullscreen').setAttribute('title', label);
+  });
   $('game-fullscreen').addEventListener('click', async () => {
     try {
-      if (document.fullscreenElement === dialog) await document.exitFullscreen();
-      else await dialog.requestFullscreen();
+      if (document.fullscreenElement === stage) await document.exitFullscreen();
+      else await stage.requestFullscreen();
     } catch (error) {
       $('game-dialog-status').textContent = translate('Fullscreen is unavailable.');
     }
   });
   dialog.addEventListener('close', () => {
-    if (document.fullscreenElement === dialog) {
+    if (document.fullscreenElement === stage) {
       document.exitFullscreen().catch((error) => {
         console.error('Could not exit fullscreen:', error);
       });

@@ -7,8 +7,8 @@ import { inspectNft } from '../src/nft-inspection.js';
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
 test('theme preferences migrate and select the correct palette', () => {
-  for (const [saved, expected] of [[null, 'aurora'], ['bch', 'aurora'], ['bch-sunrise', 'aurora'], ['green', 'aurora'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'aurora'], ['frost', 'frost'], ['unknown', 'aurora']]) {
-    const buttons = ['frost', 'aurora'].map((themeOption) => ({
+  for (const [saved, expected] of [[null, 'aurora'], ['bch', 'aurora'], ['bch-sunrise', 'aurora'], ['green', 'aurora'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'aurora'], ['frost', 'frost'], ['mina', 'mina'], ['unknown', 'aurora']]) {
+    const buttons = ['frost', 'aurora', 'mina'].map((themeOption) => ({
       dataset: { themeOption },
       setAttribute(name, value) { this[name] = value; },
     }));
