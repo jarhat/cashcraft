@@ -3,15 +3,19 @@ export function updateScrollEffects(topbar) {
   document.documentElement.style.setProperty('--topbar-height', `${Math.ceil(height)}px`);
 }
 
-export function updatePanelFades(topbar, panels) {
+export function updatePanelFades(topbar, panels, outlines) {
   const bottom = Math.max(0, topbar.getBoundingClientRect().bottom);
   const updates = [...panels].map((panel) => {
     const bounds = panel.getBoundingClientRect();
     const fade = bounds.height && bounds.top < bottom + 16 && bounds.bottom > 0 ? `${bottom - bounds.top}px` : '';
     const openMenu = fade && bounds.top < bottom ? panel.querySelector('.token-options[open]') : null;
-    return { panel, fade, openMenu };
+    const showOutline = bounds.height && bounds.top < bottom && bounds.bottom > 0
+      && (panel.classList.contains('panel') || panel.classList.contains('wizard-dialog'));
+    return { panel, bounds, fade, openMenu, showOutline };
   });
-  for (const { panel, fade, openMenu } of updates) {
+  if (outlines) outlines.layer.style.height = `${bottom}px`;
+  const active = new Set();
+  for (const { panel, bounds, fade, openMenu, showOutline } of updates) {
     if (openMenu) openMenu.open = false;
     if (fade) {
       if (panel.style.getPropertyValue('--fade-under-bar') !== fade) {
@@ -22,14 +26,36 @@ export function updatePanelFades(topbar, panels) {
       panel.classList.remove('under-topbar');
       panel.style.removeProperty('--fade-under-bar');
     }
+    if (outlines && showOutline) {
+      active.add(panel);
+      let outline = outlines.items.get(panel);
+      if (!outline) {
+        outline = document.createElement('div');
+        outline.className = panel.classList.contains('wizard-dialog') ? 'panel-outline guide-outline' : 'panel-outline';
+        outlines.layer.append(outline);
+        outlines.items.set(panel, outline);
+      }
+      outline.style.transform = `translate(${bounds.left}px, ${bounds.top}px)`;
+      outline.style.width = `${bounds.width}px`;
+      outline.style.height = `${bounds.height}px`;
+    }
+  }
+  if (outlines) {
+    for (const [panel, outline] of outlines.items) {
+      if (!active.has(panel)) {
+        outline.remove();
+        outlines.items.delete(panel);
+      }
+    }
   }
 }
 
 export function setupScrollEffects() {
   const topbar = document.querySelector('.topbar');
   const dashboard = document.querySelector('.dashboard');
+  const outlines = { layer: document.querySelector('#panel-outline-layer'), items: new Map() };
   let scheduled = false;
-  const updateFades = () => updatePanelFades(topbar, document.querySelectorAll('.dashboard > .panel, .dashboard > .wizard-dialog'));
+  const updateFades = () => updatePanelFades(topbar, document.querySelectorAll('.dashboard > .panel, .dashboard > .wizard-dialog, .media-gallery, #log, .chain-decoration, footer'), outlines);
   const update = () => {
     scheduled = false;
     updateScrollEffects(topbar);

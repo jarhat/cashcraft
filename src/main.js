@@ -298,6 +298,7 @@ function setConnection(connected) {
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
   $('advanced-settings').hidden = !connected;
   document.body.classList.toggle('wallet-connected', connected);
+  $('network-wallet-status').textContent = translate(connected ? 'Wallet connected' : 'Not connected');
   if (!$('wizard-dialog').hidden) {
     if (connected) $('wizard-next').disabled = false;
     else {

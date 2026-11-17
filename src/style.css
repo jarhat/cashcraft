@@ -2652,7 +2652,7 @@ html[data-theme="aurora"] {
   --sun-color: #8dbaf9;
 }
 html[data-theme="frost"], html[data-theme="aurora"] {
-  --miami-pink: rgb(244 109 173 / 10%);
+  --miami-pink: rgb(244 109 173 / 5%);
   --miami-blue: rgb(59 215 231 / 8%);
 }
 .panel {
@@ -2691,7 +2691,8 @@ html[data-theme="frost"], html[data-theme="aurora"] {
 .topbar { gap: clamp(10px, 1.618vw, 20px); }
 .topbar .wizard-guide { justify-self: end; align-self: start; }
 .topbar-tools { gap: 10px; }
-.dashboard > .under-topbar {
+.dashboard > .under-topbar, .media-gallery.under-topbar, #log.under-topbar,
+.chain-decoration.under-topbar, footer.under-topbar {
   -webkit-mask-image: linear-gradient(to bottom, transparent var(--fade-under-bar), #000 calc(var(--fade-under-bar) + 16px));
   mask-image: linear-gradient(to bottom, transparent var(--fade-under-bar), #000 calc(var(--fade-under-bar) + 16px));
 }
@@ -2755,6 +2756,47 @@ body:not(.wallet-connected) .dashboard { padding: clamp(24px, 5vh, 48px) 0 32px;
   margin-top: 24px;
   pointer-events: none;
 }
+.network i { background: #8c9bae; box-shadow: none; }
+body.wallet-connected .network i {
+  background: #56e69a;
+  box-shadow: 0 0 10px rgb(86 230 154 / 65%);
+}
+.panel-outline-layer {
+  position: fixed;
+  z-index: 9;
+  top: 0;
+  left: 0;
+  width: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.panel-outline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 1px solid #68cfff;
+  border-radius: 17px;
+  box-shadow: inset 0 0 5px rgb(69 186 255 / 55%), 0 0 6px rgb(69 186 255 / 40%);
+}
+.panel-outline.guide-outline { border-radius: 14px; }
+body { background-attachment: fixed, fixed, fixed, fixed; }
+.mesh-landscape, body.wallet-connected .mesh-landscape {
+  height: min(600px, 80vh);
+}
+.mesh-landscape::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background-image:
+    linear-gradient(rgb(238 133 188 / 13%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(129 210 255 / 11%) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: 0 0;
+}
+.mesh-terrain { height: 100%; }
+.chain-decoration { height: 82px; margin-top: 20px; }
+.chain-art { inset: 0; height: 82px; opacity: .5; filter: none; }
+.chain-links { stroke-width: 1.1; }
 @media (max-width: 900px) {
   .topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
   .topbar .wizard-guide { grid-column: 1; grid-row: 1; }

@@ -797,11 +797,13 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   const context = {
     $, document: { querySelectorAll: () => panels, body: { classList: { toggle() {} } } }, sending: false,
     pairingInProgress: false, transferInteracted: false, tutorialStep: 2,
+    translate: (text) => text,
     showTutorialStep() { context.tutorialUpdated = true; },
   };
   runInNewContext(source.slice(start, end), context);
   context.setConnection(true);
   assert.ok(panels.every((panel) => !panel.hidden));
+  assert.equal($('network-wallet-status').textContent, 'Wallet connected');
   assert.equal($('wizard-guide').hidden, false);
   assert.equal($('advanced-settings').hidden, false);
   $('wizard-dialog').hidden = false;
@@ -812,6 +814,7 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   assert.equal(context.tutorialUpdated, undefined);
   context.setConnection(false);
   assert.ok(panels.every((panel) => panel.hidden));
+  assert.equal($('network-wallet-status').textContent, 'Not connected');
   assert.equal($('wizard-guide').hidden, false);
   assert.equal($('advanced-settings').hidden, true);
   assert.equal(context.tutorialStep, 0);
