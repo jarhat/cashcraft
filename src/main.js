@@ -2,6 +2,7 @@ import './style.css';
 import { setLanguage, translate } from './i18n.js';
 import { createPaymentQrImage } from './payment-qr-image.js';
 import { setupScrollEffects } from './scroll-effects.js';
+import { setupSnow } from './snow.js';
 import { fetchTokenMetadata, fetchCauldronSpot } from './portfolio-data.js';
 import { loadTokenLogo } from './token-logo.js';
 import { inspectNft } from './nft-inspection.js';
@@ -22,6 +23,7 @@ const logger = createLogger(
   import.meta.env.VITE_CONSOLE_LOG_LEVEL || (import.meta.env.DEV ? 'debug' : 'error'),
 );
 setupScrollEffects();
+setupSnow(document.getElementById('snow-canvas'));
 
 for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
   document.querySelector(selector).content = new URL('/social-preview.png', window.location.origin).href;
