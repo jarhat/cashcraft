@@ -1,4 +1,5 @@
 const spanish = {
+  'Priced tokens': 'Tokens con precio',
   'Wallet connected': 'Cartera conectada',
   'About circulating supply': 'Sobre la oferta circulante',
   'Circulating supply is not verified here. Estimates depend on identifying reserved and burned tokens.': 'La oferta circulante no se verifica aquí. Las estimaciones dependen de identificar los tokens reservados y quemados.',
@@ -205,6 +206,7 @@ const spanish = {
 
 const french = {
   'Wallet connected': 'Portefeuille connecté',
+  'Priced tokens': 'Jetons avec prix',
   'About circulating supply': 'À propos de la quantité en circulation',
   'Circulating supply is not verified here. Estimates depend on identifying reserved and burned tokens.': 'La quantité en circulation n’est pas vérifiée ici. Les estimations dépendent de l’identification des jetons réservés et détruits.',
   'Explore supply and verification ↗': 'Consulter la quantité et sa vérification ↗',
@@ -410,6 +412,7 @@ const french = {
 
 const german = {
   'Wallet connected': 'Wallet verbunden',
+  'Priced tokens': 'Token mit Preis',
   'About circulating supply': 'Über die Umlaufmenge',
   'Circulating supply is not verified here. Estimates depend on identifying reserved and burned tokens.': 'Die Umlaufmenge wird hier nicht überprüft. Schätzungen hängen davon ab, reservierte und verbrannte Token zu erkennen.',
   'Explore supply and verification ↗': 'Umlaufmenge und Prüfung ansehen ↗',

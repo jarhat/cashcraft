@@ -6,7 +6,7 @@ export function tokenIconUrls(uri) {
   if (typeof uri !== 'string' || !uri.trim()) throw new Error('No BCMR token logo was found for this category.');
   let path;
   let original;
-  if (uri.startsWith('ipfs://')) path = uri.slice(7).replace(/^ipfs\//, '');
+  if (/^ipfs:\/\//i.test(uri)) path = uri.slice(7).replace(/^ipfs\//i, '');
   else {
     const url = new URL(uri);
     if (url.protocol !== 'https:' || url.username || url.password) {
@@ -30,7 +30,7 @@ export function tokenIconUrls(uri) {
   return [...new Set(original ? [original, ...gateways] : gateways)];
 }
 
-function loadImage(url, signal) {
+function loadImage(url, signal, cors) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     const cleanup = () => {
@@ -49,21 +49,34 @@ function loadImage(url, signal) {
       reject(new Error('The BCMR token logo timed out.'));
     }, 5000);
     signal.addEventListener('abort', cancel, { once: true });
-    image.crossOrigin = 'anonymous';
+    if (cors) image.crossOrigin = 'anonymous';
     image.onload = () => { cleanup(); resolve(image); };
     image.onerror = () => { cleanup(); reject(new Error('The BCMR token logo could not be loaded.')); };
     image.src = url;
   });
 }
 
-export async function loadTokenLogo(category) {
+export async function loadTokenLogo(category, { requireCors = false } = {}) {
   try {
     const metadata = await getBcmrMetadata(category);
-    const uri = metadata.uris?.image ?? metadata.uris?.icon;
-    const urls = tokenIconUrls(uri);
+    const uris = [metadata.uris?.icon, metadata.uris?.image].filter((uri) => typeof uri === 'string' && uri.trim());
+    if (!uris.length) throw new Error('No BCMR token logo was found for this category.');
+    const errors = [];
+    const urls = [...new Set(uris.flatMap((uri) => {
+      try {
+        return tokenIconUrls(uri);
+      } catch (error) {
+        errors.push(error);
+        return [];
+      }
+    }))];
+    if (!urls.length) throw new AggregateError(errors, 'No supported BCMR token logo URI.');
     const controller = new AbortController();
     try {
-      return await Promise.any(urls.map((url) => loadImage(url, controller.signal)));
+      return await Promise.any(urls.map((url) => loadImage(url, controller.signal, true).catch((error) => {
+        if (requireCors || controller.signal.aborted) throw error;
+        return loadImage(url, controller.signal, false);
+      })));
     } finally {
       controller.abort();
     }

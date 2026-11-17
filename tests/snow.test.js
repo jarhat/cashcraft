@@ -50,6 +50,7 @@ test('snow falls, pauses when hidden, and respects motion preference changes and
     setTransform() {},
     clearRect() { points.length = 0; },
     beginPath() {},
+    moveTo() {},
     arc(x, y) { points.push({ x, y }); },
     fill() {},
   };

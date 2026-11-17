@@ -32,6 +32,46 @@ test('validates BCMR category and decimals', async () => {
   } finally { globalThis.fetch = original; }
 });
 
+test('accepts omitted BCMR decimals and preserves metadata for a previously issued category', async () => {
+  const original = globalThis.fetch;
+  const category = '2'.repeat(64);
+  const nextCategory = '3'.repeat(64);
+  const registry = {
+    identities: {
+      [category]: {
+        '2020-01-01T00:00:00.000Z': { name: 'Original', token: { category, symbol: 'OLD' } },
+        '2021-01-01T00:00:00.000Z': { name: 'Migrated', token: { category: nextCategory, symbol: 'NEW', decimals: 8 } },
+      },
+    },
+  };
+  globalThis.fetch = async (url) => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
+    ? { ok: true, json: async () => authchainResponse(category, undefined, registry) }
+    : registryResponse(registry);
+  try {
+    const metadata = await fetchTokenMetadata(category);
+    assert.equal(metadata.name, 'Original');
+    assert.equal(metadata.symbol, 'OLD');
+    assert.equal(metadata.decimals, 0);
+  } finally { globalThis.fetch = original; }
+});
+
+test('selects the BCMR publication with the lowest output index', async () => {
+  const original = globalThis.fetch;
+  const category = '4'.repeat(64);
+  const registry = metadataResponse(category, { name: 'First output' });
+  const response = authchainResponse(category, undefined, registry);
+  const outputs = response.data.transaction[0].authchains[0].migrations[0].transaction[0].outputs;
+  const later = authchainResponse(category, undefined, metadataResponse(category, { name: 'Later output' }))
+    .data.transaction[0].authchains[0].migrations[0].transaction[0].outputs[0];
+  outputs.unshift({ ...later, output_index: 2 });
+  globalThis.fetch = async (url) => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
+    ? { ok: true, json: async () => response }
+    : registryResponse(registry);
+  try {
+    assert.equal((await fetchTokenMetadata(category)).name, 'First output');
+  } finally { globalThis.fetch = original; }
+});
+
 test('uses the latest BCMR publication in the token authchain', async () => {
   const original = globalThis.fetch;
   const category = 'f'.repeat(64);

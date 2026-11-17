@@ -5,14 +5,15 @@ export function setupSnow(canvas) {
   let width = 0;
   let height = 0;
   let flakes = [];
+  let layers = [];
   let frame = 0;
   let last = 0;
 
-  const makeFlake = (initial) => {
+  const makeFlake = () => {
     const depth = Math.random() ** 1.6;
     return {
       x: Math.random() * width,
-      y: initial ? Math.random() * height : -10,
+      y: Math.random() * height,
       r: 0.6 + depth * 2.2,
       vy: 14 + depth * 56,
       alpha: 0.25 + depth * 0.6,
@@ -30,17 +31,22 @@ export function setupSnow(canvas) {
     canvas.height = Math.round(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const count = Math.min(130, Math.round((width * height) / 11000));
-    flakes = Array.from({ length: count }, () => makeFlake(true));
+    flakes = Array.from({ length: count }, makeFlake);
+    layers = Array.from({ length: 8 }, () => []);
+    for (const flake of flakes) layers[Math.min(7, Math.floor((flake.alpha - 0.25) / 0.6 * 8))].push(flake);
     if (motion.matches) render();
   };
 
   const render = () => {
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = '#fff';
-    for (const f of flakes) {
-      ctx.globalAlpha = f.alpha;
+    for (const [index, layer] of layers.entries()) {
+      ctx.globalAlpha = 0.25 + (index + 0.5) * 0.6 / 8;
       ctx.beginPath();
-      ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+      for (const f of layer) {
+        ctx.moveTo(f.x + f.r, f.y);
+        ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+      }
       ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -59,7 +65,10 @@ export function setupSnow(canvas) {
       const flutter = Math.sin(time / 1000 * f.freq + f.phase);
       f.y += f.vy * (1 + flutter * 0.1) * dt;
       f.x += (wind * (0.4 + f.r / 3) + flutter * f.sway) * dt;
-      if (f.y > height + 10) Object.assign(f, makeFlake(false));
+      if (f.y > height + 10) {
+        f.x = Math.random() * width;
+        f.y = -10;
+      }
       if (f.x < -10) f.x = width + 10;
       else if (f.x > width + 10) f.x = -10;
     }

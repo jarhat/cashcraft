@@ -109,8 +109,9 @@ async function fetchBcmrMetadata(category) {
   let latestOutput;
   for (const migration of categoryMigrations) {
     const transaction = Array.isArray(migration.transaction) ? migration.transaction[0] : migration.transaction;
-    const output = transaction?.outputs?.find(({ locking_bytecode }) =>
-      locking_bytecode?.replace(/^\\x/i, '').toLowerCase().startsWith('6a0442434d52'));
+    const output = transaction?.outputs?.filter(({ locking_bytecode }) =>
+      locking_bytecode?.replace(/^\\x/i, '').toLowerCase().startsWith('6a0442434d52'))
+      .sort((a, b) => a.output_index - b.output_index)[0];
     if (output) latestOutput = output;
   }
   if (!latestOutput) throw new Error('No BCMR metadata publication was found for this category.');
@@ -128,9 +129,13 @@ async function fetchBcmrMetadata(category) {
       }
       const registry = JSON.parse(new TextDecoder().decode(bytes));
       const history = registry.identities?.[category] ?? registry.identities?.[category.toLowerCase()];
-      const metadata = currentSnapshot(history);
-      const metadataCategory = metadata?.token?.category;
-      if (typeof metadataCategory !== 'string' || metadataCategory.toLowerCase() !== category.toLowerCase()) {
+      const current = currentSnapshot(history);
+      const matchesCategory = (snapshot) => snapshot?.token?.category?.toLowerCase?.() === category;
+      const metadata = matchesCategory(current) ? current : currentSnapshot(
+        Object.fromEntries(Object.entries(history ?? {}).filter(([date, snapshot]) =>
+          Number.isFinite(Date.parse(date)) && Date.parse(date) <= Date.now() && matchesCategory(snapshot))),
+      );
+      if (!metadata || !matchesCategory(metadata)) {
         throw new Error('BCMR metadata does not match the token category.');
       }
       return metadata;

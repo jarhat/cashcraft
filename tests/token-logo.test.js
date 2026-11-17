@@ -119,3 +119,48 @@ test('does not wait for a stalled IPFS gateway before trying another', async () 
     globalThis.Image = OriginalImage;
   }
 });
+
+test('displays a non-CORS icon but requires CORS for canvas use', async () => {
+  const originalFetch = globalThis.fetch;
+  const OriginalImage = globalThis.Image;
+  const category = '1'.repeat(64);
+  const registry = metadataResponse(category, { uris: { icon: 'https://example.com/icon.png' } });
+  globalThis.fetch = async (url) => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
+    ? { ok: true, json: async () => authchainResponse(category, undefined, registry) }
+    : registryResponse(registry);
+  globalThis.Image = class {
+    set src(value) {
+      this.url = value;
+      if (!value) return;
+      queueMicrotask(() => this.crossOrigin ? this.onerror?.() : this.onload?.());
+    }
+  };
+  try {
+    const image = await loadTokenLogo(category);
+    assert.equal(image.url, 'https://example.com/icon.png');
+    assert.equal(image.crossOrigin, undefined);
+    await assert.rejects(loadTokenLogo(category, { requireCors: true }), /No BCMR token logo/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.Image = OriginalImage;
+  }
+});
+
+test('falls back to image when the BCMR icon URI is unusable', async () => {
+  const originalFetch = globalThis.fetch;
+  const OriginalImage = globalThis.Image;
+  const category = '0'.repeat(64);
+  const registry = metadataResponse(category, { uris: { icon: 'http://example.com/icon.png', image: 'https://example.com/image.png' } });
+  globalThis.fetch = async (url) => url === 'https://gql.chaingraph.pat.mn/v1/graphql'
+    ? { ok: true, json: async () => authchainResponse(category, undefined, registry) }
+    : registryResponse(registry);
+  globalThis.Image = class {
+    set src(value) { this.url = value; this.onload?.(); }
+  };
+  try {
+    assert.equal((await loadTokenLogo(category)).url, 'https://example.com/image.png');
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.Image = OriginalImage;
+  }
+});

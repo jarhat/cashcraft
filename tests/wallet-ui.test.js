@@ -703,6 +703,12 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   categoryLine.children[0].handler();
   assert.equal(metadata.hidden, false);
   assert.equal(summary.children[1].children[1], categoryLine);
+  const supply = summary.children[2].children[1];
+  supply.children[0].handler();
+  assert.equal(metadata.hidden, true);
+  supply.open = true;
+  categoryLine.children[0].handler();
+  assert.equal(supply.open, false);
   await categoryLine.children[2].handler();
   assert.equal(copied, category);
 });
@@ -870,12 +876,21 @@ test('priced metadata updates balances, token choices and allocation', async () 
   assert.equal(element('portfolio-chart').hidden, false);
   assert.match(element('tokens').children[0].children[0].children[2].children[0].children[0].textContent, /1\.25 EX/);
   const supply = element('tokens').children[0].children[0].children[2].children[1];
-  assert.match(supply.children[1].textContent, /not verified/);
-  assert.equal(supply.children[2].href, `https://tokenexplorer.cash/?tokenId=${category}`);
+  assert.match(supply.children[1].children[0].textContent, /not verified/);
+  assert.equal(supply.children[1].children[1].href, `https://tokenexplorer.cash/?tokenId=${category}`);
   assert.match(element('token-options-list').children[0].children[1].textContent, /Example.*\$2\.000/);
   assert.match(element('amount-help').textContent, /2 decimals.*Entered: 1\.25 EX/);
   const metadata = element('tokens').children[0].children[0].children[1].children[2];
   assert.match(metadata.textContent, /Example token.*example\.com/);
+  const chart = element('portfolio-chart-content').children[0];
+  assert.equal(chart.children[0].children[0].children[1].textContent, '0.01250 BCH');
+  assert.match(chart.children[1].children[0].children[2].textContent, /100\.0%/);
+  context.fetchTokenMetadata = async () => { throw new Error('Registry unavailable'); };
+  context.logger = { warn() {} };
+  context.renderBalances([{ satoshis: 100_000_000n, token: { category, amount: 125n } }]);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(element('portfolio-chart').hidden, false);
+  assert.match(element('portfolio-chart-content').children[0].children[1].children[0].children[1].textContent, /^1111111111/);
 });
 
 test('payment QR draws the loaded token logo and ignores a stale result', async () => {

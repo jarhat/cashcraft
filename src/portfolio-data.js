@@ -13,7 +13,7 @@ async function getJson(url) {
 
 export async function fetchTokenMetadata(category) {
   const data = await getBcmrMetadata(category);
-  const decimals = data.token.decimals;
+  const decimals = data.token.decimals === undefined ? 0 : data.token.decimals;
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) {
     throw new Error('BCMR token decimals are unavailable or invalid.');
   }

@@ -888,6 +888,7 @@ function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
     icon.setAttribute('aria-hidden', 'true');
     icon.textContent = '◆';
     const details = document.createElement('div');
+    details.className = 'token-details';
     const title = document.createElement('strong');
     title.textContent = 'Fungible token';
 
@@ -930,6 +931,7 @@ function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
     infoText.textContent = translate('Loading token metadata…');
     infoToggle.addEventListener('click', () => {
       infoText.hidden = !infoText.hidden;
+      if (!infoText.hidden) supplyInfo.open = false;
       infoToggle.setAttribute('aria-expanded', String(!infoText.hidden));
     });
     categoryLine.append(infoToggle, categoryElement, copyCategory);
@@ -953,16 +955,25 @@ function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
     const supplyToggle = document.createElement('summary');
     supplyToggle.textContent = 'ⓘ';
     supplyToggle.setAttribute('aria-label', translate('About circulating supply'));
+    supplyToggle.addEventListener('click', () => {
+      if (!supplyInfo.open) {
+        infoText.hidden = true;
+        infoToggle.setAttribute('aria-expanded', 'false');
+      }
+    });
     const supplyText = document.createElement('p');
     supplyText.textContent = translate('Circulating supply is not verified here. Estimates depend on identifying reserved and burned tokens.');
-    supplyInfo.append(supplyToggle, supplyText);
+    const supplyPopover = document.createElement('div');
+    supplyPopover.className = 'supply-popover';
+    supplyPopover.append(supplyText);
+    supplyInfo.append(supplyToggle, supplyPopover);
     if (mainnet) {
       const supplyLink = document.createElement('a');
       supplyLink.href = `https://tokenexplorer.cash/?tokenId=${category}`;
       supplyLink.target = '_blank';
       supplyLink.rel = 'noopener noreferrer';
       supplyLink.textContent = translate('Explore supply and verification ↗');
-      supplyInfo.append(supplyLink);
+      supplyPopover.append(supplyLink);
     }
     if (spendableAmount < amount) {
       const attached = document.createElement('small');
@@ -1029,13 +1040,13 @@ function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
       if (priceResult.status === 'fulfilled') {
         const spot = priceResult.value;
         const value = Number(amount) * spot;
-        if (metadata && Number.isFinite(value) && value > 0) {
+        if (Number.isFinite(value) && value > 0) {
           const unit = metadata ? spot * 10 ** metadata.decimals : spot;
           const denomination = metadata?.symbol || (metadata ? translate('token') : translate('base unit'));
           const usd = bchUsd === null ? '' : ` · ≈ $${(unit * bchUsd).toPrecision(4)} USD / ${denomination} · ≈ $${(value * bchUsd).toFixed(2)} USD`;
           price.textContent = `≈ ${unit.toPrecision(4)} BCH / ${denomination} · ≈ ${value.toPrecision(4)} BCH${usd}`;
           if (bchUsd !== null) amountPrice.textContent = `≈ $${(unit * bchUsd).toPrecision(4)} / ${denomination}`;
-          optionLabel.textContent = `${metadata.name || denomination} (${denomination}) · ${formatTokenAmount(spendableAmount, metadata.decimals)} ${denomination} (${spendableAmount} base units)${bchUsd === null ? '' : ` · $${(unit * bchUsd).toPrecision(4)} / token`}`;
+          if (metadata) optionLabel.textContent = `${metadata.name || denomination} (${denomination}) · ${formatTokenAmount(spendableAmount, metadata.decimals)} ${denomination} (${spendableAmount} base units)${bchUsd === null ? '' : ` · $${(unit * bchUsd).toPrecision(4)} / token`}`;
           pricedTokens.push({ category, name: metadata?.symbol || metadata?.name || `${category.slice(0, 10)}…`, value });
         } else price.textContent = translate('Cauldron price unavailable.');
       } else {
@@ -1142,7 +1153,15 @@ function renderPortfolioChart(items) {
   const legend = document.createElement('ul');
   legend.className = 'allocation-legend';
   let offset = 0;
-  const stops = items.map((item, index) => {
+  const center = document.createElement('div');
+  center.className = 'allocation-total';
+  const totalLabel = document.createElement('span');
+  totalLabel.textContent = translate('Priced tokens');
+  const totalValue = document.createElement('strong');
+  totalValue.textContent = `${total.toPrecision(4)} BCH`;
+  center.append(totalLabel, totalValue);
+  pie.append(center);
+  const stops = [...items].sort((a, b) => b.value - a.value || a.category.localeCompare(b.category)).map((item, index) => {
     const start = offset;
     offset += item.value / total * 100;
     const color = colors[index % colors.length];
@@ -1150,7 +1169,14 @@ function renderPortfolioChart(items) {
     const swatch = document.createElement('span');
     swatch.className = 'allocation-swatch';
     swatch.style.backgroundColor = color;
-    li.append(swatch, document.createTextNode(`${item.name}: ${(item.value / total * 100).toFixed(1)}% · ${item.value.toPrecision(4)} BCH`));
+    const name = document.createElement('span');
+    name.className = 'allocation-name';
+    name.textContent = item.name;
+    name.title = item.category;
+    const value = document.createElement('span');
+    value.className = 'allocation-value';
+    value.textContent = `${(item.value / total * 100).toFixed(1)}% · ${item.value.toPrecision(4)} BCH`;
+    li.append(swatch, name, value);
     legend.append(li);
     return `${color} ${start}% ${offset}%`;
   });
@@ -1949,7 +1975,7 @@ $('generate-payment').addEventListener('click', async () => {
     });
 
     if (mainnet) {
-      loadTokenLogo(category).then((logo) => {
+      loadTokenLogo(category, { requireCors: true }).then((logo) => {
         if (!currentPayment()) return;
         const context = canvas.getContext('2d');
         const size = canvas.width * 0.09;
