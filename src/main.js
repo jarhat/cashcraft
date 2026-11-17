@@ -182,7 +182,7 @@ function readReceiptState() {
 function addReceiptNotice(message) {
   const notice = document.createElement('p');
   notice.className = 'notification-message';
-  notice.textContent = message;
+  notice.textContent = translate(message);
   $('token-receipt-notifications').prepend(notice);
   $('notifications-empty').hidden = true;
 }
@@ -196,32 +196,40 @@ function rememberSentTransaction(txid) {
 function notifyTokenReceipts(scannedUtxos) {
   const state = readReceiptState();
   const wallet = receiptStorageKey();
+  const legacyMessage = 'Welcome! Your GAMBA token has arrived: enjoy your special diamond perk.';
+  const message = 'Received 1 GAMBA';
+  if (state.messages.includes(legacyMessage) || state.messages.includes(message)) {
+    state.gambaNotified = true;
+  }
+  state.messages = state.gambaNotified ? [message] : [];
+  const sent = new Set(state.sent);
+  const received = !state.gambaNotified && scannedUtxos.some((utxo) =>
+    utxo.token && !utxo.token.nft &&
+    String(utxo.token.category).toLowerCase() === rewardCategory &&
+    BigInt(utxo.token.amount || 0) === 1n &&
+    !sent.has(utxo.txid.toLowerCase()),
+  );
+  if (received) {
+    state.gambaNotified = true;
+    state.messages = [message];
+    state.unread = true;
+  } else if (!state.messages.length) {
+    state.unread = false;
+  }
+  localStorage.setItem(wallet, JSON.stringify(state));
+
   if (receiptWallet !== wallet) {
     $('token-receipt-notifications').replaceChildren();
     for (const message of state.messages) addReceiptNotice(message);
     if (state.unread) $('notification-indicator').hidden = false;
     receiptWallet = wallet;
-  }
-  const seen = new Set(state.seen);
-  const sent = new Set(state.sent);
-  for (const utxo of scannedUtxos) {
-    if (!utxo.token || (!utxo.token.nft && BigInt(utxo.token.amount || 0) <= 0n)) continue;
-    const key = utxoKey(utxo);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    if (sent.has(utxo.txid.toLowerCase())) continue;
-
-    const category = String(utxo.token.category).toLowerCase();
-    const message = category === rewardCategory
-      ? 'Welcome! Your GAMBA token has arrived: enjoy your special diamond perk.'
-      : `CashToken received: ${category}${utxo.token.nft ? ' (NFT)' : ` · ${utxo.token.amount} base units`}.`;
+  } else if (received) {
     addReceiptNotice(message);
-    state.messages.push(message);
-    state.unread = true;
-    $('notification-indicator').hidden = false;
   }
-  state.seen = [...seen];
-  localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
+  if (received) {
+    $('notification-indicator').hidden = false;
+    showGambaCelebration();
+  }
 }
 
 function report(error, { log = true } = {}) {
@@ -1562,6 +1570,51 @@ notificationsDialog.addEventListener('close', () => {
   markNotificationsRead();
   $('notifications-toggle').focus({ preventScroll: true });
 });
+
+async function playGambaSound(fromClick = false) {
+  let audio;
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) throw new Error('Audio is not supported.');
+    audio = new AudioContext();
+    if (audio.state !== 'running' && fromClick) await audio.resume();
+    if (audio.state !== 'running') throw new Error('Audio playback requires a user gesture.');
+
+    const start = audio.currentTime;
+    [880, 1320, 1760].forEach((frequency, index) => {
+      const tone = audio.createOscillator();
+      const volume = audio.createGain();
+      const time = start + index * 0.09;
+      tone.type = 'triangle';
+      tone.frequency.value = frequency;
+      volume.gain.setValueAtTime(0.06, time);
+      volume.gain.exponentialRampToValueAtTime(0.001, time + 0.16);
+      tone.connect(volume);
+      volume.connect(audio.destination);
+      tone.start(time);
+      tone.stop(time + 0.16);
+      if (index === 2) {
+        tone.onended = () => audio.close().catch((error) => logger.warn('Could not close audio:', error));
+      }
+    });
+    $('gamba-sound-status').textContent = '';
+  } catch (error) {
+    if (audio && audio.state !== 'closed') {
+      audio.close().catch((closeError) => logger.warn('Could not close audio:', closeError));
+    }
+    $('gamba-sound-status').textContent = translate('Sound unavailable. Tap Play sound to try again.');
+  }
+}
+
+function showGambaCelebration() {
+  const dialog = $('gamba-dialog');
+  if (!dialog.open) dialog.showModal();
+  void playGambaSound();
+}
+
+$('gamba-sound').addEventListener('click', () => { void playGambaSound(true); });
+$('gamba-close').addEventListener('click', () => $('gamba-dialog').close());
+
 $('view-payment-request').addEventListener('click', () => {
   notificationsDialog.close();
   setTransferTab('send');

@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
-test('new token outputs create persistent, deduplicated and GAMBA-specific notices', async () => {
+function receiptHarness(stored = new Map(), wallet = 'wallet') {
   const elements = new Map([
     ['token-receipt-notifications', {
       notices: [], prepend(item) { this.notices.unshift(item.textContent); },
@@ -14,34 +14,141 @@ test('new token outputs create persistent, deduplicated and GAMBA-specific notic
     ['notifications-empty', { hidden: false }],
     ['notification-indicator', { hidden: true }],
   ]);
-  const stored = new Map();
+  let celebrations = 0;
+  const category = 'b'.repeat(64);
   const localStorage = {
     getItem: (key) => stored.get(key) ?? null,
     setItem: (key, value) => stored.set(key, value),
   };
-  const category = 'b'.repeat(64);
   const script = source.slice(source.indexOf('let rewardCategory ='), source.indexOf('\nfunction report('));
   const context = {
-    network: 'mainnet', API_BASE_URL: 'https://example.test', localStorage,
-    addressFor: () => 'wallet', utxoKey: (utxo) => `${utxo.txid}:${utxo.vout}`,
+    network: 'mainnet', API_BASE_URL: '', localStorage,
+    addressFor: () => wallet, translate: (text) => text,
     $: (id) => elements.get(id), document: { createElement: () => ({}) },
+    showGambaCelebration() { celebrations++; },
     fetch: async () => ({ ok: true, json: async () => ({ category }) }),
   };
   const api = runInNewContext(`${script}\n({ loadRewardCategory, notifyTokenReceipts, rememberSentTransaction })`, context);
-  await api.loadRewardCategory();
-  api.rememberSentTransaction('self');
-  const reward = { txid: 'reward', vout: 0, token: { category, amount: 1n } };
-  const other = { txid: 'other', vout: 1, token: { category: 'a'.repeat(64), nft: {} } };
-  const change = { txid: 'self', vout: 1, token: { category, amount: 4n } };
-  api.notifyTokenReceipts([reward, other, change]);
-  api.notifyTokenReceipts([reward, other, change]);
-  const notices = elements.get('token-receipt-notifications').notices;
-  assert.equal(notices.length, 2);
-  assert.match(notices[1], /GAMBA.*diamond perk/);
-  assert.match(notices[0], /CashToken received:.*NFT/);
-  assert.equal(elements.get('notification-indicator').hidden, false);
-  const state = JSON.parse(stored.values().next().value);
-  assert.equal(state.seen.length, 3);
-  assert.equal(state.messages.length, 2);
-  assert.equal(state.unread, true);
+  return { api, category, elements, stored, get celebrations() { return celebrations; } };
+}
+
+test('celebrates one GAMBA once per wallet, not other tokens or self-sent change', async () => {
+  const h = receiptHarness();
+  await h.api.loadRewardCategory();
+  h.api.rememberSentTransaction('self');
+  const other = { txid: 'other', token: { category: 'a'.repeat(64), amount: 1n } };
+  const nft = { txid: 'nft', token: { category: h.category, amount: 1n, nft: {} } };
+  const change = { txid: 'self', token: { category: h.category, amount: 1n } };
+  const multiple = { txid: 'multiple', token: { category: h.category, amount: 2n } };
+  h.api.notifyTokenReceipts([other, nft, change, multiple]);
+  assert.equal(h.celebrations, 0);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, []);
+
+  const reward = { txid: 'reward', token: { category: h.category, amount: 1n } };
+  h.api.notifyTokenReceipts([other, reward]);
+  h.api.notifyTokenReceipts([reward, { ...reward, txid: 'another' }]);
+  assert.equal(h.celebrations, 1);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBA']);
+  assert.equal(h.elements.get('notification-indicator').hidden, false);
+
+  const reload = receiptHarness(h.stored);
+  await reload.api.loadRewardCategory();
+  reload.api.notifyTokenReceipts([reward]);
+  assert.equal(reload.celebrations, 0);
+  assert.deepEqual(reload.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBA']);
+
+  const anotherWallet = receiptHarness(h.stored, 'another-wallet');
+  await anotherWallet.api.loadRewardCategory();
+  anotherWallet.api.notifyTokenReceipts([reward]);
+  assert.equal(anotherWallet.celebrations, 1);
+});
+
+test('migrates existing notices without replaying GAMBA or showing other tokens', async () => {
+  const stored = new Map([['ctf-token-receipts:mainnet:wallet', JSON.stringify({
+    seen: [], sent: [], unread: true,
+    messages: [
+      'CashToken received: other.',
+      'Welcome! Your GAMBA token has arrived: enjoy your special diamond perk.',
+    ],
+  })]]);
+  const h = receiptHarness(stored);
+  await h.api.loadRewardCategory();
+  h.api.notifyTokenReceipts([{ txid: 'reward', token: { category: h.category, amount: 1n } }]);
+  assert.equal(h.celebrations, 0);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBA']);
+  assert.deepEqual(JSON.parse(stored.values().next().value).messages, ['Received 1 GAMBA']);
+});
+
+test('does not show an unrecorded celebration if browser storage fails', async () => {
+  const stored = new Map();
+  const h = receiptHarness(stored);
+  await h.api.loadRewardCategory();
+  stored.set = () => { throw new Error('Storage unavailable'); };
+  assert.throws(
+    () => h.api.notifyTokenReceipts([{ txid: 'reward', token: { category: h.category, amount: 1n } }]),
+    /Storage unavailable/,
+  );
+  assert.equal(h.celebrations, 0);
+});
+
+test('refresh renders the new balance before announcing the reward', async () => {
+  const calls = [];
+  const elements = new Map([
+    ['status', { textContent: '' }],
+    ['log', { textContent: '' }],
+  ]);
+  const manager = {};
+  const scanned = { addresses: [], utxos: [{ satoshis: 1000n }] };
+  const start = source.indexOf('async function refreshBalances(');
+  const end = source.indexOf('\nfunction validateRecipient', start);
+  const context = {
+    walletReady: true, manager, refreshPromise: null, scanAddressRecords: [],
+    addresses: [], utxos: [], balanceSatoshis: null, emptyBalanceNotified: false,
+    deriveScanAddresses: () => [], scanWallet: async () => scanned,
+    renderBalances: () => calls.push('balance'),
+    loadRewardCategory: async () => {},
+    notifyTokenReceipts: () => calls.push('notification'),
+    $: (id) => elements.get(id),
+  };
+  runInNewContext(source.slice(start, end), context);
+  await context.refreshBalances({ quiet: true });
+  assert.deepEqual(calls, ['balance', 'notification']);
+  assert.equal(context.balanceSatoshis, 1000n);
+});
+
+test('celebration offers sound when autoplay is blocked and plays on a click', async () => {
+  const calls = [];
+  class AudioContext {
+    constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = {}; }
+    async resume() { this.state = 'running'; calls.push('resumed'); }
+    async close() { this.state = 'closed'; calls.push('closed'); }
+    createGain() {
+      return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} };
+    }
+    createOscillator() {
+      return { frequency: {}, connect() {}, start() { calls.push('tone'); }, stop() {} };
+    }
+  }
+  const elements = new Map([
+    ['gamba-dialog', { open: false, showModal() { this.open = true; }, close() { this.open = false; } }],
+    ['gamba-sound-status', { textContent: '' }],
+    ['gamba-sound', { addEventListener(_type, fn) { this.click = fn; } }],
+    ['gamba-close', { addEventListener(_type, fn) { this.click = fn; } }],
+  ]);
+  const start = source.indexOf('async function playGambaSound(');
+  const end = source.indexOf("\n$('view-payment-request')", start);
+  const context = {
+    window: { AudioContext }, $: (id) => elements.get(id),
+    translate: (text) => text, logger: { warn() {} },
+  };
+  runInNewContext(source.slice(start, end), context);
+  context.showGambaCelebration();
+  assert.equal(elements.get('gamba-dialog').open, true);
+  assert.match(elements.get('gamba-sound-status').textContent, /Tap Play sound/);
+  elements.get('gamba-sound').click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.filter((call) => call === 'tone').length, 3);
+  assert.equal(elements.get('gamba-sound-status').textContent, '');
+  elements.get('gamba-close').click();
+  assert.equal(elements.get('gamba-dialog').open, false);
 });
