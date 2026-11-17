@@ -1885,9 +1885,9 @@ void ensure_chunks(Player *player) {
         if (worker->state == WORKER_IDLE) {
             ensure_chunks_worker(player, worker);
         }
-#endif
         mtx_unlock(&worker->mtx);
     }
+#endif
 }
 
 
