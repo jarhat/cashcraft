@@ -2583,14 +2583,6 @@ label[for="category"] { display: block; }
 }
 .mesh-sun { top: 0; }
 .mesh-terrain { bottom: 0; }
-.space-pixels {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: .8;
-  filter: drop-shadow(0 0 7px rgb(121 207 255 / 28%));
-}
 body:not(.wallet-connected) .dashboard { padding: clamp(80px, 16vh, 160px) 0 38px; }
 body.wallet-connected .landing-welcome { display: none; }
 .landing-welcome { text-align: center; }
@@ -2686,17 +2678,51 @@ html[data-theme="aurora"] {
 }
 @media (prefers-reduced-motion: no-preference) {
   .mesh-sun { animation: moon-drift 12s ease-in-out infinite alternate; }
-  .space-pixels { animation: stars-drift 18s ease-in-out infinite alternate; }
-  .pixel-sparkles { animation: pixel-glimmer 4s steps(2, end) infinite alternate; }
-  .pixel-crystal { animation: crystal-glow 3s ease-in-out infinite alternate; }
   @keyframes moon-drift {
     from { transform: translateX(-50%) translateY(0) scale(1); }
     to { transform: translateX(-50%) translateY(8px) scale(1.035); }
   }
-  @keyframes stars-drift {
-    from { transform: translate3d(-4px, 0, 0); }
-    to { transform: translate3d(5px, 7px, 0); }
-  }
-  @keyframes pixel-glimmer { from { opacity: .55; } to { opacity: 1; } }
-  @keyframes crystal-glow { from { opacity: .7; } to { opacity: 1; } }
+}
+
+.topbar {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+}
+.topbar .wizard-guide, body.wallet-connected .topbar .wizard-guide {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  margin: 0;
+  justify-self: start;
+  align-self: center;
+}
+.topbar .wizard-toggle { max-width: 100%; text-align: left; }
+.topbar .wizard-toggle svg { flex: none; }
+.topbar .quick-nav { grid-column: 2; grid-row: 1; }
+.topbar > .network { grid-column: 3; grid-row: 1; justify-self: end; }
+.topbar .topbar-tools { grid-column: 4; grid-row: 1; flex-wrap: nowrap; max-width: none; }
+.topbar .theme-toggle { width: 44px; height: 44px; flex: none; }
+.topbar .theme-icon, .topbar .quick-action svg { width: 19px; height: 19px; }
+.topbar .quick-action { min-height: 44px; font-size: .82rem; }
+body:not(.wallet-connected) .dashboard { padding: clamp(24px, 5vh, 48px) 0 32px; }
+.landing-welcome h2 { max-width: 22ch; margin-inline: auto; line-height: 1.2; }
+.mesh-landscape, body.wallet-connected .mesh-landscape {
+  position: relative;
+  z-index: 0;
+  inset: auto;
+  width: 100%;
+  height: clamp(140px, 20vw, 220px);
+  margin-top: 24px;
+  opacity: .65;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 78%);
+  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 78%);
+}
+@media (max-width: 900px) {
+  .topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+  .topbar .wizard-guide { grid-column: 1; grid-row: 1; }
+  .topbar > .network { grid-column: 2; grid-row: 1; }
+  .topbar .topbar-tools { grid-column: 1 / -1; grid-row: 2; justify-content: center; gap: 8px; }
+  .topbar .quick-nav { grid-column: 1 / -1; grid-row: 3; justify-self: center; }
+  .topbar .tool-dropdown { right: auto; left: 0; }
 }

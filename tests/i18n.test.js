@@ -71,6 +71,16 @@ test('French and German translate static and dynamic strings', () => {
   assert.equal(translate('1 fungible-token category'), '1 Kategorie fungibler Token');
 });
 
+test('landing privacy message is translated in each supported language', () => {
+  const headline = 'No account. No KYC. Just your wallet.';
+  const description = 'Connect your wallet to manage BCH and CashTokens. Your keys stay in your wallet.';
+  for (const language of ['es', 'fr', 'de']) {
+    setLanguage(language);
+    assert.notEqual(translate(headline), headline);
+    assert.notEqual(translate(description), description);
+  }
+});
+
 test('unsupported saved languages and unknown strings fall back to English', () => {
   setLanguage('xx');
   assert.equal(document.documentElement.lang, 'en');
