@@ -2959,3 +2959,7 @@ body::before {
 @media (max-height: 820px) {
   #wallet-help > p:first-child { display: none; }
 }
+
+/* The perspective mesh is the only grid; the flat square background is removed. */
+body::before { content: none; display: none; }
+.mesh-landscape, body.wallet-connected .mesh-landscape { height: min(340px, 45vh); }

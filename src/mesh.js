@@ -3,9 +3,9 @@ const SAMPLE_SIZE = 8;
 
 export function meshPath(width, height) {
   const centerX = width / 2;
-  const radiusX = Math.min(width * 0.42, 320);
+  const radiusX = Math.min(width * 0.3, 240);
   const horizon = height * 0.16;
-  const amplitude = Math.min(height * 0.3, 104);
+  const amplitude = Math.min(height * 0.24, 72);
   const bump = (distance, radius) => {
     if (Math.abs(distance) >= radius) return 0;
     return (1 + Math.cos(Math.PI * distance / radius)) / 2;

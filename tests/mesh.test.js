@@ -21,7 +21,7 @@ test('perspective mesh converges at the horizon and shares intersections through
   assert.ok(horizontal[4][50][1] < horizontal[4][0][1]);
   assert.ok(vertical[0][0][0] > vertical[0].at(-1)[0]);
   const css = await readFile(new URL('../src/style.css', import.meta.url), 'utf8');
-  assert.match(css, /body::before\s*\{[^}]*background-size:\s*40px 40px/s);
+  assert.match(css, /body::before\s*\{\s*content:\s*none;/);
 });
 
 test('mesh regenerates once per resize frame with the current dimensions', (t) => {
