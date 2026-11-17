@@ -1,4 +1,7 @@
 const spanish = {
+  'Show NFTs': 'Mostrar NFT',
+  'Previous': 'Anterior',
+  'No fungible tokens found. Show NFTs to view your collectibles.': 'No se encontraron tokens fungibles. Muestra los NFT para ver tus coleccionables.',
   'Received 1 GAMBA': 'Recibiste 1 GAMBA',
   'Your special diamond perk is here!': '¡Tu beneficio especial de diamante ha llegado!',
   'Play sound': 'Reproducir sonido',
@@ -173,6 +176,9 @@ const spanish = {
 };
 
 const french = {
+  'Show NFTs': 'Afficher les NFT',
+  'Previous': 'Précédent',
+  'No fungible tokens found. Show NFTs to view your collectibles.': 'Aucun jeton fongible trouvé. Affichez les NFT pour voir vos objets de collection.',
   'Received 1 GAMBA': '1 GAMBA reçu',
   'Your special diamond perk is here!': 'Votre avantage diamant spécial est arrivé !',
   'Play sound': 'Jouer le son',
@@ -347,6 +353,9 @@ const french = {
 };
 
 const german = {
+  'Show NFTs': 'NFTs anzeigen',
+  'Previous': 'Zurück',
+  'No fungible tokens found. Show NFTs to view your collectibles.': 'Keine fungiblen Token gefunden. Zeige NFTs an, um deine Sammlerstücke zu sehen.',
   'Received 1 GAMBA': '1 GAMBA erhalten',
   'Your special diamond perk is here!': 'Dein besonderer Diamant-Vorteil ist da!',
   'Play sound': 'Ton abspielen',

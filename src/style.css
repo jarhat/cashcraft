@@ -2018,7 +2018,6 @@ footer span:first-child {
   overflow: auto;
 }
 .wizard-dialog[hidden], .portfolio-chart[hidden], .token-options[hidden], select[hidden] { display: none; }
-.total-value { color: var(--mint); font: .68rem var(--mono); white-space: nowrap; }
 .token-options { margin-top: 6px; position: relative; }
 .token-options summary { cursor: pointer; color: var(--ice); font-size: .75rem; }
 #token-options-list { max-height: 250px; overflow-y: auto; margin: 6px 0; }
@@ -2050,10 +2049,82 @@ footer span:first-child {
   .topbar { grid-template-columns: 1fr auto; }
   .brand { grid-column: 1; grid-row: 1; }
   .topbar-tools { grid-column: 2; grid-row: 1; flex-wrap: wrap; max-width: 260px; }
-  .topbar-tools .total-value { order: 5; flex-basis: 100%; text-align: right; }
   .wizard-guide { grid-column: 1; grid-row: 2; }
   .quick-nav { grid-column: 2; grid-row: 2; justify-self: end; width: auto; }
 }
 @media (max-width: 360px) {
   .wizard-toggle span { display: none; }
+}
+
+[data-wallet-panel][hidden], .token-row[hidden],
+#portfolio-pagination[hidden], #portfolio-empty-filter[hidden] { display: none; }
+
+.shell { max-width: 1180px; width: calc(100% - 32px); }
+.wizard-dialog { left: max(16px, calc((100vw - 1180px) / 2)); font-size: 1rem; }
+.wizard-dialog p { font-size: .95rem; line-height: 1.55; }
+.wizard-toggle { min-height: 48px; padding: 5px 12px; font-size: .85rem; }
+.wizard-toggle svg { width: 30px; height: 38px; }
+.wizard-toggle span { display: inline; }
+.hero::after { display: none; }
+.mesh-sphere {
+  --sphere-size: min(28vw, 300px);
+  position: absolute;
+  right: 7%;
+  top: 50%;
+  width: var(--sphere-size);
+  aspect-ratio: 1;
+  transform: translateY(-50%);
+  perspective: 700px;
+  pointer-events: none;
+}
+.mesh-sphere-spin {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: rotateX(-15deg);
+  animation: mesh-spin 18s linear infinite;
+}
+.mesh-ring {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--ice) 62%, #ef42cf);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgb(191 102 255 / 28%);
+  backface-visibility: visible;
+}
+.mesh-longitude:nth-child(1) { transform: rotateY(0deg); }
+.mesh-longitude:nth-child(2) { transform: rotateY(30deg); }
+.mesh-longitude:nth-child(3) { transform: rotateY(60deg); }
+.mesh-longitude:nth-child(4) { transform: rotateY(90deg); }
+.mesh-longitude:nth-child(5) { transform: rotateY(120deg); }
+.mesh-longitude:nth-child(6) { transform: rotateY(150deg); }
+.mesh-latitude:nth-child(7) { transform: rotateX(90deg) translateZ(calc(var(--sphere-size) / -3)) scale(.75); }
+.mesh-latitude:nth-child(8) { transform: rotateX(90deg) translateZ(calc(var(--sphere-size) / -6)) scale(.94); }
+.mesh-latitude:nth-child(9) { transform: rotateX(90deg); }
+.mesh-latitude:nth-child(10) { transform: rotateX(90deg) translateZ(calc(var(--sphere-size) / 6)) scale(.94); }
+.mesh-latitude:nth-child(11) { transform: rotateX(90deg) translateZ(calc(var(--sphere-size) / 3)) scale(.75); }
+@keyframes mesh-spin { to { transform: rotateX(-15deg) rotateY(360deg); } }
+@keyframes panel-enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: no-preference) {
+  [data-wallet-panel]:not([hidden]) { animation: panel-enter .4s ease both; }
+}
+@media (prefers-reduced-motion: reduce) { .mesh-sphere-spin { animation: none; } }
+.portfolio-icon { width: 25px; height: 25px; stroke-width: 1.6; color: var(--ice); }
+.nft-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: .9rem; }
+.nft-toggle input { width: 18px; height: 18px; margin: 0; }
+.portfolio-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 16px; }
+.portfolio-pagination span { font: .8rem var(--mono); }
+.token-summary { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: start; gap: 12px; }
+.token-summary > div { min-width: 0; }
+.token-summary > .token-amount-group { grid-column: 2; justify-self: start; }
+.category-line { display: grid; grid-template-columns: 28px minmax(0, 1fr) 44px; gap: 6px; max-width: 310px; }
+.category-line code { overflow: hidden; text-overflow: ellipsis; }
+.nft-category-line { grid-template-columns: 28px minmax(0, 1fr) 44px; }
+.nft-category-line code { grid-column: 2; }
+.nft-details { overflow-wrap: anywhere; }
+@media (max-width: 680px) {
+  .mesh-sphere { --sphere-size: 155px; right: 0; opacity: .48; }
+  .hero-copy { position: relative; z-index: 1; }
+  .wizard-toggle span { display: inline; }
 }

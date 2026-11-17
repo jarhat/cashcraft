@@ -595,7 +595,7 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   class Element {
     constructor() {
       this.children = [];
-      this.classList = { add() {}, remove() {} };
+      this.classList = { add() {}, remove() {}, contains: (name) => (this.className || '').split(' ').includes(name) };
       this.options = [];
     }
     append(...children) { this.children.push(...children); }
@@ -616,7 +616,7 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   const end = source.indexOf('\nasync function refreshBalances', start);
   runInNewContext(`${source.slice(start, end)}\nrenderBalances(utxos);`, {
     $: element, walletReady: true, bchUsd: null, portfolioVersion: 0, mainnet: true, network: 'mainnet', SATOSHIS_PER_BCH: 100_000_000n,
-    tokenBalances: new Map(), pricedPortfolioBch: 0, updateAmountHelp() {}, updateTotalValue() {},
+    tokenBalances: new Map(), portfolioPage: 0, updateAmountHelp() {},
     loadTokenLogo: () => new Promise(() => {}),
     fetchTokenMetadata: () => new Promise(() => {}), fetchCauldronSpot: () => new Promise(() => {}),
     formatBch: () => '0.00001000', Option: class { constructor(text, value) { this.text = text; this.value = value; } },
@@ -638,9 +638,106 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   assert.equal(copied, category);
 });
 
+test('portfolio paginates fungible tokens and optionally includes each NFT', async () => {
+  class Element {
+    constructor() {
+      this.children = []; this.options = []; this.value = ''; this.style = {};
+      this.classList = { add() {}, remove() {}, contains: (name) => (this.className || '').split(' ').includes(name) };
+    }
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = children; this.options = children; }
+    add(option) { this.options.push(option); }
+    setAttribute() {}
+    addEventListener(type, handler) { this[type] = handler; }
+  }
+  const nodes = new Map();
+  const $ = (id) => {
+    if (!nodes.has(id)) nodes.set(id, new Element());
+    return nodes.get(id);
+  };
+  const start = source.indexOf('function renderBalances(');
+  const end = source.indexOf('\nasync function refreshBalances', start);
+  let copied;
+  const context = {
+    $, walletReady: true, bchUsd: null, portfolioVersion: 0, portfolioPage: 0,
+    mainnet: false, network: 'chipnet', SATOSHIS_PER_BCH: 100_000_000n,
+    tokenBalances: new Map(), updateAmountHelp() {}, formatBch: () => '0',
+    Option: class { constructor(text, value) { this.text = text; this.value = value; } },
+    document: { createElement: () => new Element() },
+    navigator: { clipboard: { writeText: async (value) => { copied = value; } } },
+    translate: (text) => text, setTimeout() {}, report(error) { throw error; },
+    fetchCauldronSpot: () => new Promise(() => {}), logger: { warn() {} },
+  };
+  runInNewContext(source.slice(start, end), context);
+  const fungibles = Array.from({ length: 8 }, (_, i) => ({
+    satoshis: 1000n, token: { category: i.toString(16).repeat(64), amount: 1n },
+  }));
+  const nft = { txid: 'f'.repeat(64), vout: 2, satoshis: 1000n,
+    token: { category: 'e'.repeat(64), amount: 0n, nft: { capability: 'mutable', commitment: 'abcd' } } };
+  context.renderBalances([...fungibles, nft]);
+  const rows = $('tokens').children;
+  assert.equal(rows.filter((row) => !row.hidden).length, 6);
+  assert.equal($('portfolio-page').textContent, '1 / 2');
+  context.portfolioPage = 1;
+  context.paginatePortfolio();
+  assert.equal(rows.filter((row) => !row.hidden).length, 2);
+  assert.equal(rows[8].hidden, true);
+  $('show-nfts').checked = true;
+  context.paginatePortfolio();
+  assert.equal(rows.filter((row) => !row.hidden).length, 3);
+  assert.match(rows[8].children[2].textContent, /mutable.*abcd/);
+  await rows[8].children[1].children[1].click();
+  assert.equal(copied, nft.token.category);
+  $('show-nfts').checked = false;
+  context.renderBalances([nft]);
+  assert.equal($('portfolio-empty-filter').hidden, false);
+  $('show-nfts').checked = true;
+  context.paginatePortfolio();
+  assert.equal($('portfolio-empty-filter').hidden, true);
+  assert.equal($('tokens').children[0].hidden, false);
+  context.renderBalances([{ ...nft, token: { ...nft.token, amount: 3n } }]);
+  const amountValues = $('tokens').children[0].children[0].children[2].children[0];
+  assert.match(amountValues.children[0].textContent, /3 base units/);
+  assert.match(amountValues.children[2].textContent, /3 base units attached to NFTs; unavailable for sending/);
+  assert.equal($('token-options').hidden, true);
+  context.renderBalances([
+    { ...nft, token: { ...nft.token, amount: 3n } },
+    { satoshis: 1000n, token: { category: nft.token.category, amount: 5n } },
+  ]);
+  assert.equal(context.tokenBalances.get(nft.token.category).amount, 5n);
+  const total = $('tokens').children[0].children[0].children[2].children[0];
+  assert.match(total.children[0].textContent, /8 base units/);
+  assert.match(total.children[2].textContent, /3 base units attached/);
+  assert.match($('token-options-list').children[0].children[1].textContent, /5 base units/);
+});
+
+test('connected panels reveal only after a wallet connection and hide on disconnect', () => {
+  const panels = Array.from({ length: 4 }, () => ({ hidden: true }));
+  const nodes = new Map();
+  const $ = (id) => {
+    if (!nodes.has(id)) nodes.set(id, {
+      hidden: id === 'wizard-dialog',
+      classList: { toggle() {} },
+      getAttribute: () => 'true',
+    });
+    return nodes.get(id);
+  };
+  const start = source.indexOf('function setConnection(');
+  const end = source.indexOf('\nfunction clearWalletDisplay', start);
+  const context = {
+    $, document: { querySelectorAll: () => panels }, sending: false,
+    pairingInProgress: false, transferInteracted: false,
+  };
+  runInNewContext(source.slice(start, end), context);
+  context.setConnection(true);
+  assert.ok(panels.every((panel) => !panel.hidden));
+  context.setConnection(false);
+  assert.ok(panels.every((panel) => panel.hidden));
+});
+
 test('priced metadata updates balances, token choices and allocation', async () => {
   class Element {
-    constructor() { this.children = []; this.options = []; this.style = {}; this.value = ''; this.classList = { add() {}, remove() {} }; }
+    constructor() { this.children = []; this.options = []; this.style = {}; this.value = ''; this.classList = { add() {}, remove() {}, contains: (name) => (this.className || '').split(' ').includes(name) }; }
     append(...children) { this.children.push(...children); }
     replaceChildren(...children) { this.children = children; this.options = children; }
     add(option) { this.options.push(option); }
@@ -655,11 +752,11 @@ test('priced metadata updates balances, token choices and allocation', async () 
   const category = '1'.repeat(64);
   element('category').value = category;
   element('amount').value = '125';
-  const helpers = source.slice(source.indexOf('function updateTotalValue()'), source.indexOf('\nasync function fetchAddressUtxosWithRetry'));
+  const helpers = source.slice(source.indexOf('function formatTokenAmount('), source.indexOf('\nasync function fetchAddressUtxosWithRetry'));
   const render = source.slice(source.indexOf('function renderBalances('), source.indexOf('\nasync function refreshBalances'));
   const context = {
     $: element, walletReady: true, bchUsd: 200, balanceSatoshis: 100_000_000n,
-    portfolioVersion: 0, tokenBalances: new Map(), pricedPortfolioBch: 0, mainnet: true, network: 'mainnet',
+    portfolioVersion: 0, tokenBalances: new Map(), portfolioPage: 0, mainnet: true, network: 'mainnet',
     SATOSHIS_PER_BCH: 100_000_000n, formatBch: () => '1.00000000',
     Option: class { constructor(text, value) { this.text = text; this.value = value; } },
     document: { createElement: () => new Element(), createTextNode: (text) => ({ textContent: text }) },
@@ -673,10 +770,9 @@ test('priced metadata updates balances, token choices and allocation', async () 
   assert.equal(element('portfolio-chart').hidden, true);
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(element('portfolio-chart').hidden, false);
-  assert.match(element('balance-tokens').children[0].textContent, /1\.25 EX.*\$2\.50/);
+  assert.match(element('tokens').children[0].children[0].children[2].children[0].children[0].textContent, /1\.25 EX/);
   assert.match(element('token-options-list').children[0].children[1].textContent, /Example.*\$2\.000/);
   assert.match(element('amount-help').textContent, /2 decimals.*Entered: 1\.25 EX/);
-  assert.match(element('total-value').textContent, /202\.50/);
   const metadata = element('tokens').children[0].children[0].children[1].children[2];
   assert.match(metadata.textContent, /Example token.*example\.com/);
 });

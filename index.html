@@ -23,7 +23,7 @@
   <meta property="og:image:alt" content="CTF Cash: send and receive CashTokens">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:image" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/social-preview.png'>
-  <title>CTF Cash | Bitcoin Cash CashTokens</title>
+  <title>CTF / CASH 🐉</title>
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -54,7 +54,7 @@
         CTF
         <span class="brand-dim">/ CASH</span>
       </a>
-      <nav class="quick-nav" aria-label="Wallet actions">
+      <nav class="quick-nav" aria-label="Wallet actions" data-wallet-panel hidden>
         <button id="top-send" class="quick-action" type="button" aria-controls="send-panel">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M12 5l7 7-7 7" /></svg>
           <span>Send</span>
@@ -65,7 +65,6 @@
         </button>
       </nav>
       <div class="topbar-tools">
-        <span id="total-value" class="total-value">Total USD —</span>
         <span class="network"><i></i><span id="network">CHIPNET</span></span>
         <div class="tool-menu">
           <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Choose theme" aria-expanded="false" aria-controls="theme-menu">
@@ -100,7 +99,7 @@
     </aside>
     </header>
 
-    <section class="hero">
+    <section class="hero" data-wallet-panel hidden>
       <div class="hero-copy">
         <p class="eyebrow">BITCOIN CASH · CASHTOKENS</p>
         <h1 class="hero-headline" aria-label="Send and receive CashTokens, create payment links, and track token balances">
@@ -112,6 +111,16 @@
         <p class="intro">
           Connect your wallet to send and receive tokens, create payment QR codes, and explore your balances.
         </p>
+      </div>
+      <div class="mesh-sphere" aria-hidden="true">
+        <div class="mesh-sphere-spin">
+          <span class="mesh-ring mesh-longitude"></span><span class="mesh-ring mesh-longitude"></span>
+          <span class="mesh-ring mesh-longitude"></span><span class="mesh-ring mesh-longitude"></span>
+          <span class="mesh-ring mesh-longitude"></span><span class="mesh-ring mesh-longitude"></span>
+          <span class="mesh-ring mesh-latitude"></span><span class="mesh-ring mesh-latitude"></span>
+          <span class="mesh-ring mesh-latitude"></span><span class="mesh-ring mesh-latitude"></span>
+          <span class="mesh-ring mesh-latitude"></span>
+        </div>
       </div>
     </section>
 
@@ -171,15 +180,15 @@
         <button id="forget" class="button secondary" hidden>
           Forget saved session and pair again
         </button>
-        <button id="refresh" class="button secondary" disabled>
-          Refresh balances
-        </button>
-        <label for="scan-count">Addresses per receive and change path</label>
-        <input id="scan-count" type="number" min="1" max="1000" step="1" value="50">
-        <p class="fine">Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.</p>
+        <div data-wallet-panel hidden>
+          <button id="refresh" class="button secondary" disabled>Refresh balances</button>
+          <label for="scan-count">Addresses per receive and change path</label>
+          <input id="scan-count" type="number" min="1" max="1000" step="1" value="50">
+          <p class="fine">Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.</p>
+        </div>
       </article>
 
-      <article id="balance-section" class="panel">
+      <article id="balance-section" class="panel" data-wallet-panel hidden>
         <div class="heading">
           <div>
             <p class="eyebrow">NATIVE BALANCE</p>
@@ -191,11 +200,6 @@
         <p id="bch" class="balance">— <small>BCH</small></p>
         <p id="usd" class="muted">USD value —</p>
         <div class="divider"></div>
-        <p class="eyebrow">CASHTOKENS</p>
-        <div id="balance-tokens" class="muted">Connect wallet to load tokens.</div>
-        <p class="fine">NFT display is coming soon. NFTs are not included in the token balances above.</p>
-
-        <div class="divider"></div>
 
         <p class="eyebrow">FIRST RECEIVE ADDRESS</p>
         <div class="address-line">
@@ -205,7 +209,7 @@
       </article>
     </section>
 
-    <section id="transfer-section" class="panel section transfer-panel">
+    <section id="transfer-section" class="panel section transfer-panel" data-wallet-panel hidden>
       <div class="heading">
         <div>
           <p class="eyebrow">TRANSFER</p>
@@ -375,23 +379,30 @@
       </div>
     </section>
 
-    <section id="earn-section" class="panel section">
+    <section id="earn-section" class="panel section" data-wallet-panel hidden>
       <div class="heading">
         <div>
           <p class="eyebrow">PORTFOLIO</p>
           <h2>Tokens</h2>
         </div>
-        <span id="token-count" class="muted">—</span>
+        <svg class="portfolio-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M11 3a9 9 0 1 0 9 10h-9zM14 3v7h7a8 8 0 0 0-7-7z"/></svg>
       </div>
+      <p id="token-count" class="muted">—</p>
+      <label class="nft-toggle"><input id="show-nfts" type="checkbox"> Show NFTs</label>
       <div id="tokens" class="token-list">
         <div class="empty">Connect your wallet to load balances.</div>
+      </div>
+      <p id="portfolio-empty-filter" class="muted" hidden>No fungible tokens found. Show NFTs to view your collectibles.</p>
+      <div id="portfolio-pagination" class="portfolio-pagination" hidden>
+        <button id="portfolio-prev" class="small-button" type="button">Previous</button>
+        <span id="portfolio-page" aria-live="polite"></span>
+        <button id="portfolio-next" class="small-button" type="button">Next</button>
       </div>
       <details id="portfolio-chart" class="portfolio-chart" hidden>
         <summary>Portfolio allocation</summary>
         <p class="fine">Indicative Cauldron pool spot values in BCH; excludes tokens without a price and does not account for fees or price impact.</p>
         <div id="portfolio-chart-content" aria-live="polite">Connect a wallet to view allocation.</div>
       </details>
-      <p class="fine">NFT balances are not included.</p>
     </section>
 
     <footer>
