@@ -3,17 +3,18 @@ import assert from 'node:assert/strict';
 import { setupMediaSlideshow } from '../src/media-slideshow.js';
 
 function fixture(reducedMotion = false) {
-  const elements = new Map();
-  const $ = (id) => {
-    if (!elements.has(id)) elements.set(id, {
-      listeners: {},
-      style: {},
-      addEventListener(type, handler) { this.listeners[type] = handler; },
-      matches() { return this.hovered || false; },
-      contains(element) { return element === this.focused; },
-    });
-    return elements.get(id);
-  };
+  const createElement = () => ({
+    listeners: {}, style: {},
+    addEventListener(type, handler) { this.listeners[type] = handler; },
+  });
+  const cards = Array.from({ length: 3 }, () => {
+    const nodes = {
+      img: createElement(), '.media-unavailable': createElement(),
+      a: createElement(), strong: createElement(), '.media-caption span': createElement(),
+    };
+    return { nodes, querySelector(selector) { return nodes[selector]; } };
+  });
+  const gallery = { matches: () => false, contains: () => false };
   const motion = { matches: reducedMotion };
   const document = { hidden: false, activeElement: null };
   const original = { window: globalThis.window, document: globalThis.document, setInterval: globalThis.setInterval };
@@ -21,51 +22,48 @@ function fixture(reducedMotion = false) {
   globalThis.window = { matchMedia: () => motion };
   globalThis.document = document;
   globalThis.setInterval = (callback, delay) => { tick = callback; assert.equal(delay, 6000); };
-  setupMediaSlideshow($);
-  return { $, tick, motion, document, restore() { Object.assign(globalThis, original); } };
+  setupMediaSlideshow((id) => id === 'media-gallery' ? gallery : { querySelectorAll: () => cards });
+  return { cards, gallery, motion, document, tick, restore() { Object.assign(globalThis, original); } };
 }
 
-test('slideshow automatically cycles through all supplied images and wraps', () => {
-  const { $, tick, restore } = fixture();
+test('slideshow shows multiple uncropped sources and cycles through all artwork', () => {
+  const { cards, tick, restore } = fixture();
   try {
-    const links = new Set(['https://bch.now/media/private-shadow']);
-    for (let i = 0; i < 15; i++) {
+    const links = new Set();
+    for (let i = 0; i < 16; i++) {
       tick();
-      links.add($('media-link').href);
-      assert.match($('media-image').src, /\/[0-9a-f]{10}\/thumb\.webp$/);
-      assert.ok($('media-image').alt);
+      for (const { nodes } of cards) {
+        links.add(nodes.a.href);
+        assert.match(nodes.img.src, /\/[0-9a-f]{10}\/thumb\.webp$/);
+        assert.ok(nodes.img.alt);
+      }
     }
     assert.equal(links.size, 16);
-    assert.equal($('media-position').textContent, '16 / 16');
+    assert.equal(cards[0].nodes.strong.textContent, 'Private Shadow');
+    cards[0].nodes.img.listeners.error();
+    assert.equal(cards[0].nodes['.media-unavailable'].hidden, false);
     tick();
-    assert.equal($('media-link').href, 'https://bch.now/media/private-shadow');
-    assert.equal($('media-position').textContent, '1 / 16');
-    $('media-image').listeners.error();
-    assert.equal($('media-unavailable').hidden, false);
-    tick();
-    assert.equal($('media-image').hidden, false);
-    assert.equal($('media-unavailable').hidden, true);
+    assert.equal(cards[0].nodes.img.hidden, false);
+    assert.equal(cards[0].nodes['.media-unavailable'].hidden, true);
   } finally { restore(); }
 });
 
-test('slideshow stops while hidden, hovered, focused or reduced motion is requested', () => {
-  const { $, tick, motion, document, restore } = fixture(true);
+test('slideshow pauses for reduced motion, hidden pages, hover and keyboard focus', () => {
+  const { cards, gallery, motion, document, tick, restore } = fixture(true);
   try {
     tick();
-    assert.equal($('media-title').textContent, undefined);
     motion.matches = false;
-    $('media-gallery').hovered = true;
+    gallery.matches = () => true;
     tick();
-    $('media-gallery').hovered = false;
-    document.activeElement = $('media-link');
-    $('media-gallery').focused = $('media-link');
+    gallery.matches = () => false;
+    gallery.contains = () => true;
     tick();
-    document.activeElement = null;
+    gallery.contains = () => false;
     document.hidden = true;
     tick();
-    assert.equal($('media-title').textContent, undefined);
+    assert.equal(cards[0].nodes.strong.textContent, undefined);
     document.hidden = false;
     tick();
-    assert.equal($('media-title').textContent, 'Get BCH Now: Level Clear');
+    assert.equal(cards[0].nodes.strong.textContent, 'Get BCH Now: Level Clear');
   } finally { restore(); }
 });

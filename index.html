@@ -143,8 +143,9 @@
         <svg class="chain-art" viewBox="0 0 640 160" fill="none">
           <g class="chain-links" stroke="currentColor">
             <path d="M92 80h75m66 0h75m68 0h75m66 0h32" stroke-dasharray="4 7"/>
-            <circle cx="92" cy="80" r="31"/><circle cx="92" cy="80" r="23"/>
-            <path d="M85 65v30m8-30v30m-13-24h17a6 6 0 0 1 0 12H80m0 0h19a6 6 0 0 1 0 12H80"/>
+            <rect x="67" y="75" width="50" height="37" rx="6"/>
+            <path d="M77 75V65a15 15 0 0 1 30 0v10m-15 12a4 4 0 0 1 0 8v7m-4-11a4 4 0 0 1 4-4"/>
+            <circle cx="112" cy="46" r="5"/><path d="m108 50-8 8m2-2 3 3m-7 1 3 3"/>
             <path d="m200 48 28 16v32l-28 16-28-16V64l28-16Zm-28 16 28 16 28-16m-28 16v32"/>
             <circle cx="342" cy="55" r="5"/><circle cx="322" cy="99" r="5"/><circle cx="362" cy="99" r="5"/>
             <path d="m339 60-15 34m21-34 15 34m-33 5h30"/>
@@ -154,8 +155,30 @@
           </g>
         </svg>
         <svg class="space-pixels" viewBox="0 0 640 200" shape-rendering="crispEdges">
-          <path fill="currentColor" d="M78 26h3v3h3v3h-3v3h-3v-3h-3v-3h3zm76 35h3v3h-3zm388-24h3v3h3v3h-3v3h-3v-3h-3v-3h3zM485 96h3v3h-3zM240 22h2v2h-2zm164 55h2v2h-2z"/>
-          <path fill="currentColor" d="M112 108h8v4h-8zm-4 4h16v4h-16zm4 4h4v4h-4zm8 0h4v4h-4zm-8 4h4v4h-4zm8 0h4v4h-4zM510 124h4v-8h4v-8h8v8h4v8h-4v4h-12z"/>
+          <g class="pixel-constellations" fill="none" stroke="#9bdcff" stroke-opacity=".45" stroke-width="1">
+            <path d="M28 34 63 55 95 33 126 49 151 25M469 38l29 18 29-20 42 17 35-24" stroke-dasharray="2 5"/>
+            <path d="M57 155h72m-76 6h80m386-2h74" stroke-opacity=".3"/>
+          </g>
+          <g class="pixel-sparkles" fill="#d9f8ff">
+            <path d="M28 29h3v3h3v3h-3v3h-3v-3h-3v-3h3zm66-1h3v3h3v3h-3v3h-3v-3h-3v-3h3zm56-7h3v3h3v3h-3v3h-3v-3h-3v-3h3z"/>
+            <path d="M468 33h3v3h3v3h-3v3h-3v-3h-3v-3h3zm58-2h3v3h3v3h-3v3h-3v-3h-3v-3h3zm77-7h3v3h3v3h-3v3h-3v-3h-3v-3h3z"/>
+            <path d="M174 81h3v3h3v3h-3v3h-3v-3h-3v-3h3zm290 34h3v3h3v3h-3v3h-3v-3h-3v-3h3zM211 23h2v2h-2zm216 48h2v2h-2z"/>
+          </g>
+          <g class="pixel-crystal">
+            <path fill="#123d68" d="M74 98h12v-8h12v8h12v23h-4v8H78v-8h-4z"/>
+            <path fill="#70cfff" d="M78 100h8v-6h10v6h10v19h-4v6H82v-6h-4z"/>
+            <path fill="#d4f7ff" d="M86 100h10v6h6v6h-6v8H86v-8h-4v-6h4z"/>
+            <path fill="#3272b1" d="M86 112h10v8H86zm-4 8h20v5H82z"/>
+            <path fill="#a5e5ff" d="M70 132h44v4H70zm8 4h28v4H78zm8 4h12v5H86z"/>
+            <path fill="#d6faff" d="M118 79h4v6h6v4h-6v6h-4v-6h-6v-4h6zM58 91h3v4h4v3h-4v4h-3v-4h-4v-3h4z"/>
+          </g>
+          <g class="pixel-comet">
+            <path fill="#2c6fa5" d="M492 114h14v-5h11v5h12v5h5v11h-5v5h-12v5h-11v-5h-14v-5h-9v-11h9z"/>
+            <path fill="#83d7ff" d="M497 118h12v-5h8v5h9v5h4v6h-4v4h-9v3h-8v-3h-12v-4h-10v-6h10z"/>
+            <path fill="#e1faff" d="M503 122h16v8h-16z"/>
+            <path fill="#81cfff" d="M535 119h16v3h-16zm5 6h23v3h-23zm-5 6h12v3h-12z"/>
+            <path fill="#d6faff" d="M565 104h3v5h5v3h-5v5h-3v-5h-5v-3h5z"/>
+          </g>
         </svg>
       </div>
       <div class="landing-welcome panel">
@@ -163,6 +186,7 @@
         <h2>Your wallet, your universe.</h2>
         <p class="muted">Connect a wallet to explore your balances and send CashTokens.</p>
         <button id="landing-connect" class="button primary" type="button">Connect wallet <span aria-hidden="true">→</span></button>
+        <p class="swap-note">Have BTC? You can swap it for BCH with <a href="https://sideshift.ai" target="_blank" rel="noopener noreferrer">SideShift ↗</a>. This independent service uses mainnet; check the rate, fees and recipient address.</p>
       </div>
       <article id="balance-section" class="panel" data-wallet-panel hidden>
         <div class="heading">
@@ -432,15 +456,19 @@
         <div><p class="eyebrow">BCH COMMUNITY</p><h2>Explore the artwork</h2></div>
         <a href="https://bch.now" target="_blank" rel="noopener noreferrer">bch.now ↗</a>
       </div>
-      <div class="media-slide">
-        <a id="media-link" class="media-image" href="https://bch.now/media/private-shadow" target="_blank" rel="noopener noreferrer">
-          <img id="media-image" src="https://pub-0dcd642e0e954a94b4fd240efe006ed9.r2.dev/private-shadow/7971982929/thumb.webp" alt="Stencil on a peeling wall: CCTV camera beam lights two silhouettes handing a green coin through a torn hole in the wall." width="480" height="480" loading="lazy" decoding="async">
-          <span id="media-unavailable" class="media-unavailable" hidden>Image unavailable</span>
-        </a>
-        <div class="media-caption">
-          <div><strong id="media-title">Private Shadow</strong><span id="media-category">Privacy</span></div>
-          <span id="media-position">1 / 16</span>
-        </div>
+      <div class="media-strip" id="media-strip">
+        <article class="media-slide">
+          <a class="media-image" href="https://bch.now/media/private-shadow" target="_blank" rel="noopener noreferrer"><img src="https://pub-0dcd642e0e954a94b4fd240efe006ed9.r2.dev/private-shadow/7971982929/thumb.webp" alt="Stencil on a peeling wall: CCTV camera beam lights two silhouettes handing a green coin through a torn hole in the wall." width="480" height="480" loading="lazy" decoding="async"><span class="media-unavailable" hidden>Image unavailable</span></a>
+          <div class="media-caption"><strong>Private Shadow</strong><span>Privacy</span></div>
+        </article>
+        <article class="media-slide">
+          <a class="media-image" href="https://bch.now/media/get-bch-now-level-clear" target="_blank" rel="noopener noreferrer"><img src="https://pub-0dcd642e0e954a94b4fd240efe006ed9.r2.dev/get-bch-now-level-clear/2716f97815/thumb.webp" alt="Pixel plumber collects green BCH coins and climbs a flagpole with a BCH flag." width="480" height="480" loading="lazy" decoding="async"><span class="media-unavailable" hidden>Image unavailable</span></a>
+          <div class="media-caption"><strong>Get BCH Now: Level Clear</strong><span>Markets &amp; memes</span></div>
+        </article>
+        <article class="media-slide">
+          <a class="media-image" href="https://bch.now/media/ask-again-nicely" target="_blank" rel="noopener noreferrer"><img src="https://pub-0dcd642e0e954a94b4fd240efe006ed9.r2.dev/ask-again-nicely/27315605af/thumb.webp" alt="Stencil art: a man begs at a bank cashier desk while a woman hands him a sign saying Ask Again Nicely." width="480" height="480" loading="lazy" decoding="async"><span class="media-unavailable" hidden>Image unavailable</span></a>
+          <div class="media-caption"><strong>Ask Again Nicely</strong><span>Banks &amp; power</span></div>
+        </article>
       </div>
       <p class="media-credit">Artwork from <a href="https://bch.now" target="_blank" rel="noopener noreferrer">bch.now ↗</a></p>
     </aside>

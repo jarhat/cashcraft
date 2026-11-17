@@ -1,4 +1,6 @@
 const spanish = {
+  'Have BTC? You can swap it for BCH with': '¿Tienes BTC? Puedes cambiarlo por BCH con',
+  '. This independent service uses mainnet; check the rate, fees and recipient address.': '. Este servicio independiente usa mainnet; comprueba el tipo de cambio, las comisiones y la dirección de destino.',
   'Wallet connection': 'Conexión de la cartera',
   'Your wallet, your universe.': 'Tu cartera, tu universo.',
   'Connect a wallet to explore your balances and send CashTokens.': 'Conecta una cartera para explorar tus saldos y enviar CashTokens.',
@@ -198,6 +200,8 @@ const spanish = {
 };
 
 const french = {
+  'Have BTC? You can swap it for BCH with': 'Vous avez des BTC ? Vous pouvez les échanger contre des BCH avec',
+  '. This independent service uses mainnet; check the rate, fees and recipient address.': '. Ce service indépendant utilise le réseau principal ; vérifiez le taux, les frais et l’adresse du destinataire.',
   'Wallet connection': 'Connexion du portefeuille',
   'Your wallet, your universe.': 'Votre portefeuille, votre univers.',
   'Connect a wallet to explore your balances and send CashTokens.': 'Connectez un portefeuille pour consulter vos soldes et envoyer des CashTokens.',
@@ -397,6 +401,8 @@ const french = {
 };
 
 const german = {
+  'Have BTC? You can swap it for BCH with': 'Du hast BTC? Tausche sie gegen BCH mit',
+  '. This independent service uses mainnet; check the rate, fees and recipient address.': '. Dieser unabhängige Dienst nutzt das Mainnet; prüfe Kurs, Gebühren und Empfängeradresse.',
   'Wallet connection': 'Wallet-Verbindung',
   'Your wallet, your universe.': 'Deine Wallet, dein Universum.',
   'Connect a wallet to explore your balances and send CashTokens.': 'Verbinde eine Wallet, um Guthaben anzusehen und CashTokens zu senden.',

@@ -21,31 +21,41 @@ const slides = [
 
 export function setupMediaSlideshow($) {
   const gallery = $('media-gallery');
-  const image = $('media-image');
-  const unavailable = $('media-unavailable');
+  const cards = [...$('media-strip').querySelectorAll('.media-slide')].map((card) => ({
+    image: card.querySelector('img'),
+    unavailable: card.querySelector('.media-unavailable'),
+    link: card.querySelector('a'),
+    title: card.querySelector('strong'),
+    category: card.querySelector('.media-caption span'),
+  }));
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let index = 0;
 
-  function show(next) {
-    index = (next + slides.length) % slides.length;
-    const [slug, hash, title, category, alt] = slides[index];
+  function show(card, slide) {
+    const { image, unavailable, link, title, category } = card;
+    const [slug, hash, name, topic, alt] = slide;
     image.hidden = false;
     image.style.opacity = '0';
     unavailable.hidden = true;
     image.alt = alt;
     image.src = `${MEDIA_BASE}${slug}/${hash}/thumb.webp`;
-    $('media-link').href = `https://bch.now/media/${slug}`;
-    $('media-title').textContent = title;
-    $('media-category').textContent = category;
-    $('media-position').textContent = `${index + 1} / ${slides.length}`;
+    link.href = `https://bch.now/media/${slug}`;
+    title.textContent = name;
+    category.textContent = topic;
   }
 
-  image.addEventListener('error', () => {
-    image.hidden = true;
-    unavailable.hidden = false;
+  cards.forEach(({ image, unavailable }) => {
+    const failed = () => {
+      image.hidden = true;
+      unavailable.hidden = false;
+    };
+    image.addEventListener('error', failed);
+    image.addEventListener('load', () => { image.style.opacity = '1'; });
+    if (image.complete && !image.naturalWidth) failed();
   });
-  image.addEventListener('load', () => { image.style.opacity = '1'; });
   setInterval(() => {
-    if (!motion.matches && !document.hidden && !gallery.matches(':hover') && !gallery.contains(document.activeElement)) show(index + 1);
+    if (motion.matches || document.hidden || gallery.matches(':hover') || gallery.contains(document.activeElement)) return;
+    index = (index + 1) % slides.length;
+    cards.forEach((card, offset) => show(card, slides[(index + offset) % slides.length]));
   }, 6000);
 }
