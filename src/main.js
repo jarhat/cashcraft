@@ -331,6 +331,11 @@ function setConnection(connected) {
   $('forget').hidden = !connected;
   $('disconnect').hidden = !connected;
   $('logout').hidden = !connected;
+  if (!connected) {
+    const gameDialog = $('game-dialog');
+    if (gameDialog.open) gameDialog.close();
+    $('game-status').textContent = '';
+  }
   document.body.classList.toggle('wallet-connected', connected);
   $('network-wallet-status').textContent = translate(connected ? 'Wallet connected' : 'Not connected');
   if (!$('wizard-dialog').hidden) {

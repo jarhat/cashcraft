@@ -2762,7 +2762,7 @@ html[data-theme="aurora"] {
 .topbar { gap: clamp(10px, 1.618vw, 20px); }
 .topbar .wizard-guide { justify-self: end; align-self: start; }
 .topbar-tools { gap: 10px; }
-.dashboard > .under-topbar, .games-panel.under-topbar, .media-gallery.under-topbar, #log.under-topbar,
+.dashboard > .under-topbar, .media-gallery.under-topbar, #log.under-topbar,
 .chain-decoration.under-topbar, footer.under-topbar {
   -webkit-mask-image: linear-gradient(to bottom, transparent var(--fade-under-bar), #000 calc(var(--fade-under-bar) + 16px));
   mask-image: linear-gradient(to bottom, transparent var(--fade-under-bar), #000 calc(var(--fade-under-bar) + 16px));
@@ -3018,16 +3018,14 @@ body::before { content: none; display: none; }
 .tutorial-highlight::after, .wallet-link::after, .wizard-toggle::after, .transfer-tab.active::after {
   animation: none;
 }
-.games-panel { margin: 16px 0 0; }
-.game-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.game-button {
-  display: grid; place-items: center; gap: 8px; padding: 14px 6px; min-width: 0;
-  color: var(--ice); border: 1px solid var(--glass-border); border-radius: 14px;
-  background: linear-gradient(160deg, rgb(255 255 255 / 9%), rgb(255 255 255 / 2%));
-  cursor: pointer; font-size: .75rem;
+.topbar .game-button { font-size: 1.25rem; line-height: 1; }
+.topbar .game-button span { font-size: 1.25rem; }
+.game-toast {
+  position: fixed; z-index: 30; left: 50%; bottom: 56px; transform: translateX(-50%);
+  max-width: min(92vw, 420px); margin: 0; padding: 10px 14px; text-align: center;
+  border: 1px solid var(--glass-border); border-radius: 12px; background: var(--page-base); color: var(--ice);
 }
-.game-button span { font-size: 1.8rem; }
-.game-button:hover, .game-button:focus-visible { border-color: var(--ice); }
+.game-toast:empty { display: none; }
 .game-dialog { width: min(1000px, calc(100% - 24px)); max-height: calc(100dvh - 24px); }
 .game-switcher { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .game-switcher [aria-pressed="true"] { border-color: var(--ice); color: var(--ice); }

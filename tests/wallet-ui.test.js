@@ -835,7 +835,10 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   assert.equal($('wizard-dialog').hidden, false);
   assert.equal($('wizard-next').disabled, false);
   assert.equal(context.tutorialUpdated, undefined);
+  $('game-dialog').open = true;
+  $('game-dialog').close = () => { $('game-dialog').open = false; };
   context.setConnection(false);
+  assert.equal($('game-dialog').open, false);
   assert.ok(panels.every((panel) => panel.hidden));
   assert.equal($('network-wallet-status').textContent, 'Not connected');
   assert.equal($('wizard-guide').hidden, false);
