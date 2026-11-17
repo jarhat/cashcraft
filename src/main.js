@@ -3,6 +3,7 @@ import { setLanguage, translate } from './i18n.js';
 import { createPaymentQrImage } from './payment-qr-image.js';
 import { setupScrollEffects } from './scroll-effects.js';
 import { setupSnow } from './snow.js';
+import { setupPairingReminder } from './pairing-reminder.js';
 import { fetchTokenMetadata, fetchCauldronSpot } from './portfolio-data.js';
 import { loadTokenLogo } from './token-logo.js';
 import { inspectNft } from './nft-inspection.js';
@@ -143,6 +144,14 @@ let walletReceiveAddress = null;
 let walletPairingUri = null;
 let tokenBalances = new Map();
 let portfolioPage = 0;
+const pairingReminder = setupPairingReminder({
+  button: $('pairing-reminder-enable'),
+  status: $('pairing-reminder-status'),
+  openWallet: $('open-wallet'),
+  pendingUri: () => walletReady ? null : walletPairingUri,
+  translate,
+  logger,
+});
 let rewardCategory = null;
 let rewardCategoryPromise = null;
 let receiptWallet = null;
@@ -303,6 +312,7 @@ for (const name of ['theme', 'language']) {
 }
 
 function setConnection(connected) {
+  pairingReminder.cancel();
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
   $('advanced-settings').hidden = !connected;
   document.body.classList.toggle('wallet-connected', connected);

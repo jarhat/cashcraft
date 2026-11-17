@@ -617,6 +617,13 @@ const german = {
 };
 
 Object.assign(spanish, {
+  'Enable pairing reminder': 'Activar recordatorio de conexión',
+  'Pairing reminders are enabled; delivery may be delayed while the app is inactive.': 'Los recordatorios están activados; pueden retrasarse mientras la aplicación esté inactiva.',
+  'Pairing notifications are blocked in your browser settings.': 'Las notificaciones de conexión están bloqueadas en la configuración del navegador.',
+  'Still connecting? Approve in your wallet, then return here.': '¿Aún conectando? Aprueba en tu cartera y vuelve aquí.',
+  'Return to CTF Cash': 'Vuelve a CTF Cash',
+  'If you approved in your wallet, return to finish connecting.': 'Si aprobaste en tu cartera, vuelve para terminar la conexión.',
+  'Could not enable pairing notifications.': 'No se pudieron activar las notificaciones de conexión.',
   'Total USD —': 'Total en USD —',
   'Addresses per receive and change path': 'Direcciones por ruta de recepción y cambio',
   'Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.': 'Al actualizar se examina este número de direcciones desde el índice 0 en cada ruta. Los límites mayores tardan más.',
@@ -644,6 +651,13 @@ Object.assign(spanish, {
   'Loading market prices…': 'Cargando precios…',
 });
 Object.assign(french, {
+  'Enable pairing reminder': 'Activer le rappel de connexion',
+  'Pairing reminders are enabled; delivery may be delayed while the app is inactive.': 'Les rappels sont activés ; ils peuvent être retardés lorsque l’application est inactive.',
+  'Pairing notifications are blocked in your browser settings.': 'Les notifications de connexion sont bloquées dans les paramètres du navigateur.',
+  'Still connecting? Approve in your wallet, then return here.': 'Connexion en cours ? Approuvez dans votre portefeuille, puis revenez ici.',
+  'Return to CTF Cash': 'Revenir à CTF Cash',
+  'If you approved in your wallet, return to finish connecting.': 'Si vous avez approuvé dans votre portefeuille, revenez terminer la connexion.',
+  'Could not enable pairing notifications.': 'Impossible d’activer les notifications de connexion.',
   'Total USD —': 'Total en USD —',
   'Addresses per receive and change path': 'Adresses par chemin de réception et de monnaie',
   'Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.': 'L’actualisation analyse ce nombre d’adresses à partir de l’indice 0 sur chaque chemin. Une limite plus élevée prend plus de temps.',
@@ -671,6 +685,13 @@ Object.assign(french, {
   'Loading market prices…': 'Chargement des cours…',
 });
 Object.assign(german, {
+  'Enable pairing reminder': 'Verbindungserinnerung aktivieren',
+  'Pairing reminders are enabled; delivery may be delayed while the app is inactive.': 'Erinnerungen sind aktiviert; bei inaktiver App können sie verzögert eintreffen.',
+  'Pairing notifications are blocked in your browser settings.': 'Verbindungsbenachrichtigungen sind in den Browsereinstellungen blockiert.',
+  'Still connecting? Approve in your wallet, then return here.': 'Noch beim Verbinden? Bestätige in deiner Wallet und kehre hierher zurück.',
+  'Return to CTF Cash': 'Zurück zu CTF Cash',
+  'If you approved in your wallet, return to finish connecting.': 'Wenn du in deiner Wallet bestätigt hast, kehre zurück, um die Verbindung abzuschließen.',
+  'Could not enable pairing notifications.': 'Verbindungsbenachrichtigungen konnten nicht aktiviert werden.',
   'Total USD —': 'Gesamtwert in USD —',
   'Addresses per receive and change path': 'Adressen pro Empfangs- und Wechselgeldpfad',
   'Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.': 'Beim Aktualisieren wird diese Anzahl Adressen ab Index 0 auf jedem Pfad geprüft. Höhere Grenzen dauern länger.',

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setupMediaSlideshow } from '../src/media-slideshow.js';
 
-function fixture(reducedMotion = false) {
+function fixture(reducedMotion = false, observeVisibility = false) {
   const createElement = () => ({
     listeners: {}, style: {},
     addEventListener(type, handler) { this.listeners[type] = handler; },
@@ -17,13 +17,21 @@ function fixture(reducedMotion = false) {
   const gallery = { matches: () => false, contains: () => false };
   const motion = { matches: reducedMotion };
   const document = { hidden: false, activeElement: null };
-  const original = { window: globalThis.window, document: globalThis.document, setInterval: globalThis.setInterval };
+  const original = { window: globalThis.window, document: globalThis.document, setInterval: globalThis.setInterval, IntersectionObserver: globalThis.IntersectionObserver };
   let tick;
+  let intersection;
   globalThis.window = { matchMedia: () => motion };
+  if (observeVisibility) {
+    globalThis.IntersectionObserver = class {
+      constructor(callback) { intersection = callback; }
+      observe() {}
+    };
+    globalThis.window.IntersectionObserver = globalThis.IntersectionObserver;
+  }
   globalThis.document = document;
   globalThis.setInterval = (callback, delay) => { tick = callback; assert.equal(delay, 6000); };
   setupMediaSlideshow((id) => id === 'media-gallery' ? gallery : { querySelectorAll: () => cards });
-  return { cards, gallery, motion, document, tick, restore() { Object.assign(globalThis, original); } };
+  return { cards, gallery, motion, document, tick, setVisible(value) { intersection([{ isIntersecting: value }]); }, restore() { Object.assign(globalThis, original); } };
 }
 
 test('slideshow shows multiple uncropped sources and cycles through all artwork', () => {
@@ -45,6 +53,20 @@ test('slideshow shows multiple uncropped sources and cycles through all artwork'
     tick();
     assert.equal(cards[0].nodes.img.hidden, false);
     assert.equal(cards[0].nodes['.media-unavailable'].hidden, true);
+  } finally { restore(); }
+});
+
+test('slideshow avoids fetching new images while the gallery is offscreen', () => {
+  const { cards, tick, setVisible, restore } = fixture(false, true);
+  try {
+    tick();
+    assert.equal(cards[0].nodes.strong.textContent, undefined);
+    setVisible(true);
+    tick();
+    assert.equal(cards[0].nodes.strong.textContent, 'Get BCH Now: Level Clear');
+    setVisible(false);
+    tick();
+    assert.equal(cards[0].nodes.strong.textContent, 'Get BCH Now: Level Clear');
   } finally { restore(); }
 });
 

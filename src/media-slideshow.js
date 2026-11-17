@@ -30,6 +30,11 @@ export function setupMediaSlideshow($) {
   }));
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let index = 0;
+  let visible = !('IntersectionObserver' in window);
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; });
+    observer.observe(gallery);
+  }
 
   function show(card, slide) {
     const { image, unavailable, link, title, category } = card;
@@ -54,7 +59,7 @@ export function setupMediaSlideshow($) {
     if (image.complete && !image.naturalWidth) failed();
   });
   setInterval(() => {
-    if (motion.matches || document.hidden || gallery.matches(':hover') || gallery.contains(document.activeElement)) return;
+    if (!visible || motion.matches || document.hidden || gallery.matches(':hover') || gallery.contains(document.activeElement)) return;
     index = (index + 1) % slides.length;
     cards.forEach((card, offset) => show(card, slides[(index + offset) % slides.length]));
   }, 6000);

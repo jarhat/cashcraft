@@ -48,12 +48,6 @@
   <main class="shell">
     <div id="panel-outline-layer" class="panel-outline-layer" aria-hidden="true"></div>
     <header class="topbar">
-      <aside id="wizard-guide" class="wizard-guide" aria-label="Wizard tutorial">
-        <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
-          <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true"><path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/><path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/><path fill="#f0c7ae" d="M13 18h10v8H13z"/><path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/><path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/><path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/><path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/><path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/><path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/></svg>
-          <span>Wizard help</span>
-        </button>
-      </aside>
       <nav class="quick-nav" aria-label="Wallet actions" data-wallet-panel hidden>
         <button id="top-send" class="quick-action" type="button" aria-controls="send-panel">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M12 5l7 7-7 7" /></svg>
@@ -97,6 +91,12 @@
           <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread notification</span></span>
         </button>
       </div>
+      <aside id="wizard-guide" class="wizard-guide" aria-label="Wizard tutorial">
+        <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
+          <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true"><path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/><path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/><path fill="#f0c7ae" d="M13 18h10v8H13z"/><path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/><path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/><path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/><path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/><path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/><path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/></svg>
+          <span>Wizard help</span>
+        </button>
+      </aside>
     </header>
 
       <div id="wizard-dialog" class="wizard-dialog" hidden>
@@ -368,6 +368,8 @@
             <button id="copy-uri" class="small-button">Copy</button>
           </div>
         </details>
+        <button id="pairing-reminder-enable" class="small-button pairing-reminder-button" type="button" hidden>Enable pairing reminder</button>
+        <p id="pairing-reminder-status" class="fine" role="status"></p>
       </div>
 
       <button id="connect" class="button primary">
@@ -421,7 +423,6 @@
           <path d="M0 182 Q115 182 175 170 Q235 155 270 116 Q320 66 370 116 Q405 155 465 170 Q525 182 640 182"/>
           <path d="M0 162 Q120 162 185 152 Q240 140 275 106 Q320 72 365 106 Q400 140 455 152 Q520 162 640 162"/>
           <path d="M0 142 Q125 142 195 135 Q245 125 280 98 Q320 78 360 98 Q395 125 445 135 Q515 142 640 142"/>
-          <path d="M0 122 Q140 122 210 117 Q255 110 290 92 Q320 83 350 92 Q385 110 430 117 Q500 122 640 122"/>
           <path d="M40 260 Q75 200 210 118 M120 260 Q135 200 235 109 M200 260 Q200 195 265 96 M280 260 Q280 185 300 86 M360 260 Q360 185 340 86 M440 260 Q440 195 375 96 M520 260 Q505 200 405 109 M600 260 Q565 200 430 118"/>
         </g>
       </svg>

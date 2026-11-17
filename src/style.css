@@ -2256,11 +2256,26 @@ html, body { overscroll-behavior-y: none; }
 /* Arcade dashboard */
 body {
   background-image:
-    linear-gradient(rgb(132 205 255 / 5%) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(132 205 255 / 5%) 1px, transparent 1px),
     radial-gradient(ellipse at 50% -20%, var(--page-halo), transparent 55%),
     radial-gradient(ellipse at 100% 55%, var(--page-halo-secondary), transparent 38%);
-  background-size: 40px 40px, 40px 40px, auto, auto;
+  background-size: auto, auto;
+}
+body::before {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background-image:
+    linear-gradient(rgb(132 205 255 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(132 205 255 / 5%) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 1;
+  transition: opacity .45s ease;
+}
+body.wallet-connected::before { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  body::before { transition: none; }
 }
 .topbar {
   border-radius: 4px;
@@ -2748,23 +2763,23 @@ html[data-theme="aurora"] {
   .media-slide:nth-child(3) { display: none; }
 }
 .topbar {
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 12px;
 }
 .topbar .wizard-guide, body.wallet-connected .topbar .wizard-guide {
-  grid-column: 1;
+  grid-column: 4;
   grid-row: 1;
   min-width: 0;
   margin: 0;
-  justify-self: start;
+  justify-self: end;
   align-self: center;
 }
 .topbar .wizard-toggle { max-width: 100%; text-align: left; }
 .topbar .wizard-toggle svg { flex: none; }
-.topbar .quick-nav { grid-column: 2; grid-row: 1; }
-.topbar > .network { grid-column: 3; grid-row: 1; justify-self: end; }
-.topbar .topbar-tools { grid-column: 4; grid-row: 1; flex-wrap: nowrap; max-width: none; }
+.topbar .quick-nav { grid-column: 1; grid-row: 1; }
+.topbar > .network { grid-column: 2; grid-row: 1; justify-self: end; }
+.topbar .topbar-tools { grid-column: 3; grid-row: 1; flex-wrap: nowrap; max-width: none; }
 .topbar .theme-toggle { width: 44px; height: 44px; flex: none; }
 .topbar .theme-icon, .topbar .quick-action svg { width: 19px; height: 19px; }
 .topbar .quick-action { min-height: 44px; font-size: .82rem; }
@@ -2783,6 +2798,7 @@ body:not(.wallet-connected) .dashboard { padding: clamp(24px, 5vh, 48px) 0 32px;
   animation: none;
 }
 .mesh-terrain { animation: none; }
+.mesh-sun { left: auto; right: clamp(16px, 8vw, 140px); transform: none; }
 .chain-decoration {
   position: relative;
   height: 140px;
@@ -2812,15 +2828,23 @@ body.wallet-connected .network i {
   box-shadow: inset 0 0 5px rgb(69 186 255 / 55%), 0 0 6px rgb(69 186 255 / 40%);
 }
 .panel-outline.guide-outline { border-radius: 14px; }
-body { background-attachment: fixed, fixed, fixed, fixed; }
+body { background-attachment: fixed, fixed; }
 .mesh-terrain { height: 100%; }
+.topbar {
+  border: 1px solid rgb(164 215 255 / 10%);
+  border-bottom-color: rgb(164 215 255 / 14%);
+  box-shadow: 0 12px 24px -18px rgb(0 0 0 / 90%);
+}
+.dashboard { margin-top: clamp(16px, 2.5vw, 28px); }
+.pairing-reminder-button { margin-top: 12px; }
+#pairing-reminder-status:empty { display: none; }
 .chain-decoration { height: 82px; margin-top: 20px; }
 .chain-art { inset: 0; height: 82px; opacity: .5; filter: none; }
 .chain-links { stroke-width: 1.1; }
 @media (max-width: 900px) {
   .topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
-  .topbar .wizard-guide { grid-column: 1; grid-row: 1; }
-  .topbar > .network { grid-column: 2; grid-row: 1; }
+  .topbar .wizard-guide, body.wallet-connected .topbar .wizard-guide { grid-column: 2; grid-row: 1; justify-self: end; }
+  .topbar > .network { grid-column: 1; grid-row: 1; justify-self: start; }
   .topbar .topbar-tools { grid-column: 1 / -1; grid-row: 2; justify-content: center; gap: 8px; }
   .topbar .quick-nav { grid-column: 1 / -1; grid-row: 3; justify-self: center; }
   .topbar .tool-dropdown { right: auto; left: 0; }

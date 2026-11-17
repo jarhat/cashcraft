@@ -803,6 +803,7 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   const context = {
     $, document: { querySelectorAll: () => panels, body: { classList: { toggle() {} } } }, sending: false,
     pairingInProgress: false, transferInteracted: false, tutorialStep: 2,
+    pairingReminder: { cancel() {} },
     translate: (text) => text,
     showTutorialStep() { context.tutorialUpdated = true; },
   };
