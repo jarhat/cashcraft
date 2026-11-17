@@ -86,15 +86,25 @@
             <button type="button" data-language-option="de" lang="de">Deutsch</button>
           </div>
         </div>
+        <button id="wiki-open" class="theme-toggle" type="button" aria-label="CashTokens wiki" aria-haspopup="dialog" aria-controls="wiki-dialog">
+          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-2-2-5-2-9-1v13c4-1 7-1 9 1m0-13c2-2 5-2 9-1v13c-4-1-7-1-9 1m0-13v13"/></svg>
+        </button>
+        <div class="tool-menu">
+          <button id="settings-toggle" class="theme-toggle" type="button" aria-label="Settings" aria-expanded="false" aria-controls="settings-menu">
+            <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6m8 4v6"/><circle cx="8" cy="7" r="2"/><circle cx="16" cy="17" r="2"/></svg>
+          </button>
+          <div id="settings-menu" class="tool-dropdown settings-menu" hidden>
+            <label id="advanced-control" class="advanced-control">
+              <input id="advanced-mode" type="checkbox" role="switch" aria-controls="advanced-settings show-nfts-control">
+              <span>Advanced mode</span>
+            </label>
+          </div>
+        </div>
         <button id="notifications-toggle" class="theme-toggle notification-toggle" type="button" aria-label="Notifications" aria-controls="notifications-dialog" aria-describedby="notification-indicator" aria-haspopup="dialog">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9ZM10 20h4"/></svg>
           <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread notification</span></span>
         </button>
       </div>
-      <label id="advanced-control" class="advanced-control" data-wallet-panel hidden>
-        <input id="advanced-mode" type="checkbox" role="switch" aria-controls="advanced-settings">
-        <span>Advanced mode</span>
-      </label>
     </header>
 
     <aside id="wizard-guide" class="wizard-guide" aria-label="Wizard tutorial">
@@ -103,21 +113,6 @@
         <span>Wizard help</span>
       </button>
     </aside>
-
-    <section class="hero" data-wallet-panel hidden>
-      <div class="hero-copy">
-        <p class="eyebrow">BITCOIN CASH · CASHTOKENS</p>
-        <h1 class="hero-headline" aria-label="Send and receive CashTokens, create payment links, and track token balances">
-          <span class="hero-slide" aria-hidden="true">Send<br><span>CashTokens</span></span>
-          <span class="hero-slide" aria-hidden="true">Receive<br><span>CashTokens</span></span>
-          <span class="hero-slide" aria-hidden="true">Create<br><span>Payment links</span></span>
-          <span class="hero-slide" aria-hidden="true">Track<br><span>Token balances</span></span>
-        </h1>
-        <p class="intro">
-          Connect your wallet to send and receive tokens, create payment QR codes, and explore your balances.
-        </p>
-      </div>
-    </section>
 
       <div id="wizard-dialog" class="wizard-dialog" hidden>
         <strong id="wizard-title"></strong>
@@ -132,6 +127,7 @@
           <p>Choose Connect wallet below. Open your wallet or scan the code, approve the connection, then return to this browser. Use a wallet on the same network shown above.</p>
         </div>
         <div class="wizard-controls">
+          <button id="wizard-close" class="small-button" type="button">Close</button>
           <button id="wizard-prev" class="small-button" type="button">Back</button>
           <span id="wizard-progress"></span>
           <button id="wizard-next" class="small-button" type="button">Next</button>
@@ -153,6 +149,19 @@
             <path d="M40 260 Q75 200 210 118 M120 260 Q135 200 235 109 M200 260 Q200 195 265 96 M280 260 Q280 185 300 86 M360 260 Q360 185 340 86 M440 260 Q440 195 375 96 M520 260 Q505 200 405 109 M600 260 Q565 200 430 118"/>
           </g>
         </svg>
+        <svg class="chain-art" viewBox="0 0 640 160" fill="none">
+          <g class="chain-links" stroke="currentColor">
+            <path d="M92 80h75m66 0h75m68 0h75m66 0h32" stroke-dasharray="4 7"/>
+            <circle cx="92" cy="80" r="31"/><circle cx="92" cy="80" r="23"/>
+            <path d="M85 65v30m8-30v30m-13-24h17a6 6 0 0 1 0 12H80m0 0h19a6 6 0 0 1 0 12H80"/>
+            <path d="m200 48 28 16v32l-28 16-28-16V64l28-16Zm-28 16 28 16 28-16m-28 16v32"/>
+            <circle cx="342" cy="55" r="5"/><circle cx="322" cy="99" r="5"/><circle cx="362" cy="99" r="5"/>
+            <path d="m339 60-15 34m21-34 15 34m-33 5h30"/>
+            <rect x="456" y="53" width="56" height="54" rx="8"/>
+            <path d="m474 67-4 26m16-26-4 26m-16-18h26m-28 10h26"/>
+            <path d="m540 72 9 8-9 8"/>
+          </g>
+        </svg>
       </div>
       <article id="balance-section" class="panel" data-wallet-panel hidden>
         <div class="heading">
@@ -160,7 +169,6 @@
             <p class="eyebrow">NATIVE BALANCE</p>
             <h2>Bitcoin Cash</h2>
           </div>
-          <span class="coin">₿</span>
         </div>
 
         <p id="bch" class="balance">— <small>BCH</small></p>
@@ -180,7 +188,6 @@
           <p class="eyebrow">TRANSFER</p>
           <h2>Tokens</h2>
         </div>
-        <span class="arrow" aria-hidden="true">↗</span>
       </div>
 
       <div class="transfer-tabs" role="tablist" aria-label="Token transfer">
@@ -210,21 +217,23 @@
         <div class="form">
           <div>
             <label for="category">Token category ID</label>
-            <div id="category-selector">
-            <select id="category-select" aria-label="Choose an available token" hidden disabled>
-              <option value="">Enter a category ID manually</option>
-            </select>
-            <details id="token-options" class="token-options" hidden>
-              <summary>Choose an available token</summary>
-              <div id="token-options-list"></div>
-            </details>
+            <div class="category-field">
+              <input
+                id="category"
+                placeholder="64-character category ID"
+                autocomplete="off"
+                spellcheck="false"
+              >
+              <div id="category-selector">
+                <select id="category-select" aria-label="Choose an available token" hidden disabled>
+                  <option value="">Enter a category ID manually</option>
+                </select>
+                <details id="token-options" class="token-options" hidden>
+                  <summary aria-label="Choose an available token" title="Choose an available token">▾</summary>
+                  <div id="token-options-list"></div>
+                </details>
+              </div>
             </div>
-            <input
-              id="category"
-              placeholder="64-character category ID"
-              autocomplete="off"
-              spellcheck="false"
-            >
           </div>
 
           <label>
@@ -350,10 +359,9 @@
           <p class="eyebrow">PORTFOLIO</p>
           <h2>Tokens</h2>
         </div>
-        <svg class="portfolio-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M11 3a9 9 0 1 0 9 10h-9zM14 3v7h7a8 8 0 0 0-7-7z"/></svg>
       </div>
       <p id="token-count" class="muted">—</p>
-      <label class="nft-toggle"><input id="show-nfts" type="checkbox"> Show NFTs</label>
+      <label id="show-nfts-control" class="nft-toggle" hidden><input id="show-nfts" type="checkbox"> Show NFTs</label>
       <div id="tokens" class="token-list">
         <div class="empty">Connect your wallet to load balances.</div>
       </div>
@@ -415,12 +423,60 @@
     </div>
 
     <pre id="log" role="status"></pre>
+    <aside class="media-gallery" aria-label="Bitcoin Cash media">
+      <a class="media-image" href="https://bch.now" target="_blank" rel="noopener noreferrer" aria-label="Explore Bitcoin Cash media on bch.now"></a>
+      <p>Explore Bitcoin Cash media on <a href="https://bch.now" target="_blank" rel="noopener noreferrer">bch.now ↗</a></p>
+    </aside>
     <footer>
       <span>PRIVATE KEYS REMAIN IN YOUR WALLET</span>
       <span>CTF · CASH</span>
     </footer>
 
   </main>
+
+  <dialog id="wiki-dialog" class="notifications-dialog wiki-dialog" aria-labelledby="wiki-title">
+    <div class="notifications-heading">
+      <h2 id="wiki-title">CashTokens wiki</h2>
+      <button id="wiki-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="wiki-content" lang="en">
+      <p>A practical guide to Bitcoin Cash tokens. This overview is not a consensus implementation; consult the <a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer">CashTokens specification ↗</a> and its test vectors for normative rules.</p>
+      <details open><summary>UTXOs and categories</summary>
+        <p>CashTokens are consensus-validated data on BCH outputs, not a separate ledger. An output contains satoshis, locking bytecode and optionally one token category, with fungible units, one NFT, or both. BCH pays transaction fees.</p>
+        <p>A category is identified by 32 bytes. Genesis is associated with spending output index 0 of an earlier transaction; that transaction's hash identifies the eligible category. Displayed IDs and wire bytes may use different byte order. Names and logos do not establish identity.</p>
+      </details>
+      <details><summary>Fungible amounts and burns</summary>
+        <p>Amounts are integer base units. An encoded amount must be positive and no greater than 2<sup>63</sup> − 1. Decimal places are metadata, not consensus.</p>
+        <p>For an existing category, outputs cannot exceed inputs. The difference is burned; genesis is the issuance exception. For example, 100 input units and 90 output units burn 10. Token-unaware spending can accidentally destroy tokens.</p>
+      </details>
+      <details><summary>NFTs, commitments and capabilities</summary>
+        <p>An NFT has a category, a capability and an application-defined commitment of up to 40 bytes. A commitment need not be unique or prove authenticity.</p>
+        <p><strong>None (immutable):</strong> ordinary continuation preserves the commitment. <strong>Mutable:</strong> a valid successor can change it. <strong>Minting:</strong> an input with minting authority can authorize new NFTs in its category. Whether authority is safe depends on who can spend it and on any covenant restrictions.</p>
+        <p>Validation accounts for all NFTs and authority in a category across the transaction; it is not a simple one-input-to-one-output rule. This wallet's advanced inspector is read-only and shows only scanned wallet outputs, not all authority in the category.</p>
+      </details>
+      <details><summary>Encoding and validation</summary>
+        <p>The token prefix encodes the category, a bitfield and optional commitment and amount. Invalid combinations, reserved capabilities, non-minimal encodings, zero encoded amounts and out-of-range values are rejected. Use the complete CHIP algorithm and test vectors for duplicate NFTs, mutable transitions, minting and genesis.</p>
+      </details>
+      <details><summary>Script, covenants and signing</summary>
+        <p>Token introspection lets BCH Script examine token data on inputs and outputs. A covenant can impose additional rules on destinations, amounts or state transitions; consensus validity alone does not establish an application's policy.</p>
+        <p>Token-aware signing must account for the assets and relevant transaction data. The specification includes signing-serialization changes such as SIGHASH_UTXOS. Always review the transaction in a token-aware wallet before signing.</p>
+      </details>
+      <details><summary>Metadata, supply and trust</summary>
+        <p>BCMR metadata can supply names, symbols, decimals, descriptions and icons, but these are not the consensus category ID and are not proof of an issuer's claims. Similar names can refer to different categories.</p>
+        <p>Supply figures depend on how extant, reserved and circulating units are defined. A minting NFT is authority to create NFTs, not fungible supply already issued. Consensus validity does not prove backing, redemption or value.</p>
+      </details>
+      <details><summary>History and checklist</summary>
+        <p>CashTokens are a consensus-level descendant of colored-coin ideas. Unlike application-layer conventions such as SLP, their core token rules are enforced by network nodes; indexers remain useful for discovery and presentation.</p>
+        <p>Check the exact category and genesis, current UTXOs, minting authority and its controller, NFT capability and commitment, covenant rules, metadata authenticity, wallet token handling, conformance tests and any economic claims independently.</p>
+      </details>
+      <details><summary>FAQ</summary>
+        <p><strong>Why do I need BCH?</strong> Token-bearing outputs hold satoshis, and transaction fees are paid in BCH.</p>
+        <p><strong>Does a minting NFT create fungible units?</strong> No. It authorizes NFT issuance in its category, not ordinary fungible inflation.</p>
+        <p><strong>Does this inspector show every minting authority?</strong> No. It describes only NFTs found in the scanned wallet addresses.</p>
+        <p><strong>Can I trust a token's name or icon?</strong> Not on its own. Check the exact category and independently verify issuer claims and controlling scripts.</p>
+      </details>
+    </div>
+  </dialog>
 
   <dialog id="notifications-dialog" class="notifications-dialog" aria-labelledby="notifications-title">
     <div class="notifications-heading">

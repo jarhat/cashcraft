@@ -4,6 +4,7 @@ import { createPaymentQrImage } from './payment-qr-image.js';
 import { setupScrollEffects } from './scroll-effects.js';
 import { fetchTokenMetadata, fetchCauldronSpot } from './portfolio-data.js';
 import { loadTokenLogo } from './token-logo.js';
+import { inspectNft } from './nft-inspection.js';
 import { setupMarketTicker } from './market-ticker.js';
 import { createLogger } from './logger.js';
 import { submitCashAddress, API_BASE_URL } from './api.js';
@@ -253,7 +254,7 @@ function setTheme(theme) {
 const migratedTheme = { dark: 'frost', blue: 'frost', green: 'aurora', bch: 'aurora', 'bch-sunrise': 'aurora' }[savedTheme] || savedTheme;
 setTheme(['frost', 'aurora'].includes(migratedTheme) ? migratedTheme : 'frost');
 
-for (const name of ['theme', 'language']) {
+for (const name of ['theme', 'language', 'settings']) {
   const toggle = $(`${name}-toggle`);
   const menu = $(`${name}-menu`);
   const close = () => {
@@ -750,6 +751,7 @@ async function scanWallet() {
   }
 
   const results = new Array(scanAddressRecords.length);
+  const prefetchedLogos = new Map();
   let nextIndex = 0;
 
   async function worker() {
@@ -759,6 +761,17 @@ async function scanWallet() {
 
       const record = scanAddressRecords[index];
       results[index] = await fetchAddressUtxosWithRetry(record);
+      if (mainnet) {
+        for (const utxo of results[index]) {
+          const category = String(utxo.token?.category || '').toLowerCase();
+          const amount = String(utxo.token?.amount ?? '');
+          if (!/^[\da-f]{64}$/.test(category) || !/^[0-9]+$/.test(amount) || /^0+$/.test(amount) || prefetchedLogos.has(category)) continue;
+          prefetchedLogos.set(category, loadTokenLogo(category).then(
+            (image) => ({ image }),
+            (error) => ({ error }),
+          ));
+        }
+      }
     }
   }
 
@@ -781,10 +794,10 @@ async function scanWallet() {
     }
   }
 
-  return { addresses: scanAddressRecords, utxos: foundUtxos };
+  return { addresses: scanAddressRecords, utxos: foundUtxos, prefetchedLogos };
 }
 
-function renderBalances(scannedUtxos) {
+function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
   const version = ++portfolioVersion;
   const pricedTokens = [];
   $('portfolio-chart').hidden = true;
@@ -959,7 +972,11 @@ function renderBalances(scannedUtxos) {
     if (spendableAmount > 0n) optionList.append(option);
 
     if (mainnet) {
-      loadTokenLogo(category).then((image) => {
+      const logo = prefetchedLogos.get(category)?.then(({ image, error }) => {
+        if (error) throw error;
+        return image;
+      }) ?? loadTokenLogo(category);
+      logo.then((image) => {
         if (version !== portfolioVersion) return;
         image.alt = '';
         icon.replaceChildren(image);
@@ -1043,9 +1060,30 @@ function renderBalances(scannedUtxos) {
     const details = document.createElement('p');
     details.className = 'fine nft-details';
     const nft = utxo.token.nft;
-    details.textContent = `Capability: ${nft.capability || 'none'} · Commitment: ${nft.commitment || 'empty'} · ${utxo.txid}:${utxo.vout}` +
+    details.textContent = `Capability: ${nft.capability ?? 'unavailable'} · Commitment: ${nft.commitment === '' ? 'empty' : nft.commitment ?? 'unavailable'} · ${utxo.txid}:${utxo.vout}` +
       (BigInt(utxo.token.amount || 0) > 0n ? ` · ${utxo.token.amount} attached base units` : '');
-    row.append(heading, categoryLine, details);
+    const inspection = inspectNft(nft);
+    const advanced = document.createElement('details');
+    advanced.className = 'advanced-nft';
+    advanced.hidden = !$('advanced-mode').checked;
+    const summary = document.createElement('summary');
+    summary.textContent = translate('Inspect NFT');
+    const info = document.createElement('p');
+    info.className = 'fine nft-inspection';
+    const capabilities = {
+      none: 'Immutable: ordinary continuation preserves the commitment.',
+      mutable: 'Mutable: a valid successor may change the commitment.',
+      minting: 'Minting: this NFT can authorize new NFTs in its category.',
+    };
+    const capabilityText = inspection.capability
+      ? translate(capabilities[inspection.capability])
+      : translate('Unrecognized NFT capability.');
+    const commitmentText = inspection.commitmentBytes === null
+      ? translate('Invalid or unavailable commitment.')
+      : `${translate('Commitment bytes')}: ${inspection.commitmentBytes} / 40`;
+    info.textContent = `${capabilityText} ${commitmentText} · ${translate('Output')}: ${utxo.txid}:${utxo.vout} · ${utxo.satoshis} satoshis. ${translate('This wallet view does not establish who controls other minting authorities.')}`;
+    advanced.append(summary, info);
+    row.append(heading, categoryLine, details, advanced);
     tokens.append(row);
   }
   if (balances.size === 0) $('portfolio-chart-content').textContent = translate('No priced token balances available.');
@@ -1126,7 +1164,7 @@ async function refreshBalances({ quiet = false } = {}) {
     addresses = scanned.addresses;
     utxos = scanned.utxos;
     balanceSatoshis = utxos.reduce((sum, utxo) => sum + BigInt(utxo.satoshis), 0n);
-    renderBalances(utxos);
+    renderBalances(utxos, scanned.prefetchedLogos);
     let receiptError;
     try {
       await loadRewardCategory();
@@ -1578,8 +1616,24 @@ $('refresh').addEventListener('click', () => {
 });
 
 $('advanced-mode').addEventListener('change', () => {
-  $('advanced-settings').hidden = !walletReady || !$('advanced-mode').checked;
+  const enabled = $('advanced-mode').checked;
+  $('advanced-settings').hidden = !walletReady || !enabled;
+  $('show-nfts-control').hidden = !enabled;
+  if (!enabled && $('show-nfts').checked) {
+    $('show-nfts').checked = false;
+    portfolioPage = 0;
+    paginatePortfolio();
+  }
+  document.querySelectorAll('.advanced-nft').forEach((details) => {
+    details.hidden = !enabled;
+    if (details.hidden) details.open = false;
+  });
 });
+
+$('wiki-open').addEventListener('click', () => {
+  if (!$('wiki-dialog').open) $('wiki-dialog').showModal();
+});
+$('wiki-close').addEventListener('click', () => $('wiki-dialog').close());
 
 $('show-nfts').addEventListener('change', () => {
   portfolioPage = 0;
@@ -2003,7 +2057,10 @@ function showTutorialStep() {
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
   const step = tutorialSteps[tutorialStep];
   const panel = $(step.id);
+  const dialog = $('wizard-dialog');
+  const focused = dialog.contains(document.activeElement) ? document.activeElement : null;
   panel.classList.add('tutorial-highlight');
+  panel.prepend(dialog);
   $('wizard-title').textContent = step.title;
   $('wizard-message').textContent = step.message;
   $('wallet-help').hidden = tutorialStep !== 0;
@@ -2011,12 +2068,13 @@ function showTutorialStep() {
   $('wizard-prev').disabled = tutorialStep === 0;
   $('wizard-next').disabled = tutorialStep === 0 && $('balance-section').hidden;
   $('wizard-next').textContent = tutorialStep === tutorialSteps.length - 1 ? 'Done' : 'Next';
+  if (focused) (focused.disabled ? $('wizard-next') : focused).focus({ preventScroll: true });
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function closeTutorial() {
   const guide = document.querySelector('.wizard-guide');
-  const focused = guide.contains(document.activeElement);
+  const focused = guide.contains(document.activeElement) || $('wizard-dialog').contains(document.activeElement);
   $('wizard-dialog').hidden = true;
   $('wizard-toggle').setAttribute('aria-expanded', 'false');
   guide.classList.remove('walking');
@@ -2045,6 +2103,7 @@ $('wizard-prev').addEventListener('click', () => {
     showTutorialStep();
   }
 });
+$('wizard-close').addEventListener('click', closeTutorial);
 $('wizard-next').addEventListener('click', () => {
   if (tutorialStep === tutorialSteps.length - 1) {
     closeTutorial();

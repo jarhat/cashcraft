@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
+import { inspectNft } from '../src/nft-inspection.js';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
@@ -22,7 +23,7 @@ test('theme preferences migrate and select the correct palette', () => {
       setItem(key, value) { this[key] = value; },
     };
     const start = source.indexOf('const savedTheme =');
-    const end = source.indexOf("\nfor (const name of ['theme', 'language'])", start);
+    const end = source.indexOf("\nfor (const name of ['theme', 'language', 'settings'])", start);
     runInNewContext(source.slice(start, end), { document, localStorage });
     assert.equal(document.documentElement.dataset.theme, expected);
     assert.equal(localStorage['ctf-theme'], expected);
@@ -49,6 +50,7 @@ test('wizard highlights and scrolls to each tutorial panel without moving the na
   for (const id of ['connection-section', 'balance-section', 'earn-section', 'transfer-section']) {
     const panel = {
       ...target(id),
+      prepend(node) { assert.equal(node, elements.get('wizard-dialog')); node.parent = id; },
       scrollIntoView() { scrolled = id; },
       closest(selector) {
         assert.equal(selector, '.grid');
@@ -61,11 +63,12 @@ test('wizard highlights and scrolls to each tutorial panel without moving the na
     };
     elements.set(id, panel);
   }
-  for (const id of ['wizard-toggle', 'wizard-dialog', 'wizard-title', 'wizard-message', 'wizard-progress', 'wizard-prev', 'wizard-next', 'wallet-help']) {
+  for (const id of ['wizard-toggle', 'wizard-dialog', 'wizard-title', 'wizard-message', 'wizard-progress', 'wizard-prev', 'wizard-next', 'wizard-close', 'wallet-help']) {
     elements.set(id, {
       hidden: id === 'wizard-dialog',
       addEventListener(type, handler) { this[type] = handler; },
       setAttribute() {},
+      contains() { return false; },
     });
   }
   const document = {
@@ -79,9 +82,11 @@ test('wizard highlights and scrolls to each tutorial panel without moving the na
   elements.get('wizard-toggle').click();
   assert.equal(guidePosition, 'hero');
   assert.equal(scrolled, 'connection-section');
+  assert.equal(elements.get('wizard-dialog').parent, 'connection-section');
   assert.equal(elements.get('wizard-progress').textContent, '1 / 4');
   elements.get('wizard-next').click();
   assert.equal(scrolled, 'balance-section');
+  assert.equal(elements.get('wizard-dialog').parent, 'balance-section');
   elements.get('wizard-next').click();
   assert.equal(scrolled, 'transfer-section');
   elements.get('wizard-next').click();
@@ -299,6 +304,32 @@ test('token decimals are formatted exactly without losing large base units', () 
   assert.equal(context.formatTokenAmount(1234567890123456789n, 8), '12345678901.23456789');
   assert.equal(context.formatTokenAmount(5n, 3), '0.005');
   assert.equal(context.formatTokenAmount(5n, 0), '5');
+});
+
+test('prefetches each token logo during the scan without waiting for other addresses', async () => {
+  const category = 'a'.repeat(64);
+  let finishSecondAddress;
+  const logoRequests = [];
+  const records = [{ index: 0 }, { index: 1 }];
+  const start = source.indexOf('async function scanWallet()');
+  const end = source.indexOf('\nfunction renderBalances', start);
+  const context = {
+    scanAddressRecords: records, SCAN_CONCURRENCY: 2, mainnet: true,
+    fetchAddressUtxosWithRetry: (record) => record.index === 0
+      ? Promise.resolve([{ token: { category, amount: 1n } }])
+      : new Promise((resolve) => { finishSecondAddress = resolve; }),
+    loadTokenLogo: (id) => { logoRequests.push(id); return new Promise(() => {}); },
+    utxoKey: () => null, normalizeUtxo: (utxo) => utxo,
+  };
+  runInNewContext(source.slice(start, end), context);
+  const scan = context.scanWallet();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(logoRequests, [category]);
+  finishSecondAddress([{ token: { category, amount: 2n } }]);
+  const result = await scan;
+  assert.equal(result.utxos.length, 2);
+  assert.equal(result.prefetchedLogos.size, 1);
+  assert.deepEqual(logoRequests, [category]);
 });
 
 test('late scans restart the manager handshake and attach the listener immediately', async () => {
@@ -654,6 +685,7 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
     fetchTokenMetadata: () => new Promise(() => {}), fetchCauldronSpot: () => new Promise(() => {}),
     formatBch: () => '0.00001000', Option: class { constructor(text, value) { this.text = text; this.value = value; } },
     document: { createElement: () => new Element() },
+    inspectNft,
     navigator: { clipboard: { writeText: async (value) => { copied = value; } } },
     translate: (text) => text, setTimeout() {}, report(error) { throw error; },
     utxos: [{ satoshis: 1000n, token: { category, amount: 5n } }],
@@ -697,6 +729,7 @@ test('portfolio paginates fungible tokens and optionally includes each NFT', asy
     tokenBalances: new Map(), updateAmountHelp() {}, formatBch: () => '0',
     Option: class { constructor(text, value) { this.text = text; this.value = value; } },
     document: { createElement: () => new Element() },
+    inspectNft,
     navigator: { clipboard: { writeText: async (value) => { copied = value; } } },
     translate: (text) => text, setTimeout() {}, report(error) { throw error; },
     fetchCauldronSpot: () => new Promise(() => {}), logger: { warn() {} },
@@ -788,17 +821,40 @@ test('advanced mode shows scan controls only while connected', () => {
   const nodes = {
     'advanced-mode': { checked: false, addEventListener(_type, fn) { this.change = fn; } },
     'advanced-settings': { hidden: true },
+    'show-nfts-control': { hidden: true },
+    'show-nfts': { checked: false },
   };
   const start = source.indexOf("$('advanced-mode').addEventListener('change'");
-  const end = source.indexOf("\n$('show-nfts')", start);
-  const context = { $: (id) => nodes[id], walletReady: true };
+  const end = source.indexOf("\n$('wiki-open')", start);
+  const nft = { hidden: true, open: false };
+  const context = { $: (id) => nodes[id], walletReady: true, document: { querySelectorAll: () => [nft] } };
   runInNewContext(source.slice(start, end), context);
   nodes['advanced-mode'].checked = true;
   nodes['advanced-mode'].change();
   assert.equal(nodes['advanced-settings'].hidden, false);
+  assert.equal(nodes['show-nfts-control'].hidden, false);
+  assert.equal(nft.hidden, false);
+  nft.open = true;
+  nodes['advanced-mode'].checked = false;
+  nodes['advanced-mode'].change();
+  assert.equal(nft.hidden, true);
+  assert.equal(nft.open, false);
+  nodes['advanced-mode'].checked = true;
   context.walletReady = false;
   nodes['advanced-mode'].change();
   assert.equal(nodes['advanced-settings'].hidden, true);
+});
+
+test('NFT inspection validates capabilities and commitment bytes', () => {
+  assert.deepEqual(inspectNft({ capability: 'mutable', commitment: 'Ab01' }), {
+    capability: 'mutable', commitment: 'ab01', commitmentBytes: 2,
+  });
+  assert.equal(inspectNft({ capability: 'none', commitment: '' }).commitmentBytes, 0);
+  assert.equal(inspectNft({ capability: 'minting', commitment: 'ff'.repeat(40) }).commitmentBytes, 40);
+  assert.equal(inspectNft({ capability: 'other', commitment: 'abc' }).capability, null);
+  assert.equal(inspectNft({ capability: 'none', commitment: 'abc' }).commitmentBytes, null);
+  assert.equal(inspectNft({ capability: 'none', commitment: 'ff'.repeat(41) }).commitmentBytes, null);
+  assert.equal(inspectNft({}).commitmentBytes, null);
 });
 
 test('priced metadata updates balances, token choices and allocation', async () => {
@@ -923,6 +979,7 @@ test('wizard follows the panels in reading order and resets when closed', () => 
       setAttribute() {},
       addEventListener(type, handler) { this.listeners[type] = handler; },
       scrollIntoView() { guidePosition = id; },
+      prepend(node) { node.parent = id; },
       contains() { return false; },
       before() { guidePosition = id; },
       closest(selector) {
@@ -948,10 +1005,12 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   element('wizard-toggle').listeners.click();
   assert.deepEqual([...highlighted], ['connection-section']);
   assert.equal(guidePosition, 'connection-section');
+  assert.equal(element('wizard-dialog').parent, 'connection-section');
   assert.equal(walking, true);
   element('wizard-next').listeners.click();
   assert.deepEqual([...highlighted], ['balance-section']);
   assert.equal(guidePosition, 'balance-section');
+  assert.equal(element('wizard-dialog').parent, 'balance-section');
   element('wizard-next').listeners.click();
   assert.deepEqual([...highlighted], ['transfer-section']);
   assert.equal(guidePosition, 'transfer-section');

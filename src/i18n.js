@@ -1,4 +1,15 @@
 const spanish = {
+  'Settings': 'Configuración',
+  'CashTokens wiki': 'Wiki de CashTokens',
+  'Inspect NFT': 'Inspeccionar NFT',
+  'Immutable: ordinary continuation preserves the commitment.': 'Inmutable: la continuación ordinaria conserva el compromiso.',
+  'Mutable: a valid successor may change the commitment.': 'Mutable: un sucesor válido puede cambiar el compromiso.',
+  'Minting: this NFT can authorize new NFTs in its category.': 'Acuñación: este NFT puede autorizar nuevos NFT en su categoría.',
+  'Unrecognized NFT capability.': 'Capacidad de NFT desconocida.',
+  'Invalid or unavailable commitment.': 'Compromiso inválido o no disponible.',
+  'Commitment bytes': 'Bytes del compromiso',
+  'Output': 'Salida',
+  'This wallet view does not establish who controls other minting authorities.': 'Esta vista no determina quién controla otras autoridades de acuñación.',
   'Advanced mode': 'Modo avanzado',
   'Show NFTs': 'Mostrar NFT',
   'Previous': 'Anterior',
@@ -177,6 +188,17 @@ const spanish = {
 };
 
 const french = {
+  'Settings': 'Paramètres',
+  'CashTokens wiki': 'Wiki CashTokens',
+  'Inspect NFT': 'Examiner le NFT',
+  'Immutable: ordinary continuation preserves the commitment.': 'Immuable : la continuation ordinaire conserve le commitment.',
+  'Mutable: a valid successor may change the commitment.': 'Mutable : un successeur valide peut modifier le commitment.',
+  'Minting: this NFT can authorize new NFTs in its category.': 'Émission : ce NFT peut autoriser de nouveaux NFT dans sa catégorie.',
+  'Unrecognized NFT capability.': 'Capacité NFT inconnue.',
+  'Invalid or unavailable commitment.': 'Commitment invalide ou indisponible.',
+  'Commitment bytes': 'Octets du commitment',
+  'Output': 'Sortie',
+  'This wallet view does not establish who controls other minting authorities.': 'Cette vue ne détermine pas qui contrôle les autres autorités d’émission.',
   'Advanced mode': 'Mode avancé',
   'Show NFTs': 'Afficher les NFT',
   'Previous': 'Précédent',
@@ -355,6 +377,17 @@ const french = {
 };
 
 const german = {
+  'Settings': 'Einstellungen',
+  'CashTokens wiki': 'CashTokens-Wiki',
+  'Inspect NFT': 'NFT untersuchen',
+  'Immutable: ordinary continuation preserves the commitment.': 'Unveränderlich: Bei normaler Fortführung bleibt das Commitment erhalten.',
+  'Mutable: a valid successor may change the commitment.': 'Veränderlich: Ein gültiger Nachfolger kann das Commitment ändern.',
+  'Minting: this NFT can authorize new NFTs in its category.': 'Minting: Dieses NFT kann neue NFTs seiner Kategorie autorisieren.',
+  'Unrecognized NFT capability.': 'Unbekannte NFT-Fähigkeit.',
+  'Invalid or unavailable commitment.': 'Ungültiges oder nicht verfügbares Commitment.',
+  'Commitment bytes': 'Commitment-Bytes',
+  'Output': 'Ausgabe',
+  'This wallet view does not establish who controls other minting authorities.': 'Diese Wallet-Ansicht zeigt nicht, wer andere Minting-Berechtigungen kontrolliert.',
   'Advanced mode': 'Erweiterter Modus',
   'Show NFTs': 'NFTs anzeigen',
   'Previous': 'Zurück',

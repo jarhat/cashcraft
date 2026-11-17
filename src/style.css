@@ -2415,3 +2415,136 @@ input:not([type="checkbox"]), textarea, select {
   body.wallet-connected .wizard-guide { margin: 14px 0 12px; }
   .panel { padding: 20px; }
 }
+
+/* Rounded, readable wallet surfaces */
+.panel {
+  overflow: visible;
+  border-radius: 17px;
+  border-color: var(--glass-border);
+  background:
+    linear-gradient(145deg, rgb(255 255 255 / 7%), transparent 36%),
+    radial-gradient(ellipse at 100% 0, var(--glass-glow), transparent 55%),
+    var(--glass-tint);
+  box-shadow: inset 0 1px rgb(255 255 255 / 20%), 0 20px 60px rgb(0 0 0 / 28%);
+}
+.panel::before {
+  inset: 0 12% auto;
+  width: auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ice), transparent);
+  opacity: .35;
+}
+.panel .eyebrow::before { content: none; }
+.panel:has(.token-options[open]) { z-index: 3; }
+input:not([type="checkbox"]), textarea, select {
+  min-width: 0;
+  border-radius: 12px;
+}
+textarea { resize: vertical; }
+.form { grid-template-columns: minmax(0, 1.3fr) minmax(90px, .7fr); }
+.form > * { min-width: 0; }
+.form .full { grid-column: 1 / -1; }
+label[for="category"] { display: block; }
+.category-field { position: relative; display: flex; align-items: center; margin-top: 6px; }
+.category-field input { margin-top: 0; padding-right: 50px; }
+#category-selector { position: absolute; inset: 0 0 0 auto; display: flex; align-items: center; }
+#category-selector[hidden] { display: none; }
+.token-options { position: static; margin: 0; }
+.token-options summary {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  color: var(--ice);
+  font-size: 1rem;
+  list-style: none;
+}
+.token-options summary::-webkit-details-marker { display: none; }
+.token-options summary:focus-visible { outline: 2px solid var(--ice); outline-offset: -4px; border-radius: 10px; }
+#token-options-list {
+  position: absolute;
+  z-index: 4;
+  top: 100%;
+  right: 0;
+  left: 0;
+  max-height: 250px;
+  margin: 6px 0 0;
+  padding: 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: var(--glass-tint);
+  box-shadow: 0 16px 35px rgb(0 0 0 / 45%);
+}
+.token-option { min-width: 0; border-radius: 9px; }
+.token-option > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.address-line, .uri-line, .payment-url-line {
+  min-width: 0;
+  align-items: center;
+  padding: 5px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: rgb(0 0 0 / 18%);
+}
+.address-line code, .uri-line code, .payment-url-line code { padding: 5px 7px; }
+.address-line input { margin: 0; border: 0; background: transparent; box-shadow: none; }
+.address-line:focus-within { outline: 2px solid var(--ice); outline-offset: 2px; }
+.address-line .small-button, .uri-line .small-button, .payment-url-line .small-button { border-radius: 9px; }
+.category-line {
+  padding: 2px 3px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: rgb(0 0 0 / 18%);
+}
+.category-copy { border-radius: 8px; }
+.token-summary { grid-template-columns: 36px minmax(0, 1fr) minmax(0, auto); align-items: start; }
+.token-summary > .token-amount-group { grid-column: 3; justify-self: end; text-align: right; overflow-wrap: anywhere; }
+.wizard-dialog {
+  position: static;
+  width: auto;
+  max-height: none;
+  margin: 0 0 20px;
+  border-radius: 14px;
+}
+.chain-art {
+  position: absolute;
+  inset: 18px 0 auto;
+  width: 100%;
+  height: 140px;
+  color: var(--ice);
+  opacity: .7;
+  filter: drop-shadow(0 0 8px var(--glow-color));
+}
+.chain-links { stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.media-gallery {
+  margin-top: 28px;
+  color: var(--muted);
+  font-size: .72rem;
+}
+.media-gallery p { margin: 6px 0 0; }
+.media-gallery a { color: var(--ice); }
+.media-image {
+  display: block;
+  width: 100%;
+  height: clamp(100px, 16vw, 190px);
+  border: 1px solid var(--glass-border);
+  border-radius: 17px;
+  background: var(--glass-tint) url("https://pub-0dcd642e0e954a94b4fd240efe006ed9.r2.dev/some-money-is-more-equal/a5fed29a3d/thumb.webp") center / cover no-repeat;
+}
+@media (max-width: 480px) {
+  .token-summary { grid-template-columns: 36px minmax(0, 1fr); }
+  .token-summary > .token-amount-group { grid-column: 2; justify-self: start; text-align: left; }
+  .chain-art { top: 10px; }
+}
+.advanced-nft { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgb(0 0 0 / 14%); }
+.advanced-nft[hidden] { display: none; }
+.advanced-nft summary { color: var(--ice); }
+.nft-inspection { overflow-wrap: anywhere; }
+.wiki-dialog { width: min(720px, calc(100% - 32px)); max-height: min(85vh, 900px); border-radius: 17px; }
+.wiki-content { color: #c6d6e5; font-size: .88rem; line-height: 1.65; }
+.wiki-content a { color: var(--ice); }
+.wiki-content details { padding: 13px 0; border-top: 1px solid var(--glass-border); }
+.wiki-content summary { color: #e9f4ff; font-size: .9rem; font-weight: 700; }
+.wiki-content p:last-child { margin-bottom: 0; }
+.settings-menu { min-width: 190px; }
+.settings-menu .advanced-control { display: flex; margin: 0; white-space: nowrap; }
+#show-nfts-control[hidden] { display: none; }
