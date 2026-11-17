@@ -179,9 +179,13 @@ function readReceiptState() {
 }
 
 function addReceiptNotice(message) {
-  const notice = document.createElement('p');
-  notice.className = 'notification-message';
-  notice.textContent = translate(message);
+  const notice = document.createElement('div');
+  notice.className = 'notification-message gamba-notice';
+  const art = $('gamba-art').cloneNode(true);
+  art.removeAttribute('id');
+  const label = document.createElement('strong');
+  label.textContent = translate(message);
+  notice.append(art, label);
   $('token-receipt-notifications').prepend(notice);
   $('notifications-empty').hidden = true;
 }
@@ -289,6 +293,7 @@ for (const name of ['theme', 'language']) {
 
 function setConnection(connected) {
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
+  $('advanced-settings').hidden = !connected || !$('advanced-mode').checked;
   document.body.classList.toggle('wallet-connected', connected);
   $('wizard-guide').hidden = connected;
   if (connected && !$('wizard-dialog').hidden) closeTutorial();
@@ -1569,6 +1574,10 @@ $('refresh').addEventListener('click', () => {
     $('status').textContent =
       'Balance refresh failed · previous balances retained';
   });
+});
+
+$('advanced-mode').addEventListener('change', () => {
+  $('advanced-settings').hidden = !walletReady || !$('advanced-mode').checked;
 });
 
 $('show-nfts').addEventListener('change', () => {

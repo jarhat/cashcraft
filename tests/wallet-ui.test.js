@@ -765,9 +765,31 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   context.setConnection(true);
   assert.ok(panels.every((panel) => !panel.hidden));
   assert.equal($('wizard-guide').hidden, true);
+  assert.equal($('advanced-settings').hidden, true);
+  $('advanced-mode').checked = true;
+  context.setConnection(true);
+  assert.equal($('advanced-settings').hidden, false);
   context.setConnection(false);
   assert.ok(panels.every((panel) => panel.hidden));
   assert.equal($('wizard-guide').hidden, false);
+  assert.equal($('advanced-settings').hidden, true);
+});
+
+test('advanced mode shows scan controls only while connected', () => {
+  const nodes = {
+    'advanced-mode': { checked: false, addEventListener(_type, fn) { this.change = fn; } },
+    'advanced-settings': { hidden: true },
+  };
+  const start = source.indexOf("$('advanced-mode').addEventListener('change'");
+  const end = source.indexOf("\n$('show-nfts')", start);
+  const context = { $: (id) => nodes[id], walletReady: true };
+  runInNewContext(source.slice(start, end), context);
+  nodes['advanced-mode'].checked = true;
+  nodes['advanced-mode'].change();
+  assert.equal(nodes['advanced-settings'].hidden, false);
+  context.walletReady = false;
+  nodes['advanced-mode'].change();
+  assert.equal(nodes['advanced-settings'].hidden, true);
 });
 
 test('priced metadata updates balances, token choices and allocation', async () => {

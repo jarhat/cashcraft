@@ -1,4 +1,5 @@
 const spanish = {
+  'Advanced mode': 'Modo avanzado',
   'Show NFTs': 'Mostrar NFT',
   'Previous': 'Anterior',
   'No fungible tokens found. Show NFTs to view your collectibles.': 'No se encontraron tokens fungibles. Muestra los NFT para ver tus coleccionables.',
@@ -176,6 +177,7 @@ const spanish = {
 };
 
 const french = {
+  'Advanced mode': 'Mode avancé',
   'Show NFTs': 'Afficher les NFT',
   'Previous': 'Précédent',
   'No fungible tokens found. Show NFTs to view your collectibles.': 'Aucun jeton fongible trouvé. Affichez les NFT pour voir vos objets de collection.',
@@ -353,6 +355,7 @@ const french = {
 };
 
 const german = {
+  'Advanced mode': 'Erweiterter Modus',
   'Show NFTs': 'NFTs anzeigen',
   'Previous': 'Zurück',
   'No fungible tokens found. Show NFTs to view your collectibles.': 'Keine fungiblen Token gefunden. Zeige NFTs an, um deine Sammlerstücke zu sehen.',
