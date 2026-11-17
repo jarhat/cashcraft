@@ -30,6 +30,39 @@ class RewardTests(unittest.TestCase):
         self.addCleanup(self.path.stop)
         backend.init_db()
 
+    def test_chain_status_uses_cached_node_data_and_reports_sync(self):
+        info = {
+            "chain": "main", "blocks": 800000, "headers": 800002,
+            "difficulty": 123.5, "bestblockhash": "A" * 64,
+            "initialblockdownload": False, "private_field": "not exposed",
+        }
+        client = TestClient(backend.app)
+        with patch.object(backend, "_chain_status_cache", None), \
+             patch.object(backend.time, "monotonic", return_value=100), \
+             patch.object(backend, "bch_rpc", return_value=info) as rpc:
+            first = client.get("/api/chain-status")
+            second = client.get("/api/chain-status")
+            self.assertEqual(first.status_code, 200)
+            self.assertEqual(first.json(), {
+                "network": "mainnet", "blocks": 800000, "headers": 800002,
+                "difficulty": 123.5, "best_block_hash": "a" * 64, "syncing": True,
+            })
+            self.assertEqual(second.json(), first.json())
+            rpc.assert_called_once_with("getblockchaininfo", [])
+
+    def test_chain_status_does_not_serve_expired_or_invalid_data(self):
+        client = TestClient(backend.app)
+        with patch.object(backend, "_chain_status_cache", {"blocks": 1}), \
+             patch.object(backend, "_chain_status_cached_at", 1.0), \
+             patch.object(backend.time, "monotonic", return_value=30), \
+             patch.object(backend, "bch_rpc", side_effect=RuntimeError("secret RPC details")):
+            response = client.get("/api/chain-status")
+            self.assertEqual(response.status_code, 503)
+            self.assertNotIn("secret", response.text)
+        with patch.object(backend, "_chain_status_cache", None), \
+             patch.object(backend, "bch_rpc", return_value={"chain": "main"}):
+            self.assertEqual(client.get("/api/chain-status").status_code, 503)
+
     def test_only_new_addresses_are_queued_and_proof_rollback_is_atomic(self):
         with sqlite3.connect(backend.DB_PATH) as db:
             db.execute("INSERT INTO cash_addresses (cash_address, network, prefix, address_type) VALUES ('old', 'mainnet', 'bitcoincash', 2)")

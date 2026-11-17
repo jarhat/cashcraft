@@ -36,9 +36,9 @@
   </script>
 </head>
 <body>
-  <div class="market-strip" aria-label="Cryptocurrency prices">
-    <span class="market-label">MARKET / USD</span>
-    <div id="market-ticker" class="market-ticker" role="region" tabindex="0" aria-label="Top cryptocurrencies by market capitalization">Loading market prices…</div>
+  <div class="market-strip" aria-label="Bitcoin Cash blockchain status">
+    <span class="market-label">BCH / CHAIN</span>
+    <div id="chain-ticker" class="market-ticker" role="region" tabindex="0" aria-label="Bitcoin Cash blockchain status">Loading blockchain status…</div>
     <svg class="holiday-flight" viewBox="0 0 64 24" shape-rendering="crispEdges" aria-hidden="true">
       <path fill="#cf3744" d="M5 10h13v6H5zm4-6h6v6H9z"/><path fill="#fff" d="M8 3h7v2H8zm0 7h8v2H8zM15 5h2v3h-2z"/><path fill="#eac09b" d="M10 7h5v3h-5z"/>
       <path fill="#ad774f" d="M33 10h13v6H33zm11-4h5v7h-5zM35 16h2v4h-2zm8 0h2v4h-2z"/><path fill="#e9c38b" d="M46 3h2v4h-2zm3 1h2v4h-2z"/><path fill="#e34a4a" d="M49 8h2v2h-2z"/><path fill="#9ab8c6" d="M18 15h15v1H18zM3 19h20v1H3z"/>
@@ -489,7 +489,25 @@
       <h2 id="wiki-title">CashTokens wiki</h2>
       <button id="wiki-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
     </div>
-    <div class="wiki-content" lang="en">
+    <div class="wiki-language">
+      <label for="wiki-language">Language</label>
+      <select id="wiki-language" data-language-select>
+        <option value="en" lang="en">English</option>
+        <option value="es" lang="es">Español</option>
+        <option value="fr" lang="fr">Français</option>
+        <option value="de" lang="de">Deutsch</option>
+      </select>
+    </div>
+    <div class="wiki-content">
+      <p class="wiki-glossary-intro">Tap a term for a quick explanation.</p>
+      <div class="wiki-glossary" aria-label="CashTokens glossary">
+        <details class="wiki-term"><summary>UTXO</summary><div class="wiki-term-popover">An unspent transaction output is a piece of BCH you can spend. It can also carry CashTokens.</div></details>
+        <details class="wiki-term"><summary>Category</summary><div class="wiki-term-popover">A category ID identifies a token family. Check the ID, not just the name or icon.</div></details>
+        <details class="wiki-term"><summary>Fungible</summary><div class="wiki-term-popover">Fungible tokens are interchangeable units of the same category, like identical coins.</div></details>
+        <details class="wiki-term"><summary>NFT</summary><div class="wiki-term-popover">An NFT is a non-fungible token. It can carry application-defined data and a capability.</div></details>
+        <details class="wiki-term"><summary>Covenant</summary><div class="wiki-term-popover">A covenant is a script that can place rules on how an output may be spent.</div></details>
+        <details class="wiki-term"><summary>BCMR</summary><div class="wiki-term-popover">BCMR describes token metadata such as names and icons. It does not prove a token is authentic.</div></details>
+      </div>
       <p>A practical guide to Bitcoin Cash tokens. This overview is not a consensus implementation; consult the <a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer">CashTokens specification ↗</a> and its test vectors for normative rules.</p>
       <details open><summary>UTXOs and categories</summary>
         <p>CashTokens are consensus-validated data on BCH outputs, not a separate ledger. An output contains satoshis, locking bytecode and optionally one token category, with fungible units, one NFT, or both. BCH pays transaction fees.</p>
@@ -573,6 +591,10 @@
     <div class="funding-actions"><a class="button secondary" href="https://bch.now" target="_blank" rel="noopener noreferrer">bch.now ↗</a><a class="button secondary" href="https://sideshift.ai" target="_blank" rel="noopener noreferrer">SideShift ↗</a><button id="funding-connect" class="button primary" type="button">Connect wallet</button></div>
   </dialog>
 
+  <div class="market-strip market-strip-bottom" aria-label="Cryptocurrency prices">
+    <span class="market-label">MARKET / USD</span>
+    <div id="market-ticker" class="market-ticker" role="region" tabindex="0" aria-label="Top cryptocurrencies by market capitalization">Loading market prices…</div>
+  </div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

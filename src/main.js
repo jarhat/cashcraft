@@ -9,6 +9,8 @@ import { fetchTokenMetadata, fetchCauldronSpot } from './portfolio-data.js';
 import { loadTokenLogo } from './token-logo.js';
 import { inspectNft } from './nft-inspection.js';
 import { setupMarketTicker } from './market-ticker.js';
+import { setupChainTicker } from './chain-ticker.js';
+import { setupWikiGlossary } from './wiki-glossary.js';
 import { setupMediaSlideshow } from './media-slideshow.js';
 import { createLogger } from './logger.js';
 import { submitCashAddress, API_BASE_URL, createShortLink, openShortLink } from './api.js';
@@ -98,6 +100,7 @@ const mainnet = network === 'mainnet';
 const prefix = mainnet ? 'bitcoincash' : 'bchtest';
 const $ = (id) => document.getElementById(id);
 setupMarketTicker($('market-ticker'), translate, logger);
+setupChainTicker($('chain-ticker'), logger);
 setupMediaSlideshow($);
 let QRCode, decodeCashAddress, encodeCashAddress, hash160, initiateDappRelay;
 let DappConnectionManager, loadSession, sourceOutputToRelay, transactionToHex;
@@ -1752,6 +1755,8 @@ $('wiki-open').addEventListener('click', () => {
   if (!$('wiki-dialog').open) $('wiki-dialog').showModal();
 });
 $('wiki-close').addEventListener('click', () => $('wiki-dialog').close());
+$('wiki-language').addEventListener('change', (event) => setLanguage(event.target.value));
+setupWikiGlossary($('wiki-dialog'));
 
 $('show-nfts').addEventListener('change', () => {
   portfolioPage = 0;

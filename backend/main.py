@@ -1,6 +1,7 @@
 import os
 import html
 import io
+import math
 import re
 import secrets
 import sqlite3
@@ -413,6 +414,48 @@ def health() -> dict[str, str]:
 @app.get("/api/token-reward")
 def token_reward() -> dict[str, str]:
     return {"category": BCH_REWARD_CATEGORY}
+
+
+_chain_status_lock = threading.Lock()
+_chain_status_cache: dict | None = None
+_chain_status_cached_at = 0.0
+
+
+@app.get("/api/chain-status")
+def chain_status() -> dict:
+    global _chain_status_cache, _chain_status_cached_at
+    with _chain_status_lock:
+        if _chain_status_cache is not None and time.monotonic() - _chain_status_cached_at < 20:
+            return _chain_status_cache
+        try:
+            info = bch_rpc("getblockchaininfo", [])
+            if not isinstance(info, dict):
+                raise ValueError("Invalid blockchain info")
+            blocks, headers = info["blocks"], info["headers"]
+            difficulty, block_hash = info["difficulty"], info["bestblockhash"]
+            if (
+                info["chain"] != "main"
+                or type(blocks) is not int or blocks < 0
+                or type(headers) is not int or headers < blocks
+                or type(difficulty) not in (int, float)
+                or not math.isfinite(difficulty) or difficulty <= 0
+                or not isinstance(block_hash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", block_hash)
+                or type(info["initialblockdownload"]) is not bool
+            ):
+                raise ValueError("Invalid blockchain info")
+            _chain_status_cache = {
+                "network": "mainnet",
+                "blocks": blocks,
+                "headers": headers,
+                "best_block_hash": block_hash.lower(),
+                "difficulty": difficulty,
+                "syncing": info["initialblockdownload"] or headers > blocks,
+            }
+            _chain_status_cached_at = time.monotonic()
+            return _chain_status_cache
+        except (RuntimeError, ValueError, KeyError) as exc:
+            logger.warning("BCHN chain status unavailable: %s", type(exc).__name__)
+            raise HTTPException(status_code=503, detail="Blockchain status unavailable.") from exc
 
 
 def purge_expired_short_links() -> None:

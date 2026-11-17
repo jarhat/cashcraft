@@ -1,3 +1,5 @@
+import { wikiTranslations } from './wiki-translations.js';
+
 const spanish = {
   'Priced tokens': 'Tokens con precio',
   'Wallet connected': 'Cartera conectada',
@@ -724,6 +726,51 @@ Object.assign(german, {
   'Market prices temporarily unavailable': 'Marktpreise vorübergehend nicht verfügbar',
   'Loading market prices…': 'Marktpreise werden geladen…',
 });
+Object.assign(spanish, {
+  'Bitcoin Cash blockchain status': 'Estado de la cadena de Bitcoin Cash',
+  'Loading blockchain status…': 'Cargando estado de la cadena…',
+  'Blockchain status unavailable.': 'Estado de la cadena no disponible.',
+  'Network': 'Red',
+  'Mainnet': 'Red principal',
+  'Block height': 'Altura de bloque',
+  'Latest block': 'Último bloque',
+  'Difficulty': 'Dificultad',
+  'Node status': 'Estado del nodo',
+  'Syncing': 'Sincronizando',
+  'Synced': 'Sincronizado',
+  'Headers': 'Cabeceras',
+});
+Object.assign(french, {
+  'Bitcoin Cash blockchain status': 'État de la blockchain Bitcoin Cash',
+  'Loading blockchain status…': 'Chargement de l’état de la blockchain…',
+  'Blockchain status unavailable.': 'État de la blockchain indisponible.',
+  'Network': 'Réseau',
+  'Mainnet': 'Réseau principal',
+  'Block height': 'Hauteur du bloc',
+  'Latest block': 'Dernier bloc',
+  'Difficulty': 'Difficulté',
+  'Node status': 'État du nœud',
+  'Syncing': 'Synchronisation',
+  'Synced': 'Synchronisé',
+  'Headers': 'En-têtes',
+});
+Object.assign(german, {
+  'Bitcoin Cash blockchain status': 'Bitcoin-Cash-Blockchain-Status',
+  'Loading blockchain status…': 'Blockchain-Status wird geladen…',
+  'Blockchain status unavailable.': 'Blockchain-Status nicht verfügbar.',
+  'Network': 'Netzwerk',
+  'Mainnet': 'Hauptnetz',
+  'Block height': 'Blockhöhe',
+  'Latest block': 'Letzter Block',
+  'Difficulty': 'Schwierigkeit',
+  'Node status': 'Knotenstatus',
+  'Syncing': 'Synchronisierung',
+  'Synced': 'Synchronisiert',
+  'Headers': 'Block-Header',
+});
+Object.assign(spanish, wikiTranslations.es);
+Object.assign(french, wikiTranslations.fr);
+Object.assign(german, wikiTranslations.de);
 const translations = { es: spanish, fr: french, de: german };
 let language = ['es', 'fr', 'de'].includes(localStorage.getItem('ctf-language')) ? localStorage.getItem('ctf-language') : 'en';
 const originals = new WeakMap();
@@ -914,6 +961,9 @@ export function setLanguage(value) {
   document.documentElement.lang = language;
   document.querySelectorAll('[data-language-option]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.languageOption === language));
+  });
+  document.querySelectorAll('[data-language-select]').forEach((select) => {
+    select.value = language;
   });
   translateNode(document.body);
 }

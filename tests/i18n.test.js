@@ -6,6 +6,7 @@ const languageOptions = ['en', 'es', 'fr', 'de'].map((languageOption) => ({
   dataset: { languageOption },
   setAttribute(name, value) { this[name] = value; },
 }));
+const languageSelect = { value: '' };
 globalThis.localStorage = {
   value: 'fr',
   getItem(key) {
@@ -20,7 +21,9 @@ globalThis.localStorage = {
 globalThis.document = {
   body: { nodeType: 1, childNodes: [], hasAttribute() { return false; } },
   documentElement: {},
-  querySelectorAll() { return languageOptions; },
+  querySelectorAll(selector) {
+    return selector === '[data-language-select]' ? [languageSelect] : languageOptions;
+  },
 };
 globalThis.Node = { TEXT_NODE: 3, ELEMENT_NODE: 1 };
 globalThis.MutationObserver = class {
@@ -53,7 +56,22 @@ test('stored language initializes selection and supported language changes persi
     setLanguage(language);
     assert.equal(document.documentElement.lang, language);
     assert.equal(localStorage.value, language);
+    assert.equal(languageSelect.value, language);
     assert.equal(languageOptions.find((option) => option.dataset.languageOption === language)['aria-pressed'], 'true');
+  }
+});
+
+test('all wiki explanation text has translations in each supported language', async () => {
+  const { wikiTranslations } = await import('../src/wiki-translations.js');
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const wiki = html.split('<div class="wiki-content">')[1].split('</dialog>')[0];
+  const textNodes = wiki.replace(/<[^>]*>/g, '\n').split('\n')
+    .map((text) => text.trim().replace(/\s+/g, ' ')).filter(Boolean);
+  for (const language of ['es', 'fr', 'de']) {
+    for (const text of textNodes) {
+      if (['UTXO', 'NFT', 'BCMR', '63'].includes(text)) continue;
+      assert.ok(wikiTranslations[language][text], `${language}: missing wiki translation for ${text}`);
+    }
   }
 });
 
