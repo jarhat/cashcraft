@@ -33,3 +33,24 @@ export async function submitCashAddress(cashAddress) {
   }
   return result.cash_address;
 }
+
+async function shortLinkRequest(path, body) {
+  const response = await fetch(`${API_BASE_URL}/api/short-link${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error(`Link service returned an invalid response (${response.status}).`);
+  }
+  if (!response.ok) {
+    throw new Error(typeof result?.detail === 'string' ? result.detail : `Link service error (${response.status})`);
+  }
+  return result;
+}
+
+export const createShortLink = (link) => shortLinkRequest('', link);
+export const openShortLink = (id) => shortLinkRequest(`/${encodeURIComponent(id)}/open`);

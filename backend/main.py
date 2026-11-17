@@ -1,16 +1,22 @@
 import os
+import html
+import io
 import re
+import secrets
 import sqlite3
+import time
 import logging
 import threading
 from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Literal
 from urllib.parse import quote
 
 import httpx
-from fastapi import FastAPI, HTTPException
+import segno
+from fastapi import FastAPI, HTTPException, Request, Response
+from urllib.parse import parse_qs, urlsplit
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -112,6 +118,21 @@ class CashAddressProofRequest(BaseModel):
     txid: str = Field(min_length=64, max_length=64)
 
 
+SHORT_LINK_TTL_SECONDS = {"1d": 86400, "1w": 7 * 86400, "1m": 30 * 86400}
+SHORT_LINK_ID_RE = re.compile(r"[A-Za-z0-9_-]{8,32}")
+SHORT_LINK_MAX_ROWS = 50000
+SHORT_LINK_HOURLY_LIMIT = 300
+
+
+class ShortLinkRequest(BaseModel):
+    address: str = Field(min_length=1, max_length=120)
+    category: str = Field(min_length=64, max_length=64)
+    amount: str = Field(min_length=1, max_length=30)
+    note: str = Field(default="", max_length=280)
+    one_time: bool = False
+    expires_in: Literal["1d", "1w", "1m"] = "1w"
+
+
 class CashAddressRequest(BaseModel):
     cash_address: str = Field(min_length=1, max_length=120)
 
@@ -141,6 +162,19 @@ def init_db() -> None:
                 FOREIGN KEY (cash_address) REFERENCES cash_addresses(cash_address)
             )
         """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS short_links (
+                id TEXT PRIMARY KEY,
+                address TEXT NOT NULL,
+                category TEXT NOT NULL,
+                amount TEXT NOT NULL,
+                note TEXT NOT NULL,
+                one_time INTEGER NOT NULL,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS short_links_expires ON short_links (expires_at)")
     stat = DB_PATH.stat()
     db_identity = (stat.st_dev, stat.st_ino)
 
@@ -379,6 +413,171 @@ def health() -> dict[str, str]:
 @app.get("/api/token-reward")
 def token_reward() -> dict[str, str]:
     return {"category": BCH_REWARD_CATEGORY}
+
+
+def purge_expired_short_links() -> None:
+    with open_db(timeout=10) as db:
+        db.execute("DELETE FROM short_links WHERE expires_at <= ?", (int(time.time()),))
+
+
+@app.post("/api/short-link", status_code=201)
+def create_short_link(request: ShortLinkRequest) -> dict[str, str | bool | int]:
+    try:
+        address, _, _ = validate_token_aware_cashaddr(request.address)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    category = request.category.strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", category):
+        raise HTTPException(status_code=422, detail="Invalid category ID.")
+    if not re.fullmatch(r"[1-9][0-9]{0,29}", request.amount):
+        raise HTTPException(status_code=422, detail="Invalid amount.")
+
+    now = int(time.time())
+    expires_at = now + SHORT_LINK_TTL_SECONDS[request.expires_in]
+    link_id = secrets.token_urlsafe(9)
+    try:
+        with open_db(timeout=10) as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("DELETE FROM short_links WHERE expires_at <= ?", (now,))
+            total, recent = db.execute(
+                "SELECT COUNT(*), COALESCE(SUM(created_at > ?), 0) FROM short_links",
+                (now - 3600,),
+            ).fetchone()
+            if total >= SHORT_LINK_MAX_ROWS or recent >= SHORT_LINK_HOURLY_LIMIT:
+                raise HTTPException(status_code=429, detail="Too many short links. Try again later.")
+            db.execute(
+                "INSERT INTO short_links (id, address, category, amount, note, one_time, created_at, expires_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (link_id, address, category, request.amount, request.note.strip(),
+                 int(request.one_time), now, expires_at),
+            )
+    except RewardDatabaseError as exc:
+        logger.exception("Short link database unavailable.")
+        raise HTTPException(status_code=503, detail="Link database unavailable.") from exc
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=500, detail="Could not create short link.") from exc
+    return {"id": link_id, "one_time": request.one_time, "expires_at": expires_at}
+
+
+@app.post("/api/short-link/{link_id}/open")
+def open_short_link(link_id: str) -> dict[str, str | bool]:
+    # POST so link previews and crawlers that only issue GET cannot consume a one-time link.
+    if not SHORT_LINK_ID_RE.fullmatch(link_id):
+        raise HTTPException(status_code=404, detail="This link is unavailable.")
+    now = int(time.time())
+    try:
+        with open_db(timeout=10) as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("DELETE FROM short_links WHERE expires_at <= ?", (now,))
+            row = db.execute(
+                "SELECT address, category, amount, note, one_time FROM short_links WHERE id = ?",
+                (link_id,),
+            ).fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="This link is unavailable.")
+            if row[4]:
+                db.execute("DELETE FROM short_links WHERE id = ?", (link_id,))
+    except RewardDatabaseError as exc:
+        logger.exception("Short link database unavailable.")
+        raise HTTPException(status_code=503, detail="Link database unavailable.") from exc
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=500, detail="Could not open short link.") from exc
+    return {"address": row[0], "category": row[1], "amount": row[2], "note": row[3], "one_time": bool(row[4])}
+
+
+def peek_short_link(link_id: str):
+    """Read a link without consuming it so previews never burn one-time links."""
+    if not SHORT_LINK_ID_RE.fullmatch(link_id):
+        return None
+    try:
+        with open_db(timeout=10) as db:
+            return db.execute(
+                "SELECT address, category, amount FROM short_links WHERE id = ? AND expires_at > ?",
+                (link_id, int(time.time())),
+            ).fetchone()
+    except (RewardDatabaseError, sqlite3.Error):
+        return None
+
+
+def request_origin(request: Request) -> str:
+    origin = request.headers.get("x-preview-origin", "")
+    parts = urlsplit(origin)
+    if parts.scheme in {"http", "https"} and parts.netloc and not parts.path.strip("/"):
+        return f"{parts.scheme}://{parts.netloc}"
+    return ""
+
+
+def valid_payment(address: str, category: str, amount: str):
+    try:
+        address, _, _ = validate_token_aware_cashaddr(address)
+    except ValueError:
+        return None
+    category = category.strip().lower()
+    if re.fullmatch(r"[0-9a-f]{64}", category) and re.fullmatch(r"[1-9][0-9]{0,29}", amount):
+        return address, category, amount
+    return None
+
+
+@app.get("/api/qr.png")
+def payment_qr(request: Request, addr: str = "", category: str = "", amount: str = "", s: str = ""):
+    origin = request_origin(request)
+    if s:
+        if not peek_short_link(s):
+            raise HTTPException(status_code=404, detail="This link is unavailable.")
+        target = f"{origin}/s/{s}"
+    else:
+        payment = valid_payment(addr, category, amount)
+        if not payment:
+            raise HTTPException(status_code=422, detail="Invalid payment request.")
+        query = "&".join(f"{k}={quote(v, safe='')}" for k, v in zip(("addr", "amount", "category"), (payment[0], payment[2], payment[1])))
+        target = f"{origin}/?{query}"
+    buffer = io.BytesIO()
+    segno.make(target, error="m").save(buffer, kind="png", scale=12, border=4, dark="#07111b", light="#ffffff")
+    return Response(buffer.getvalue(), media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
+
+
+@app.get("/api/preview")
+def link_preview(request: Request) -> Response:
+    """Static HTML with Open Graph tags for chat-app link unfurlers; never includes the note."""
+    origin = request_origin(request)
+    original = request.headers.get("x-original-uri", "/")
+    parts = urlsplit(original)
+    query = parse_qs(parts.query)
+    payment = None
+    image_query = ""
+    short_match = re.fullmatch(r"/s/([A-Za-z0-9_-]{8,32})/?", parts.path)
+    if short_match:
+        row = peek_short_link(short_match.group(1))
+        if row:
+            payment = valid_payment(*row)
+            image_query = "s=" + short_match.group(1)
+    elif parts.path == "/":
+        payment = valid_payment(*(query.get(k, [""])[0] for k in ("addr", "category", "amount")))
+        if payment:
+            image_query = "&".join(f"{k}={quote(v, safe='')}" for k, v in zip(("addr", "category", "amount"), payment))
+    if payment and origin:
+        title = f"Payment request: {payment[2]} token base units"
+        description = f"Send {payment[2]} token base units to {payment[0]} (category {payment[1][:12]}…)."
+        image = f"{origin}/api/qr.png?{image_query}"
+    else:
+        title = "CTF Cash | Bitcoin Cash CashTokens"
+        description = "Send and receive CashTokens, create payment links and QR codes, and track token balances with your Bitcoin Cash wallet."
+        image = f"{origin}/social-preview.png" if origin else ""
+    url = f"{origin}{original}"
+    e = html.escape
+    page = (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        f"<title>{e(title)}</title>"
+        f'<meta name="description" content="{e(description)}">'
+        '<meta property="og:type" content="website"><meta property="og:site_name" content="CTF Cash">'
+        f'<meta property="og:title" content="{e(title)}"><meta property="og:description" content="{e(description)}">'
+        f'<meta property="og:url" content="{e(url)}">'
+        + (f'<meta property="og:image" content="{e(image)}"><meta property="og:image:width" content="592">'
+           f'<meta name="twitter:image" content="{e(image)}">' if image else "")
+        + '<meta name="twitter:card" content="summary_large_image">'
+        f'<meta http-equiv="refresh" content="0;url={e(url)}"></head><body><a href="{e(url)}">{e(title)}</a></body></html>'
+    )
+    return Response(page, media_type="text/html")
 
 
 @app.post("/api/cash-address")
@@ -628,6 +827,10 @@ def process_one_reward() -> bool:
 
 def reward_worker() -> None:
     while not reward_stop.is_set():
+        try:
+            purge_expired_short_links()
+        except (RewardDatabaseError, sqlite3.Error) as exc:
+            logger.error("Could not purge short links: %s", type(exc).__name__)
         try:
             if process_one_reward():
                 continue

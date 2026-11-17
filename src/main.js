@@ -11,7 +11,7 @@ import { inspectNft } from './nft-inspection.js';
 import { setupMarketTicker } from './market-ticker.js';
 import { setupMediaSlideshow } from './media-slideshow.js';
 import { createLogger } from './logger.js';
-import { submitCashAddress, API_BASE_URL } from './api.js';
+import { submitCashAddress, API_BASE_URL, createShortLink, openShortLink } from './api.js';
 import {
   SATOSHIS_PER_BCH,
   formatBch,
@@ -38,8 +38,7 @@ if (!['mainnet', 'chipnet'].includes(network)) {
   );
 }
 
-function fillFromUrl() {
-  const params = new URLSearchParams(window.location.search);
+function fillFromUrl(params = new URLSearchParams(window.location.search), note = '') {
   const sharedLink = {
     address: params.get('addr'),
     category: params.get('category'),
@@ -74,6 +73,8 @@ function fillFromUrl() {
     $('shared-link-amount').textContent = `${sharedLink.amount} token base units`;
     $('shared-link-address').textContent = sharedLink.address;
     $('shared-link-category').textContent = sharedLink.category;
+    $('shared-link-note').textContent = note;
+    $('shared-link-note-row').hidden = !note;
     $('shared-link-preview').classList.remove('hidden');
     $('notifications-empty').hidden = true;
     $('notification-indicator').hidden = false;
@@ -322,6 +323,9 @@ function setConnection(connected) {
   if (!connected) $('connection-loading').hidden = true;
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
   $('advanced-settings').hidden = !connected;
+  $('forget').hidden = !connected;
+  $('disconnect').hidden = !connected;
+  $('logout').hidden = !connected;
   document.body.classList.toggle('wallet-connected', connected);
   $('network-wallet-status').textContent = translate(connected ? 'Wallet connected' : 'Not connected');
   if (!$('wizard-dialog').hidden) {
@@ -451,6 +455,7 @@ async function showPairingUri(uri) {
     color: { dark: '#07111b', light: '#ffffff' },
   });
   if (!walletReady && walletPairingUri === uri) pairingReminder.start();
+  $('open-wallet').scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
 }
 
 async function startConnection({ fresh = false, restoring = false } = {}) {
@@ -498,7 +503,6 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
 
     manager = new DappConnectionManager('CTF CashTokens');
     if (fresh || (saved && !stored)) manager.clearStoredSession();
-    if (stored) $('forget').hidden = false;
     const connectionManager = manager;
     let connectedAt = 0;
     let relayConnected = false;
@@ -1636,6 +1640,44 @@ $('open-wallet').addEventListener('click', () => {
   if (walletPairingUri) window.location.href = walletPairingUri;
 });
 
+async function endWalletSession() {
+  const previousManager = manager;
+  const previousRelay = relay;
+  const wasReady = walletReady;
+  manager = null;
+  relay = null;
+  walletReady = false;
+
+  if (previousManager) {
+    if (wasReady) {
+      try {
+        await Promise.race([
+          previousManager.sendDisconnect(),
+          wait(2000).then(() => { throw new Error('Wallet disconnect timed out.'); }),
+        ]);
+      } catch (error) {
+        logger.warn('Could not notify wallet of disconnection:', error);
+      }
+    }
+    previousManager.clearStoredSession();
+    await previousManager.destroy();
+  }
+
+  try {
+    previousRelay?.cleanup();
+  } catch {
+    // Cleanup is best-effort.
+  }
+
+  $('pairing').classList.add('hidden');
+  walletPairingUri = null;
+  $('open-wallet').disabled = true;
+  $('open-wallet').hidden = false;
+  $('pairing-help').hidden = false;
+  clearWalletDisplay();
+  setConnection(false);
+}
+
 $('forget').addEventListener('click', async () => {
   if (
     !window.confirm(
@@ -1646,46 +1688,35 @@ $('forget').addEventListener('click', async () => {
   }
 
   try {
-    const previousManager = manager;
-    const previousRelay = relay;
-    const wasReady = walletReady;
-    manager = null;
-    relay = null;
-    walletReady = false;
-
-    if (previousManager) {
-      if (wasReady) {
-        try {
-          await Promise.race([
-            previousManager.sendDisconnect(),
-            wait(2000).then(() => { throw new Error('Wallet disconnect timed out.'); }),
-          ]);
-        } catch (error) {
-          logger.warn('Could not notify wallet of disconnection:', error);
-        }
-      }
-      previousManager.clearStoredSession();
-      await previousManager.destroy();
-    }
-
-    try {
-      previousRelay?.cleanup();
-    } catch {
-      // Cleanup is best-effort.
-    }
-
-    $('pairing').classList.add('hidden');
-    walletPairingUri = null;
-    $('open-wallet').disabled = true;
-    $('open-wallet').hidden = false;
-    $('pairing-help').hidden = false;
-    clearWalletDisplay();
+    await endWalletSession();
     $('status').textContent = 'Saved session cleared';
-
     await startConnection({ fresh: true });
   } catch (error) {
     report(error);
   }
+});
+
+$('disconnect').addEventListener('click', async () => {
+  if (!window.confirm(translate('Disconnect this wallet from CTF Cash?'))) return;
+  try {
+    await endWalletSession();
+    $('status').textContent = 'Wallet disconnected';
+    $('connect').hidden = false;
+    $('connect').disabled = false;
+  } catch (error) {
+    report(error);
+  }
+});
+
+$('logout').addEventListener('click', async () => {
+  if (!window.confirm(translate('Log out and leave this site?'))) return;
+  try {
+    await endWalletSession();
+  } catch (error) {
+    report(error);
+  }
+  window.close();
+  setTimeout(() => window.location.replace('https://bch.now'), 150);
 });
 
 $('refresh').addEventListener('click', () => {
@@ -1699,6 +1730,16 @@ $('refresh').addEventListener('click', () => {
 function openConnectionDialog() {
   if (!$('connection-dialog').open) $('connection-dialog').showModal();
 }
+
+document.querySelectorAll('[data-wallet-choice]').forEach((choice) => {
+  choice.addEventListener('click', () => {
+    document.querySelectorAll('[data-wallet-choice]').forEach((other) => {
+      other.setAttribute('aria-pressed', String(other === choice));
+    });
+    openConnectionDialog();
+    beginPairing();
+  });
+});
 
 $('connection-open').addEventListener('click', openConnectionDialog);
 $('landing-connect').addEventListener('click', openConnectionDialog);
@@ -1743,14 +1784,20 @@ function showFundingDialog(message) {
   if (!$('funding-dialog').open && !document.querySelector('dialog[open]')) $('funding-dialog').showModal();
 }
 $('funding-close').addEventListener('click', () => $('funding-dialog').close());
+function beginPairing() {
+  if (walletReady) return;
+  if (relay?.uri && !loadSession()?.paths?.length) showPairingUri(relay.uri).catch(report);
+  else if (!relay && !pairingInProgress) $('connect').click();
+}
+
 $('funding-connect').addEventListener('click', () => {
   $('funding-dialog').close();
   openConnectionDialog();
   $('connect').focus({ preventScroll: true });
-  if (relay?.uri && !loadSession()?.paths?.length) showPairingUri(relay.uri).catch(report);
-  else if (!relay && !pairingInProgress) $('connect').click();
-  else if (pairingInProgress) openTutorial();
+  if (pairingInProgress && !(relay?.uri && !loadSession()?.paths?.length)) openTutorial();
+  else beginPairing();
 });
+
 
 const notificationsDialog = $('notifications-dialog');
 for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notifications-dialog']) {
@@ -1921,8 +1968,6 @@ function setTransferTab(tabName) {
   $('receive-panel').classList.toggle('hidden', isSend);
 }
 
-setTransferTab('receive');
-
 function updateReceiveAddress() {
   if (!walletReady) return;
 
@@ -1932,6 +1977,26 @@ function updateReceiveAddress() {
     walletReceiveAddress = address;
   }
   $('copy-receive-address').disabled = false;
+}
+
+const shortLinkId = /^\/s\/([A-Za-z0-9_-]{8,32})\/?$/.exec(window.location.pathname)?.[1];
+const openedPaymentRequest = ['addr', 'category', 'amount'].every(
+  (name) => new URLSearchParams(window.location.search).get(name)?.trim(),
+) || Boolean(shortLinkId);
+setTransferTab(openedPaymentRequest ? 'send' : 'receive');
+
+if (shortLinkId) {
+  openShortLink(shortLinkId).then((link) => {
+    const params = new URLSearchParams({ addr: link.address, category: link.category, amount: link.amount });
+    // Replace the short path so reloading keeps the request after a one-time link is consumed.
+    window.history.replaceState(null, '', `/?${params}`);
+    fillFromUrl(params, link.note);
+    setTransferTab('send');
+  }).catch((error) => {
+    report(new Error(translate(/unavailable/i.test(error.message)
+      ? 'This payment link has expired or was already opened.'
+      : error.message)));
+  });
 }
 
 $('send-tab').addEventListener('click', () => setTransferTab('send'));
@@ -1949,6 +2014,7 @@ $('generate-payment').addEventListener('click', async () => {
   const generation = ++paymentGeneration;
   try {
     $('payment-result').classList.add('hidden');
+    resetShortLink();
     await loadWalletDependencies();
     const address = validateRecipient($('receive-address').value);
     const category = $('receive-category').value.trim().toLowerCase();
@@ -2050,8 +2116,53 @@ $('generate-payment').addEventListener('click', async () => {
   }
 });
 
+function resetShortLink() {
+  $('short-link-result').hidden = true;
+  $('short-link-url').textContent = '';
+  $('short-link-status').textContent = '';
+}
+
+$('create-short-link').addEventListener('click', async () => {
+  const button = $('create-short-link');
+  button.disabled = true;
+  $('short-link-status').textContent = translate('Creating short link…');
+  try {
+    const url = new URL($('payment-url').textContent);
+    const link = await createShortLink({
+      address: url.searchParams.get('addr'),
+      category: url.searchParams.get('category'),
+      amount: url.searchParams.get('amount'),
+      note: $('receive-note').value.trim(),
+      one_time: $('short-link-type').value === 'one-time',
+      expires_in: $('short-link-expiry').value,
+    });
+    $('short-link-url').textContent = `${url.origin}/s/${link.id}`;
+    $('short-link-result').hidden = false;
+    $('short-link-status').textContent = translate(link.one_time
+      ? 'One-time link: it is deleted after the first time it is opened.'
+      : 'Persistent link: it can be opened repeatedly until it is removed.');
+  } catch (error) {
+    $('short-link-status').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('copy-short-link').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('short-link-url').textContent);
+    $('copy-short-link').textContent = 'Copied';
+    setTimeout(() => { $('copy-short-link').textContent = 'Copy link'; }, 1200);
+  } catch (error) {
+    report(error);
+  }
+});
+
+$('receive-note').addEventListener('input', resetShortLink);
+
 for (const id of ['receive-address', 'receive-category', 'receive-amount']) {
   $(id).addEventListener('input', () => {
+    resetShortLink();
     $('payment-result').classList.add('hidden');
     if (id === 'receive-address') {
       walletReceiveAddress = null;
@@ -2115,8 +2226,8 @@ $('download-payment-qr').addEventListener('click', () => {
 
 $('share-payment-qr').addEventListener('click', async () => {
   try {
-    const url = $('payment-url').textContent;
-    const paymentUrl = new URL(url);
+    const paymentUrl = new URL($('payment-url').textContent);
+    const url = $('short-link-result').hidden ? paymentUrl.toString() : $('short-link-url').textContent;
     const note = $('receive-note').value.trim();
     const text = `${translate('Amount')}: ${translate(`${paymentUrl.searchParams.get('amount')} token base units`)}\n` +
       `${translate('Recipient address')}: ${paymentUrl.searchParams.get('addr')}` +

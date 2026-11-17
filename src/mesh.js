@@ -5,7 +5,7 @@ export function meshPath(width, height) {
   const centerX = width / 2;
   const radiusX = Math.min(width * 0.42, 320);
   const horizon = height * 0.16;
-  const amplitude = Math.min(height * 0.23, 80);
+  const amplitude = Math.min(height * 0.3, 104);
   const bump = (distance, radius) => {
     if (Math.abs(distance) >= radius) return 0;
     return (1 + Math.cos(Math.PI * distance / radius)) / 2;
@@ -13,7 +13,8 @@ export function meshPath(width, height) {
   const point = (x, y) => {
     const depth = y / height;
     const perspective = 0.38 + 0.62 * depth;
-    const influence = bump(x - centerX, radiusX) * Math.sin(Math.PI * depth) ** 2;
+    const ripple = 0.7 + 0.3 * Math.cos((x - centerX) / 46 + depth * 5);
+    const influence = bump(x - centerX, radiusX) * Math.sin(Math.PI * depth) ** 2 * ripple;
     const projectedX = centerX + (x - centerX) * perspective;
     const projectedY = horizon + (height - horizon) * depth - amplitude * influence;
     return `${projectedX.toFixed(2)},${projectedY.toFixed(2)}`;

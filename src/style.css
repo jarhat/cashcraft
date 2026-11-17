@@ -2896,3 +2896,66 @@ body { background-attachment: fixed, fixed; }
   .topbar .quick-nav { grid-column: 1 / -1; grid-row: 3; justify-self: center; }
   .topbar .tool-dropdown { right: auto; left: 0; }
 }
+
+/* Connected-only chrome, merged mesh, landing and short links */
+[data-wallet-panel][hidden], .wizard-logout[hidden], #disconnect[hidden], #forget[hidden] { display: none !important; }
+body::before {
+  -webkit-mask-image: linear-gradient(to bottom, transparent min(250px, 34vh), #000 min(440px, 60vh));
+  mask-image: linear-gradient(to bottom, transparent min(250px, 34vh), #000 min(440px, 60vh));
+}
+.topbar {
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  gap: 12px;
+}
+.topbar .topbar-tools-left { grid-column: 1; grid-row: 1; justify-self: start; }
+.topbar .quick-nav { grid-column: 2; grid-row: 1; justify-self: center; }
+.topbar > .network { grid-column: 3; grid-row: 1; justify-self: end; }
+.topbar .topbar-tools-right { grid-column: 4; grid-row: 1; justify-self: end; }
+.topbar .wizard-guide, body.wallet-connected .topbar .wizard-guide { grid-column: 5; grid-row: 1; display: flex; align-items: center; gap: 8px; }
+.wizard-logout {
+  display: grid; place-items: center; width: 44px; height: 44px; flex: none; padding: 0;
+  border: 1px solid var(--glass-border); border-radius: 12px; color: var(--ice);
+  background: rgb(255 255 255 / 5%); cursor: pointer;
+}
+.wizard-logout svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.wizard-logout:hover { background: rgb(255 255 255 / 10%); }
+@media (max-width: 900px) {
+  .topbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .topbar .topbar-tools-left { grid-column: 1; grid-row: 1; }
+  .topbar .wizard-guide, body.wallet-connected .topbar .wizard-guide { grid-column: 2; grid-row: 1; justify-self: end; }
+  .topbar > .network { grid-column: 1; grid-row: 2; justify-self: start; }
+  .topbar .topbar-tools-right { grid-column: 2; grid-row: 2; justify-self: end; }
+  .topbar .quick-nav { grid-column: 1 / -1; grid-row: 3; justify-self: center; }
+}
+.wallet-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.wallet-choice {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer;
+  border: 1px solid var(--glass-border); border-radius: 12px; color: var(--ice); font: inherit;
+  background: rgb(255 255 255 / 5%); transition: background .2s, border-color .2s;
+}
+.wallet-choice:hover, .wallet-choice[aria-pressed="true"] { background: rgb(255 255 255 / 12%); border-color: var(--glow-color); }
+.wallet-install { font-size: .78rem; color: var(--muted); }
+.wallet-install a { color: var(--ice); }
+.button.plain { background: transparent; box-shadow: none; }
+.short-link-box { margin: 14px 0 0; padding: 12px; border: 1px solid var(--glass-border); border-radius: 12px; min-width: 0; }
+.short-link-box legend { padding: 0 6px; font-size: .75rem; color: var(--muted); }
+.short-link-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.short-link-options label { display: grid; gap: 4px; font-size: .75rem; }
+.short-link-options select { min-width: 0; }
+#shared-link-note { overflow-wrap: anywhere; white-space: pre-wrap; }
+.landing-features {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px;
+  margin: 26px 0 0; padding: 0; list-style: none; text-align: left;
+}
+.landing-features li {
+  display: grid; gap: 4px; padding: 14px; border: 1px solid var(--glass-border); border-radius: 14px;
+  background: linear-gradient(160deg, rgb(255 255 255 / 8%), transparent);
+}
+.landing-features strong { color: var(--ice); font-size: .9rem; }
+.landing-features span { color: var(--muted); font-size: .78rem; line-height: 1.5; }
+.landing-welcome h2 { max-width: 20ch; }
+.connection-dialog { max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
+.connection-dialog .wizard-dialog { max-width: 100%; }
+@media (max-height: 820px) {
+  #wallet-help > p:first-child { display: none; }
+}

@@ -44,6 +44,42 @@ class RewardTests(unittest.TestCase):
             self.assertEqual(rows, [("new", "b" * 64), ("proof", "b" * 64)])
             self.assertIsNone(db.execute("SELECT 1 FROM cash_addresses WHERE cash_address = 'failed'").fetchone())
 
+    def test_short_links_one_time_persistent_and_expiry(self):
+        client = TestClient(backend.app)
+        body = {
+            "address": "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz",
+            "category": "a" * 64, "amount": "5", "note": "thanks", "one_time": True, "expires_in": "1d",
+        }
+        one = client.post("/api/short-link", json=body).json()
+        opened = client.post(f"/api/short-link/{one['id']}/open")
+        self.assertEqual(opened.json()["note"], "thanks")
+        self.assertEqual(client.post(f"/api/short-link/{one['id']}/open").status_code, 404)
+        keep = client.post("/api/short-link", json={**body, "one_time": False}).json()
+        for _ in range(2):
+            self.assertEqual(client.post(f"/api/short-link/{keep['id']}/open").status_code, 200)
+        with sqlite3.connect(backend.DB_PATH) as db:
+            db.execute("UPDATE short_links SET expires_at = 1")
+        backend.purge_expired_short_links()
+        self.assertEqual(client.post(f"/api/short-link/{keep['id']}/open").status_code, 404)
+        self.assertEqual(client.post("/api/short-link", json={**body, "amount": "0"}).status_code, 422)
+        self.assertEqual(client.post("/api/short-link", json={**body, "expires_in": "1y"}).status_code, 422)
+
+    def test_unfurl_preview_and_qr_never_expose_note_or_consume_one_time_link(self):
+        client = TestClient(backend.app)
+        body = {
+            "address": "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz",
+            "category": "a" * 64, "amount": "5", "note": "private-note", "one_time": True, "expires_in": "1d",
+        }
+        link = client.post("/api/short-link", json=body).json()
+        headers = {"X-Original-URI": f"/s/{link['id']}", "X-Preview-Origin": "https://ctf.example"}
+        page = client.get("/api/preview", headers=headers)
+        self.assertIn(f"https://ctf.example/api/qr.png?s={link['id']}", page.text)
+        self.assertNotIn("private-note", page.text)
+        qr = client.get(f"/api/qr.png?s={link['id']}", headers=headers)
+        self.assertTrue(qr.content.startswith(b"\x89PNG"))
+        self.assertEqual(client.post(f"/api/short-link/{link['id']}/open").json()["note"], "private-note")
+        self.assertEqual(client.get(f"/api/qr.png?s={link['id']}", headers=headers).status_code, 404)
+
     def test_address_endpoint_saves_valid_address_and_queues_one_reward(self):
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
         client = TestClient(backend.app)

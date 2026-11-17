@@ -48,27 +48,10 @@
   <main class="shell">
     <div id="panel-outline-layer" class="panel-outline-layer" aria-hidden="true"></div>
     <header class="topbar">
-      <nav class="quick-nav" aria-label="Wallet actions" data-wallet-panel hidden>
-        <button id="top-send" class="quick-action" type="button" aria-controls="send-panel">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M12 5l7 7-7 7" /></svg>
-          <span>Send</span>
+      <div class="topbar-tools topbar-tools-left">
+        <button id="wiki-open" class="theme-toggle" type="button" aria-label="CashTokens wiki" aria-haspopup="dialog" aria-controls="wiki-dialog">
+          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-2-2-5-2-9-1v13c4-1 7-1 9 1m0-13c2-2 5-2 9-1v13c-4-1-7-1-9 1m0-13v13"/></svg>
         </button>
-        <button id="top-receive" class="quick-action" type="button" aria-controls="receive-panel">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 19h16" /></svg>
-          <span>Receive</span>
-        </button>
-      </nav>
-      <span class="network"><i aria-hidden="true"></i><span id="network">CHIPNET</span><span id="network-wallet-status" class="visually-hidden">Not connected</span></span>
-      <div class="topbar-tools">
-        <div class="tool-menu">
-          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Choose theme" aria-expanded="false" aria-controls="theme-menu">
-            <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.7 1.7 0 0 1 1.3-2.7H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><circle cx="7.5" cy="11" r=".7"/><circle cx="10" cy="7.5" r=".7"/><circle cx="14" cy="7.5" r=".7"/><circle cx="17" cy="11" r=".7"/></svg>
-          </button>
-          <div id="theme-menu" class="tool-dropdown" hidden>
-            <button type="button" data-theme-option="frost">Frost</button>
-            <button type="button" data-theme-option="aurora">Aurora</button>
-          </div>
-        </div>
         <div class="tool-menu">
           <button id="language-toggle" class="theme-toggle" type="button" aria-label="Choose language" aria-expanded="false" aria-controls="language-menu">
             <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 4 6 4 9s-1 6-4 9c-3-3-4-6-4-9s1-6 4-9Z"/></svg>
@@ -80,18 +63,41 @@
             <button type="button" data-language-option="de" lang="de">Deutsch</button>
           </div>
         </div>
-        <button id="wiki-open" class="theme-toggle" type="button" aria-label="CashTokens wiki" aria-haspopup="dialog" aria-controls="wiki-dialog">
-          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-2-2-5-2-9-1v13c4-1 7-1 9 1m0-13c2-2 5-2 9-1v13c-4-1-7-1-9 1m0-13v13"/></svg>
+        <div class="tool-menu" data-wallet-panel hidden>
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Choose theme" aria-expanded="false" aria-controls="theme-menu">
+            <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.7 1.7 0 0 1 1.3-2.7H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><circle cx="7.5" cy="11" r=".7"/><circle cx="10" cy="7.5" r=".7"/><circle cx="14" cy="7.5" r=".7"/><circle cx="17" cy="11" r=".7"/></svg>
+          </button>
+          <div id="theme-menu" class="tool-dropdown" hidden>
+            <button type="button" data-theme-option="frost">Frost</button>
+            <button type="button" data-theme-option="aurora">Aurora</button>
+          </div>
+        </div>
+      </div>
+      <nav class="quick-nav" aria-label="Wallet actions" data-wallet-panel hidden>
+        <button id="top-send" class="quick-action" type="button" aria-controls="send-panel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M12 5l7 7-7 7" /></svg>
+          <span>Send</span>
         </button>
-        <button id="connection-open" class="theme-toggle" type="button" aria-label="Wallet connection" aria-haspopup="dialog" aria-controls="connection-dialog">
+        <button id="top-receive" class="quick-action" type="button" aria-controls="receive-panel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 19h16" /></svg>
+          <span>Receive</span>
+        </button>
+      </nav>
+
+      <span class="network"><i aria-hidden="true"></i><span id="network">CHIPNET</span><span id="network-wallet-status" class="visually-hidden">Not connected</span></span>
+      <div class="topbar-tools topbar-tools-right">
+        <button id="connection-open" class="theme-toggle" data-wallet-panel hidden type="button" aria-label="Wallet connection" aria-haspopup="dialog" aria-controls="connection-dialog">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M4 6V5a2 2 0 0 1 2-2h12v3m3 5h-5a2 2 0 0 0 0 4h5"/><circle cx="16" cy="13" r=".6"/></svg>
         </button>
-        <button id="notifications-toggle" class="theme-toggle notification-toggle" type="button" aria-label="Notifications" aria-controls="notifications-dialog" aria-describedby="notification-indicator" aria-haspopup="dialog">
+        <button id="notifications-toggle" class="theme-toggle notification-toggle" data-wallet-panel hidden type="button" aria-label="Notifications" aria-controls="notifications-dialog" aria-describedby="notification-indicator" aria-haspopup="dialog">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9ZM10 20h4"/></svg>
           <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread notification</span></span>
         </button>
       </div>
       <aside id="wizard-guide" class="wizard-guide" aria-label="Wizard tutorial">
+        <button id="logout" class="wizard-logout" type="button" aria-label="Log out and leave site" title="Log out and leave site" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3m6-12 5 4-5 4m5-4H9"/></svg>
+        </button>
         <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
           <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true"><path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/><path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/><path fill="#f0c7ae" d="M13 18h10v8H13z"/><path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/><path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/><path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/><path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/><path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/><path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/></svg>
           <span>Wizard help</span>
@@ -104,12 +110,16 @@
         <p id="wizard-message" aria-live="polite"></p>
         <div id="wallet-help">
           <p>New here? Install a compatible wallet, create or restore it, and safely back up your recovery phrase. Never share that phrase.</p>
-          <div class="wallet-options">
-            <a href="https://selene.cash" target="_blank" rel="noopener noreferrer"><img class="wallet-icon" src="https://raw.githubusercontent.com/fyookball/selene3/3049d71ca26caf744e4d349ddb727a9e71a57a2b/icons/icon-96.webp" alt="" referrerpolicy="no-referrer"><span class="wallet-icon-fallback" aria-hidden="true">☾</span> Selene ↗</a>
-            <a href="https://cashonize.com" target="_blank" rel="noopener noreferrer"><img class="wallet-icon" src="https://raw.githubusercontent.com/cashonize/cashonize-wallet/ff731f9dacdc9b6ae0194292fa144da248f620b3/public/images/cashonize-icon.png" alt="" referrerpolicy="no-referrer"> Cashonize ↗</a>
-            <a href="https://www.paytaca.com" target="_blank" rel="noopener noreferrer"><img class="wallet-icon" src="https://raw.githubusercontent.com/paytaca/paytaca-app/f12d121932e98c41520ce0df37727bf826dd955d/public/icons/paytaca_logo.png" alt="" referrerpolicy="no-referrer"> Paytaca ↗</a>
+          <div class="wallet-options" role="group" aria-label="Choose your wallet">
+            <button type="button" class="wallet-choice" data-wallet-choice="selene"><img class="wallet-icon" src="https://raw.githubusercontent.com/fyookball/selene3/3049d71ca26caf744e4d349ddb727a9e71a57a2b/icons/icon-96.webp" alt="" referrerpolicy="no-referrer"><span class="wallet-icon-fallback" aria-hidden="true">☾</span> <span>Selene</span></button>
+            <button type="button" class="wallet-choice" data-wallet-choice="cashonize"><img class="wallet-icon" src="https://raw.githubusercontent.com/cashonize/cashonize-wallet/ff731f9dacdc9b6ae0194292fa144da248f620b3/public/images/cashonize-icon.png" alt="" referrerpolicy="no-referrer"> <span>Cashonize</span></button>
+            <button type="button" class="wallet-choice" data-wallet-choice="paytaca"><img class="wallet-icon" src="https://raw.githubusercontent.com/paytaca/paytaca-app/f12d121932e98c41520ce0df37727bf826dd955d/public/icons/paytaca_logo.png" alt="" referrerpolicy="no-referrer"> <span>Paytaca</span></button>
           </div>
-          <p>Choose Connect wallet below. Open your wallet or scan the code, approve the connection, then return to this browser. Use a wallet on the same network shown above.</p>
+          <details class="wallet-install">
+            <summary>Need to install a wallet?</summary>
+            <p><a href="https://selene.cash" target="_blank" rel="noopener noreferrer">selene.cash ↗</a> · <a href="https://cashonize.com" target="_blank" rel="noopener noreferrer">cashonize.com ↗</a> · <a href="https://www.paytaca.com" target="_blank" rel="noopener noreferrer">paytaca.com ↗</a></p>
+          </details>
+          <p>Pick your wallet to start pairing, then approve the connection there and return to this browser. Use a wallet on the same network shown above.</p>
         </div>
         <div class="wizard-controls">
           <button id="wizard-close" class="small-button" type="button">Close</button>
@@ -122,9 +132,15 @@
     <div class="dashboard">
       <div class="landing-welcome panel">
         <p class="eyebrow">BITCOIN CASH · CASHTOKENS</p>
-        <h2>No account. No KYC. Just your wallet.</h2>
-        <p class="muted">Connect your wallet to manage BCH and CashTokens. Your keys stay in your wallet.</p>
+        <h2>Send and receive CashTokens. No account. No KYC.</h2>
+        <p class="muted">Pair the wallet you already use, share a payment link or QR, and track every token balance. Your keys never leave your wallet.</p>
         <button id="landing-connect" class="button primary" type="button">Connect wallet <span aria-hidden="true">→</span></button>
+        <ul class="landing-features">
+          <li><strong>No sign-up</strong><span>Open the page, scan a code, done in seconds.</span></li>
+          <li><strong>Non-custodial</strong><span>Every transaction is approved and signed in your wallet.</span></li>
+          <li><strong>Share anywhere</strong><span>Payment links and QR codes, with optional one-time short links.</span></li>
+          <li><strong>Live portfolio</strong><span>Token icons, metadata and indicative prices at a glance.</span></li>
+        </ul>
         <p class="swap-note">Have BTC? You can swap it for BCH with <a href="https://sideshift.ai" target="_blank" rel="noopener noreferrer">SideShift ↗</a>. This independent service uses mainnet; check the rate, fees and recipient address.</p>
       </div>
       <article id="balance-section" class="panel" data-wallet-panel hidden>
@@ -311,13 +327,38 @@
               Copy link
             </button>
           </div>
+
+          <fieldset class="short-link-box">
+            <legend>Short link</legend>
+            <div class="short-link-options">
+              <label>Link type
+                <select id="short-link-type">
+                  <option value="persistent">Persistent</option>
+                  <option value="one-time">One-time (deleted after first open)</option>
+                </select>
+              </label>
+              <label>Remove after
+                <select id="short-link-expiry">
+                  <option value="1d">1 day</option>
+                  <option value="1w" selected>1 week</option>
+                  <option value="1m">1 month</option>
+                </select>
+              </label>
+            </div>
+            <button id="create-short-link" class="small-button" type="button">Create short link</button>
+            <div id="short-link-result" class="payment-url-line" hidden>
+              <code id="short-link-url"></code>
+              <button id="copy-short-link" class="small-button" type="button">Copy link</button>
+            </div>
+            <p id="short-link-status" class="fine" role="status"></p>
+          </fieldset>
         </div>
 
         <p class="fine">
           The QR code contains a link to this site with the receive address,
           category ID, and requested amount.
         </p>
-        <p class="fine">The sharing note appears in the shared image and message, not in the payment link.</p>
+        <p class="fine">The sharing note appears in the shared image and message. Short links also keep it on our server until they expire or, for one-time links, are first opened.</p>
       </div>
     </section>
 
@@ -384,6 +425,7 @@
         Open in wallet <span aria-hidden="true">↗</span>
       </button>
       <p id="pairing-help" class="fine">Choose Connect wallet, then open your wallet and approve the connection. Return to this browser to continue.</p>
+      <button id="disconnect" class="button secondary plain" type="button" hidden>Disconnect</button>
       <button id="forget" class="button secondary" hidden>
         Forget saved session and pair again
       </button>
@@ -397,7 +439,7 @@
     </dialog>
 
     <pre id="log" role="status"></pre>
-    <aside id="media-gallery" class="media-gallery" aria-label="Bitcoin Cash media">
+    <aside id="media-gallery" class="media-gallery" aria-label="Bitcoin Cash media" data-wallet-panel hidden>
       <div class="media-gallery-heading">
         <div><p class="eyebrow">BCH COMMUNITY</p><h2>Explore the artwork</h2></div>
         <a href="https://bch.now" target="_blank" rel="noopener noreferrer">bch.now ↗</a>
@@ -504,6 +546,7 @@
         <div><dt>Amount</dt><dd id="shared-link-amount"></dd></div>
         <div><dt>Recipient address</dt><dd id="shared-link-address"></dd></div>
         <div><dt>CashToken category</dt><dd id="shared-link-category"></dd></div>
+        <div id="shared-link-note-row" hidden><dt>Note</dt><dd id="shared-link-note"></dd></div>
       </dl>
       <button id="view-payment-request" class="button primary" type="button">View payment request <span aria-hidden="true">→</span></button>
     </div>

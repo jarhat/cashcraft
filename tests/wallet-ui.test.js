@@ -123,7 +123,7 @@ function sharedLinkFixture(search) {
       return meta.get(selector);
     },
   };
-  const body = source.slice(source.indexOf('function fillFromUrl()'), source.indexOf('\nconst mainnet'));
+  const body = source.slice(source.indexOf('function fillFromUrl('), source.indexOf('\nconst mainnet'));
   runInNewContext(`${body}\nfillFromUrl();`, {
     URLSearchParams, Object, document, $: element, walletReady: false,
     window: { location: { search, href: `https://ctf.example/${search}` } },
@@ -474,12 +474,13 @@ test('forgetting a pairing notifies the wallet before tearing down the relay', a
   let handler;
   const nodes = {
     forget: { addEventListener(_type, fn) { handler = fn; } },
+    disconnect: { addEventListener() {} }, logout: { addEventListener() {} },
     pairing: { classList: { add() {} } },
     'open-wallet': { disabled: false, hidden: false },
     'pairing-help': { hidden: false },
     status: { textContent: '' },
   };
-  const start = source.indexOf("$('forget').addEventListener('click'");
+  const start = source.indexOf('async function endWalletSession');
   const end = source.indexOf("\n$('refresh').addEventListener", start);
   const context = {
     $: (id) => nodes[id], window: { confirm: () => true }, translate: (text) => text,
@@ -490,7 +491,7 @@ test('forgetting a pairing notifies the wallet before tearing down the relay', a
       async destroy() { calls.push('destroy'); },
     },
     relay: { cleanup() { calls.push('cleanup'); } },
-    wait: () => new Promise(() => {}), clearWalletDisplay() {},
+    wait: () => new Promise(() => {}), clearWalletDisplay() {}, setConnection() {},
     async startConnection(options) { calls.push(options.fresh ? 'fresh' : 'restore'); },
     report(error) { throw error; },
   };

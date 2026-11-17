@@ -59,7 +59,7 @@ export function setupMediaSlideshow($) {
     if (image.complete && !image.naturalWidth) failed();
   });
   setInterval(() => {
-    if (!visible || motion.matches || document.hidden || gallery.matches(':hover') || gallery.contains(document.activeElement)) return;
+    if (gallery.hidden || !visible || motion.matches || document.hidden || gallery.matches(':hover') || gallery.contains(document.activeElement)) return;
     index = (index + 1) % slides.length;
     cards.forEach((card, offset) => show(card, slides[(index + offset) % slides.length]));
   }, 6000);
