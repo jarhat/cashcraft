@@ -1547,6 +1547,33 @@ html[data-theme="light"] select {
   font-size: .85rem;
 }
 
+.gamba-dialog {
+  text-align: center;
+  border-color: #ff6d8b;
+  background: radial-gradient(circle at 50% 20%, #5b1936, #102333 70%);
+}
+
+.gamba-art {
+  width: min(190px, 52vw);
+  margin: 0 auto;
+  filter: drop-shadow(0 0 18px rgb(255 65 100 / 50%));
+}
+
+.gamba-art svg { display: block; width: 100%; }
+.gamba-sparkle { animation: gamba-sparkle 1.1s steps(2, end) infinite alternate; }
+@keyframes gamba-sparkle { to { opacity: .35; } }
+
+.gamba-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gamba-sparkle { animation: none; }
+}
+
 @media (pointer: coarse) {
   .snow {
     animation: none;

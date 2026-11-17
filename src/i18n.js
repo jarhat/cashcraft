@@ -1,4 +1,9 @@
 const spanish = {
+  'Received 1 GAMBA': 'Recibiste 1 GAMBA',
+  'Your special diamond perk is here!': '¡Tu beneficio especial de diamante ha llegado!',
+  'Play sound': 'Reproducir sonido',
+  'Awesome': 'Genial',
+  'Sound unavailable. Tap Play sound to try again.': 'Sonido no disponible. Pulsa Reproducir sonido para intentarlo de nuevo.',
   'Automatic balance refresh failed · use Refresh balances to retry.': 'Falló la actualización automática del saldo · usa Actualizar saldos para volver a intentarlo.',
   'Waiting for wallet to reconnect…': 'Esperando que la cartera se vuelva a conectar…',
   'Wallet connected · relay ready': 'Cartera conectada · retransmisor listo',
@@ -168,6 +173,11 @@ const spanish = {
 };
 
 const french = {
+  'Received 1 GAMBA': '1 GAMBA reçu',
+  'Your special diamond perk is here!': 'Votre avantage diamant spécial est arrivé !',
+  'Play sound': 'Jouer le son',
+  'Awesome': 'Super',
+  'Sound unavailable. Tap Play sound to try again.': 'Son indisponible. Appuyez sur Jouer le son pour réessayer.',
   'Automatic balance refresh failed · use Refresh balances to retry.': 'Actualisation automatique du solde échouée · utilisez Actualiser les soldes pour réessayer.',
   'Waiting for wallet to reconnect…': 'En attente de la reconnexion du portefeuille…',
   'Wallet connected · relay ready': 'Portefeuille connecté · relais prêt',
@@ -337,6 +347,11 @@ const french = {
 };
 
 const german = {
+  'Received 1 GAMBA': '1 GAMBA erhalten',
+  'Your special diamond perk is here!': 'Dein besonderer Diamant-Vorteil ist da!',
+  'Play sound': 'Ton abspielen',
+  'Awesome': 'Super',
+  'Sound unavailable. Tap Play sound to try again.': 'Ton nicht verfügbar. Tippe auf Ton abspielen, um es erneut zu versuchen.',
   'Automatic balance refresh failed · use Refresh balances to retry.': 'Automatische Guthabenaktualisierung fehlgeschlagen · verwende Guthaben aktualisieren, um es erneut zu versuchen.',
   'Waiting for wallet to reconnect…': 'Warte auf die erneute Verbindung der Wallet…',
   'Wallet connected · relay ready': 'Wallet verbunden · Relay bereit',
