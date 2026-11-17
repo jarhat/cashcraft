@@ -501,6 +501,7 @@ test('open in wallet remains available until an address is derived, including re
   };
   runInNewContext(source.slice(start, end), context);
   await context.startConnection({ restoring: true });
+  assert.equal(element('connect').hidden, true);
   assert.equal(element('open-wallet').hidden, false);
   assert.equal(element('open-wallet').disabled, false);
   assert.equal(context.walletPairingUri, 'wiz:restored');
@@ -533,6 +534,38 @@ test('open in wallet remains available until an address is derived, including re
   instance.handlers.disconnect('closed');
   assert.equal(element('open-wallet').hidden, false);
   assert.equal(element('open-wallet').disabled, true);
+  assert.equal(element('connect').hidden, false);
+});
+
+test('saved wallet sessions start restoring immediately on page load', async () => {
+  const saved = { walletPublicKey: 'key', paths: ['receive'] };
+  const events = [];
+  const start = source.indexOf('const restoreSession =');
+  const end = source.indexOf("\nif ('serviceWorker'", start);
+  const context = {
+    loadWalletDependencies: async () => events.push('dependencies'),
+    loadSession: () => saved,
+    pairingInProgress: false, walletReady: false,
+    startConnection: async (options) => events.push(options.restoring ? 'restore' : 'new'),
+    logger: { warn() {} },
+  };
+  runInNewContext(source.slice(start, end), context);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(events, ['dependencies', 'restore']);
+});
+
+test('open in wallet works when a connected session needs relay reconnection', () => {
+  let handler;
+  const start = source.indexOf("$('open-wallet').addEventListener('click'");
+  const end = source.indexOf("\n$('forget').addEventListener", start);
+  const context = {
+    $: () => ({ addEventListener(_name, fn) { handler = fn; } }),
+    walletPairingUri: 'wiz:reconnect', walletReady: true,
+    window: { location: { href: '' } },
+  };
+  runInNewContext(source.slice(start, end), context);
+  handler();
+  assert.equal(context.window.location.href, 'wiz:reconnect');
 });
 
 test('token send signs and broadcasts without submitting a payment proof', async () => {
@@ -725,14 +758,16 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   const start = source.indexOf('function setConnection(');
   const end = source.indexOf('\nfunction clearWalletDisplay', start);
   const context = {
-    $, document: { querySelectorAll: () => panels }, sending: false,
+    $, document: { querySelectorAll: () => panels, body: { classList: { toggle() {} } } }, sending: false,
     pairingInProgress: false, transferInteracted: false,
   };
   runInNewContext(source.slice(start, end), context);
   context.setConnection(true);
   assert.ok(panels.every((panel) => !panel.hidden));
+  assert.equal($('wizard-guide').hidden, true);
   context.setConnection(false);
   assert.ok(panels.every((panel) => panel.hidden));
+  assert.equal($('wizard-guide').hidden, false);
 });
 
 test('priced metadata updates balances, token choices and allocation', async () => {

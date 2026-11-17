@@ -289,8 +289,11 @@ for (const name of ['theme', 'language']) {
 
 function setConnection(connected) {
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
-  if (!$('wizard-dialog').hidden) {
-    if (!connected) tutorialStep = 0;
+  document.body.classList.toggle('wallet-connected', connected);
+  $('wizard-guide').hidden = connected;
+  if (connected && !$('wizard-dialog').hidden) closeTutorial();
+  else if (!connected && !$('wizard-dialog').hidden) {
+    tutorialStep = 0;
     showTutorialStep();
   }
   $('dot').classList.toggle('online', connected);
@@ -417,6 +420,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
 
   pairingInProgress = true;
   $('connect').disabled = true;
+  $('connect').hidden = true;
   $('log').textContent = '';
   walletReady = false;
   clearWalletDisplay();
@@ -548,6 +552,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
       relay = null;
 
       $('connect').disabled = false;
+      $('connect').hidden = false;
     });
 
     manager.on('messagesent', (message) => {
@@ -664,6 +669,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
     walletPairingUri = null;
     $('open-wallet').disabled = true;
     $('connect').disabled = false;
+    $('connect').hidden = false;
   } finally {
     pairingInProgress = false;
     $('connect').disabled = walletReady;
@@ -1498,15 +1504,11 @@ async function sendFungibleTokens() {
 }
 
 $('connect').addEventListener('click', () => {
-  if (!localStorage.getItem('ctf-connect-help-seen')) {
-    localStorage.setItem('ctf-connect-help-seen', '1');
-    openTutorial();
-  }
   startConnection();
 });
 
 $('open-wallet').addEventListener('click', () => {
-  if (walletPairingUri && !walletReady) window.location.href = walletPairingUri;
+  if (walletPairingUri) window.location.href = walletPairingUri;
 });
 
 $('forget').addEventListener('click', async () => {
@@ -2056,11 +2058,7 @@ const restoreSession = async () => {
     logger.warn('Could not restore previous WizardConnect session:', error);
   }
 };
-if ('requestIdleCallback' in window) {
-  window.requestIdleCallback(restoreSession, { timeout: 3000 });
-} else {
-  setTimeout(restoreSession, 1000);
-}
+void restoreSession();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
