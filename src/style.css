@@ -1524,12 +1524,6 @@ html[data-theme="light"] select {
   font-size: .85rem;
 }
 
-.gamba-dialog {
-  text-align: center;
-  border-color: #ff6d8b;
-  background: radial-gradient(circle at 50% 20%, #5b1936, #102333 70%);
-}
-
 .gamba-art {
   width: min(190px, 52vw);
   margin: 0 auto;
@@ -1542,10 +1536,13 @@ html[data-theme="light"] select {
 
 .gamba-actions {
   display: flex;
-  justify-content: center;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
 }
+.gamba-actions[hidden] { display: none; }
+.gamba-actions p { margin: 0; }
+.gamba-actions p:empty { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .gamba-sparkle { animation: none; }

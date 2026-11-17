@@ -495,6 +495,10 @@
     </div>
     <p id="notifications-empty" class="muted">No notifications yet.</p>
     <div id="token-receipt-notifications" aria-live="polite"></div>
+    <div id="gamba-sound-controls" class="gamba-actions" hidden>
+      <p id="gamba-sound-status" class="fine" role="status"></p>
+      <button id="gamba-sound" class="button secondary" type="button">Play sound</button>
+    </div>
     <div id="shared-link-preview" class="shared-link-preview hidden">
       <p class="eyebrow">SHARED PAYMENT LINK</p>
       <p class="notification-message">You received a payment request.</p>
@@ -507,7 +511,7 @@
     </div>
   </dialog>
 
-  <dialog id="gamba-dialog" class="notifications-dialog gamba-dialog" aria-labelledby="gamba-title" aria-describedby="gamba-description">
+  <div hidden>
     <div id="gamba-art" class="gamba-art" aria-hidden="true">
       <svg viewBox="0 0 24 24" shape-rendering="crispEdges">
         <path class="gamba-sparkle" fill="#ffe5a0" d="M3 2h1v2h2v1H4v2H3V5H1V4h2zm17 3h1v2h2v1h-2v2h-1V8h-2V7h2zM3 16h1v1h1v1H4v1H3v-1H2v-1h1zm17 1h1v1h1v1h-1v1h-1v-1h-1v-1h1z"/>
@@ -519,14 +523,7 @@
         <path fill="#ff5c78" d="M8 10h8v2h-1v2h-1v2h-1v2h-2v-2h-1v-2H9v-2H8z"/>
       </svg>
     </div>
-    <h2 id="gamba-title">Received 1 GAMBA</h2>
-    <p id="gamba-description">Your special diamond perk is here!</p>
-    <p id="gamba-sound-status" class="fine" role="status"></p>
-    <div class="gamba-actions">
-      <button id="gamba-sound" class="button secondary" type="button">Play sound</button>
-      <button id="gamba-close" class="button primary" type="button" autofocus>Awesome</button>
-    </div>
-  </dialog>
+  </div>
 
   <dialog id="funding-dialog" class="notifications-dialog" aria-labelledby="funding-title">
     <div class="notifications-heading"><h2 id="funding-title">Get ready to send</h2><button id="funding-close" class="small-button close-notifications" type="button" aria-label="Close">×</button></div>

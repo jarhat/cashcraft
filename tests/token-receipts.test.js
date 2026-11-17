@@ -13,6 +13,7 @@ function receiptHarness(stored = new Map(), wallet = 'wallet') {
     }],
     ['notifications-empty', { hidden: false }],
     ['notification-indicator', { hidden: true }],
+    ['gamba-sound-controls', { hidden: true }],
     ['gamba-art', { cloneNode: () => ({ removeAttribute() {} }) }],
   ]);
   let celebrations = 0;
@@ -53,17 +54,19 @@ test('celebrates one GAMBA once per wallet, not other tokens or self-sent change
   h.api.notifyTokenReceipts([other, reward]);
   h.api.notifyTokenReceipts([reward, { ...reward, txid: 'another' }]);
   assert.equal(h.celebrations, 1);
-  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBA']);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBAYour special diamond perk is here!']);
   const notice = h.elements.get('token-receipt-notifications').items[0];
   assert.equal(notice.className, 'notification-message gamba-notice');
   assert.equal(notice.children.length, 2);
   assert.equal(h.elements.get('notification-indicator').hidden, false);
+  assert.equal(h.elements.get('gamba-sound-controls').hidden, false);
+  assert.match(notice.children[1].children[1].textContent, /diamond perk/);
 
   const reload = receiptHarness(h.stored);
   await reload.api.loadRewardCategory();
   reload.api.notifyTokenReceipts([reward]);
   assert.equal(reload.celebrations, 0);
-  assert.deepEqual(reload.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBA']);
+  assert.deepEqual(reload.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBAYour special diamond perk is here!']);
 
   const anotherWallet = receiptHarness(h.stored, 'another-wallet');
   await anotherWallet.api.loadRewardCategory();
@@ -83,7 +86,7 @@ test('migrates existing notices without replaying GAMBA or showing other tokens'
   await h.api.loadRewardCategory();
   h.api.notifyTokenReceipts([{ txid: 'reward', token: { category: h.category, amount: 1n } }]);
   assert.equal(h.celebrations, 0);
-  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBA']);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBAYour special diamond perk is here!']);
   assert.deepEqual(JSON.parse(stored.values().next().value).messages, ['Received 1 GAMBA']);
 });
 
@@ -124,11 +127,12 @@ test('refresh renders the new balance before announcing the reward', async () =>
   assert.equal(context.balanceSatoshis, 1000n);
 });
 
-test('celebration offers sound when autoplay is blocked and plays on a click', async () => {
+test('celebration opens notifications and offers sound when autoplay is blocked', async () => {
   const calls = [];
+  let canPlay = false;
   class AudioContext {
     constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = {}; }
-    async resume() { this.state = 'running'; calls.push('resumed'); }
+    async resume() { if (canPlay) { this.state = 'running'; calls.push('resumed'); } }
     async close() { this.state = 'closed'; calls.push('closed'); }
     createGain() {
       return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} };
@@ -138,28 +142,28 @@ test('celebration offers sound when autoplay is blocked and plays on a click', a
     }
   }
   const elements = new Map([
-    ['gamba-dialog', { open: false, showModal() { this.open = true; }, close() { this.open = false; } }],
+    ['notifications-dialog', { open: false, showModal() { this.open = true; }, close() { this.open = false; } }],
     ['gamba-sound-status', { textContent: '' }],
     ['gamba-sound', { addEventListener(_type, fn) { this.click = fn; } }],
-    ['gamba-close', { addEventListener(_type, fn) { this.click = fn; } }],
   ]);
   const start = source.indexOf('let notificationAudio;');
   const end = source.indexOf("\n$('view-payment-request')", start);
   const context = {
     window: { AudioContext }, $: (id) => elements.get(id),
     translate: (text) => text, logger: { warn() {} },
-    document: { addEventListener() {} },
+    document: { addEventListener() {} }, setTimeout, clearTimeout,
+    notificationsDialog: elements.get('notifications-dialog'),
   };
   runInNewContext(source.slice(start, end), context);
   context.showGambaCelebration();
-  assert.equal(elements.get('gamba-dialog').open, true);
+  assert.equal(elements.get('notifications-dialog').open, true);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.match(elements.get('gamba-sound-status').textContent, /Tap Play sound/);
+  canPlay = true;
   elements.get('gamba-sound').click();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(calls.filter((call) => call === 'tone').length, 3);
   assert.equal(elements.get('gamba-sound-status').textContent, '');
-  elements.get('gamba-close').click();
-  assert.equal(elements.get('gamba-dialog').open, false);
 });
 
 test('a prior user gesture unlocks sound before a later GAMBA receipt', async () => {
@@ -172,17 +176,20 @@ test('a prior user gesture unlocks sound before a later GAMBA receipt', async ()
   }
   const listeners = {};
   const elements = new Map([
-    ['gamba-dialog', { open: false, showModal() { this.open = true; }, close() {} }],
+    ['notifications-dialog', { open: false, showModal() { this.open = true; }, close() {} }],
     ['gamba-sound-status', { textContent: '' }],
     ['gamba-sound', { addEventListener() {} }],
-    ['gamba-close', { addEventListener() {} }],
   ]);
   const start = source.indexOf('let notificationAudio;');
   const end = source.indexOf("\n$('view-payment-request')", start);
   const context = {
     window: { AudioContext }, $: (id) => elements.get(id),
-    document: { addEventListener(type, handler) { listeners[type] = handler; } },
+    document: {
+      addEventListener(type, handler) { listeners[type] = handler; },
+      removeEventListener(type) { delete listeners[type]; },
+    },
     translate: (text) => text, logger: { warn() {} },
+    notificationsDialog: elements.get('notifications-dialog'), setTimeout, clearTimeout,
   };
   runInNewContext(source.slice(start, end), context);
   listeners.pointerdown();
@@ -190,5 +197,73 @@ test('a prior user gesture unlocks sound before a later GAMBA receipt', async ()
   context.showGambaCelebration();
   assert.equal(calls.filter((call) => call === 'created').length, 1);
   assert.equal(calls.filter((call) => call === 'tone').length, 3);
+  assert.equal(elements.get('gamba-sound-status').textContent, '');
+});
+
+test('a later gesture retries audio unlock after an earlier failure', async () => {
+  let attempts = 0;
+  const calls = [];
+  class AudioContext {
+    constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = {}; }
+    async resume() {
+      if (++attempts === 1) throw new Error('Blocked');
+      this.state = 'running';
+    }
+    createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; }
+    createOscillator() { return { frequency: {}, connect() {}, start() { calls.push('tone'); }, stop() {} }; }
+  }
+  const listeners = {};
+  const elements = new Map([
+    ['notifications-dialog', { open: false, showModal() { this.open = true; } }],
+    ['gamba-sound-status', { textContent: '' }],
+    ['gamba-sound', { addEventListener() {} }],
+  ]);
+  const start = source.indexOf('let notificationAudio;');
+  const end = source.indexOf("\n$('view-payment-request')", start);
+  const context = {
+    window: { AudioContext }, $: (id) => elements.get(id),
+    document: {
+      addEventListener(type, handler) { listeners[type] = handler; },
+      removeEventListener(type) { delete listeners[type]; },
+    },
+    notificationsDialog: elements.get('notifications-dialog'),
+    translate: (text) => text, logger: { warn() {} }, setTimeout, clearTimeout,
+  };
+  runInNewContext(source.slice(start, end), context);
+  listeners.pointerdown();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(typeof listeners.keydown, 'function');
+  listeners.keydown();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(listeners.pointerdown, undefined);
+  context.showGambaCelebration();
+  assert.equal(calls.length, 3);
+});
+
+test('a suspended audio context is resumed when a receipt arrives', async () => {
+  const calls = [];
+  class AudioContext {
+    constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = {}; }
+    async resume() { this.state = 'running'; calls.push('resume'); }
+    createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; }
+    createOscillator() { return { frequency: {}, connect() {}, start() { calls.push('tone'); }, stop() {} }; }
+  }
+  const elements = new Map([
+    ['notifications-dialog', { open: false, showModal() { this.open = true; } }],
+    ['gamba-sound-status', { textContent: '' }],
+    ['gamba-sound', { addEventListener() {} }],
+  ]);
+  const start = source.indexOf('let notificationAudio;');
+  const end = source.indexOf("\n$('view-payment-request')", start);
+  const context = {
+    window: { AudioContext }, $: (id) => elements.get(id),
+    document: { addEventListener() {} },
+    notificationsDialog: elements.get('notifications-dialog'),
+    translate: (text) => text, logger: { warn() {} }, setTimeout, clearTimeout,
+  };
+  runInNewContext(source.slice(start, end), context);
+  context.showGambaCelebration();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls, ['resume', 'tone', 'tone', 'tone']);
   assert.equal(elements.get('gamba-sound-status').textContent, '');
 });

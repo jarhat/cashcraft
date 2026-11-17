@@ -190,9 +190,14 @@ function addReceiptNotice(message) {
   art.removeAttribute('id');
   const label = document.createElement('strong');
   label.textContent = translate(message);
-  notice.append(art, label);
+  const details = document.createElement('div');
+  const description = document.createElement('p');
+  description.textContent = translate('Your special diamond perk is here!');
+  details.append(label, description);
+  notice.append(art, details);
   $('token-receipt-notifications').prepend(notice);
   $('notifications-empty').hidden = true;
+  $('gamba-sound-controls').hidden = false;
 }
 
 function rememberSentTransaction(txid) {
@@ -228,6 +233,7 @@ function notifyTokenReceipts(scannedUtxos) {
 
   if (receiptWallet !== wallet) {
     $('token-receipt-notifications').replaceChildren();
+    $('gamba-sound-controls').hidden = true;
     for (const message of state.messages) addReceiptNotice(message);
     if (state.unread) $('notification-indicator').hidden = false;
     receiptWallet = wallet;
@@ -340,6 +346,8 @@ function clearWalletDisplay() {
   tokenBalances = new Map();
   receiptWallet = null;
   $('token-receipt-notifications').replaceChildren();
+  $('gamba-sound-controls').hidden = true;
+  $('gamba-sound-status').textContent = '';
   if ($('shared-link-preview').classList.contains('hidden')) {
     $('notifications-empty').hidden = false;
     $('notification-indicator').hidden = true;
@@ -1748,21 +1756,37 @@ function prepareNotificationAudio() {
 function unlockNotificationAudio() {
   try {
     const audio = prepareNotificationAudio();
-    if (audio.state !== 'running') {
-      audio.resume().catch((error) => logger.warn('Could not enable notification sound:', error));
-    }
+    const unlocked = () => {
+      if (audio.state !== 'running') return;
+      document.removeEventListener('pointerdown', unlockNotificationAudio);
+      document.removeEventListener('keydown', unlockNotificationAudio);
+    };
+    if (audio.state === 'running') unlocked();
+    else audio.resume().then(unlocked).catch((error) => logger.warn('Could not enable notification sound:', error));
   } catch (error) {
     logger.warn('Could not enable notification sound:', error);
   }
 }
 
-document.addEventListener('pointerdown', unlockNotificationAudio, { once: true });
-document.addEventListener('keydown', unlockNotificationAudio, { once: true });
+document.addEventListener('pointerdown', unlockNotificationAudio);
+document.addEventListener('keydown', unlockNotificationAudio);
 
-async function playGambaSound(fromClick = false) {
+async function playGambaSound() {
   try {
     const audio = prepareNotificationAudio();
-    if (audio.state !== 'running' && fromClick) await audio.resume();
+    if (audio.state !== 'running') {
+      let timeout;
+      try {
+        await Promise.race([
+          audio.resume(),
+          new Promise((_, reject) => {
+            timeout = setTimeout(() => reject(new Error('Audio playback requires a user gesture.')), 750);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
     if (audio.state !== 'running') throw new Error('Audio playback requires a user gesture.');
 
     const start = audio.currentTime;
@@ -1772,7 +1796,7 @@ async function playGambaSound(fromClick = false) {
       const time = start + index * 0.09;
       tone.type = 'triangle';
       tone.frequency.value = frequency;
-      volume.gain.setValueAtTime(0.06, time);
+      volume.gain.setValueAtTime(0.15, time);
       volume.gain.exponentialRampToValueAtTime(0.001, time + 0.16);
       tone.connect(volume);
       volume.connect(audio.destination);
@@ -1787,13 +1811,11 @@ async function playGambaSound(fromClick = false) {
 }
 
 function showGambaCelebration() {
-  const dialog = $('gamba-dialog');
-  if (!dialog.open) dialog.showModal();
+  if (!notificationsDialog.open) notificationsDialog.showModal();
   void playGambaSound();
 }
 
-$('gamba-sound').addEventListener('click', () => { void playGambaSound(true); });
-$('gamba-close').addEventListener('click', () => $('gamba-dialog').close());
+$('gamba-sound').addEventListener('click', () => { void playGambaSound(); });
 
 $('view-payment-request').addEventListener('click', () => {
   notificationsDialog.close();
