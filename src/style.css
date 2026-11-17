@@ -2106,7 +2106,6 @@ body:not(.wallet-connected) #connection-section {
   background: linear-gradient(160deg, color-mix(in srgb, var(--glass-tint) 94%, transparent), var(--glass-tint));
   box-shadow: 0 20px 70px rgb(0 0 0 / 40%), 0 0 42px color-mix(in srgb, var(--glow-color) 20%, transparent);
 }
-body.wallet-connected .mesh-landscape { display: none; }
 .mesh-landscape {
   position: absolute;
   z-index: 0;
