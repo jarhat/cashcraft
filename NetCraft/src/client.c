@@ -34,6 +34,7 @@ static thrd_t recv_thread;
 #endif
 static char *queue = 0;
 static int qsize = 0;
+static bool position_sent = false;
 
 void client_enable() {
     client_enabled = true;
@@ -102,9 +103,10 @@ void client_position(float x, float y, float z, float rx, float ry) {
         (pz - z) * (pz - z) +
         (prx - rx) * (prx - rx) +
         (pry - ry) * (pry - ry);
-    if (distance < 0.0001) {
+    if (position_sent && distance < 0.0001) {
         return;
     }
+    position_sent = true;
     px = x; py = y; pz = z; prx = rx; pry = ry;
     char buffer[1024];
     snprintf(buffer, 1024, "P,%.2f,%.2f,%.2f,%.2f,%.2f\n", x, y, z, rx, ry);
@@ -311,9 +313,15 @@ void client_connect(char *hostname, int port) {
 #ifdef __EMSCRIPTEN__
         // Websockets are async, so connect() always returns EINPROGRESS
         if (errno == EINPROGRESS) return;
-#endif
+        perror("connect");
+        client_disable();
+        close(sd);
+        EM_ASM(Module.setGameReady(); Module.setConnectionStatus('Could not connect to game server. Check the WebSocket domain and reload.'););
+        return;
+#else
         perror("connect");
         exit(1);
+#endif
     }
 }
 
@@ -322,6 +330,7 @@ void client_start() {
         return;
     }
     running = true;
+    position_sent = false;
     queue = (char *)calloc(QUEUE_SIZE, sizeof(char));
     qsize = 0;
 #ifndef __EMSCRIPTEN__ // emscripten gets async message callbacks instead, no receiver thread

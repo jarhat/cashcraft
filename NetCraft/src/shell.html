@@ -12,6 +12,14 @@
         /* not scrollable, workaround https://github.com/satoshinm/NetCraft/issues/3 space = pages down */
         overflow: hidden;
       }
+      body > a, #spinner, #status, #progress, #output { display: none !important; }
+      #loading-screen { display: grid !important; position: fixed; inset: 0; z-index: 40; place-content: center; justify-items: center; gap: 18px; background: #101e1b; color: #eef6dd; font: 600 16px system-ui, sans-serif; text-align: center; }
+      #loading-screen[hidden] { display: none !important; }
+      .loading-mine { position: relative; width: 110px; height: 110px; }
+      .loading-block { position: absolute; left: 22px; bottom: 8px; width: 64px; height: 64px; border: 4px solid #3c4930; background: repeating-linear-gradient(45deg, #718650 0 8px, #64784a 8px 16px); box-shadow: inset 0 8px #9fb970, 6px 6px #0b130d; }
+      .loading-pick { position: absolute; top: 0; right: 3px; width: 60px; height: 60px; fill: none; stroke: #f0dda0; stroke-width: 3; stroke-linecap: square; transform-origin: 50px 52px; animation: mine-swing .8s ease-in-out infinite alternate; }
+      @keyframes mine-swing { from { transform: rotate(-35deg); } to { transform: rotate(12deg); } }
+      @media (prefers-reduced-motion: reduce) { .loading-pick { animation: none; } }
 
       .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
       div.emscripten { text-align: center; }      
@@ -114,7 +122,11 @@
       #mobile-build { right: 16px; bottom: 20px; }
       #mobile-jump { right: 16px; bottom: 100px; }
       #mobile-next { right: 168px; bottom: 20px; }
-      #sound-toggle { display: block !important; position: fixed; right: 12px; top: 12px; z-index: 25; }
+      .mobile-controls svg, #sound-toggle svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      #sound-toggle { display: grid !important; place-items: center; position: fixed; left: 64px; top: 12px; z-index: 25; width: 44px; height: 44px; padding: 9px; border: 1px solid rgba(255,255,255,.5); border-radius: 50%; background: rgba(0,0,0,.55); color: white; cursor: pointer; }
+      #sound-toggle[aria-pressed="true"] .sound-muted { display: none; }
+      #connection-status { display: block !important; position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 26; max-width: 90%; padding: 8px 12px; background: rgba(0,0,0,.8); color: white; text-align: center; }
+      #connection-status[hidden] { display: none !important; }
       @media (pointer: coarse) { .mobile-controls { display: block !important; } }
     </style>
   </head>
@@ -1227,13 +1239,23 @@
     </div>
     <textarea id="output" rows="8"></textarea>
 
-    <button id="sound-toggle" type="button" aria-pressed="false">Sound off</button>
+    <div id="loading-screen" role="status" aria-live="polite">
+      <div class="loading-mine" aria-hidden="true">
+        <div class="loading-block"></div>
+        <svg class="loading-pick" viewBox="0 0 24 24"><path d="M4 20 17 7m-5-4c3-1 7 0 9 4l-3 1-3-3-3-2ZM3 19l2 2"/></svg>
+      </div>
+      <span id="loading-message">Preparing your world...</span>
+    </div>
+    <div id="connection-status" role="status" hidden></div>
+    <button id="sound-toggle" type="button" aria-pressed="false" aria-label="Enable sound" title="Enable sound">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3zM16 8a6 6 0 0 1 0 8"/><path class="sound-muted" d="M17 3 3 21"/></svg>
+    </button>
     <div class="mobile-controls" aria-label="Touch controls">
       <div id="mobile-stick" class="mobile-stick" aria-label="Move"><div id="mobile-stick-knob" class="mobile-stick-knob"></div></div>
-      <button id="mobile-mine" type="button">Mine</button>
-      <button id="mobile-build" type="button">Build</button>
-      <button id="mobile-jump" type="button">Jump</button>
-      <button id="mobile-next" type="button">Next</button>
+      <button id="mobile-mine" type="button" aria-label="Mine" title="Mine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 17 7m-5-4c3-1 7 0 9 4l-3 1-3-3-3-2ZM3 19l2 2"/></svg></button>
+      <button id="mobile-build" type="button" aria-label="Build" title="Build"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4v10l-8 4-8-4V7zM4 7l8 4 8-4m-8 4v10"/></svg></button>
+      <button id="mobile-jump" type="button" aria-label="Jump" title="Jump"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6M5 21h14"/></svg></button>
+      <button id="mobile-next" type="button" aria-label="Next block" title="Next block"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-5-5 5 5-5 5M4 5h4v4H4zM4 15h4v4H4z"/></svg></button>
     </div>
 
     <script type='text/javascript'>
@@ -1244,6 +1266,14 @@
       var Module = {
         preRun: [],
         postRun: [],
+        websocket: {},
+        setConnectionStatus: function(text) {
+          var element = document.getElementById('connection-status');
+          element.textContent = text;
+          element.hidden = !text;
+          if (text) document.getElementById('loading-message').textContent = text;
+        },
+        setGameReady: function() { document.getElementById('loading-screen').hidden = true; },
         print: (function() {
           var element = document.getElementById('output');
           if (element) element.value = ''; // clear browser cache
@@ -1297,7 +1327,8 @@
             progressElement.hidden = true;
             if (!text) spinnerElement.style.display = 'none';
           }
-          statusElement.innerHTML = text;
+          statusElement.textContent = text;
+          if (text) document.getElementById('loading-message').textContent = text;
         },
         totalDependencies: 0,
         monitorRunDependencies: function(left) {
@@ -1309,10 +1340,13 @@
       window.onerror = function(event) {
         // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
         Module.setStatus('Exception thrown, see JavaScript console');
+        Module.setGameReady();
+        Module.setConnectionStatus('Game could not start. Check the browser console and reload.');
         spinnerElement.style.display = 'none';
         Module.setStatus = function(text) {
           if (text) Module.printErr('[post-exception status] ' + text);
         };
+      };
 
         (function() {
           var context = null;
@@ -1322,7 +1356,8 @@
             if (!enabled) {
               var AudioContext = window.AudioContext || window.webkitAudioContext;
               if (!AudioContext) {
-                button.textContent = 'Sound unavailable';
+                button.setAttribute('aria-label', 'Sound unavailable');
+                button.title = 'Sound unavailable';
                 return;
               }
               context = context || new AudioContext();
@@ -1330,7 +1365,9 @@
             }
             enabled = !enabled;
             button.setAttribute('aria-pressed', String(enabled));
-            button.textContent = enabled ? 'Sound on' : 'Sound off';
+            var label = enabled ? 'Disable sound' : 'Enable sound';
+            button.setAttribute('aria-label', label);
+            button.title = label;
           });
           Module.playBlockSound = function(placed) {
             if (!enabled || !context || context.state !== 'running') return;
@@ -1413,7 +1450,6 @@
             call('touch_set_jump', [0]);
           });
         })();
-      };
     </script>
     {{{ SCRIPT }}}
   </body>

@@ -184,7 +184,9 @@ at the proxy, configure the other required values in `.env`, build the WASM
 client into `NETCRAFT_BUILD_PATH`, and start Compose. The frontend is built with
 `wss://<NETCRAFT_WS_DOMAIN>/craftws` and connects automatically when NetCraft
 opens. Rebuild the frontend after changing the domain. The local client can
-also use `/online` and a full WebSocket URL.
+also use `/online` and a full WebSocket URL. The loading screen shows connection
+progress; if the connection fails or closes, check the domain and reload to
+reconnect.
 
 Compose enables mining rewards by default. A connected token-aware address
 receives one base unit for a naturally generated, previously unedited block;

@@ -881,4 +881,19 @@ mod tests {
         let output = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert!(output.contains("B,0,0,0,100,0,67\n"));
     }
+
+    #[test]
+    fn movement_and_block_edits_are_broadcast_without_receiver_input() {
+        let (server, first, second) = setup();
+        handle_command(&server, 1, "P,0,100,0,0,0").unwrap();
+        let position = String::from_utf8(second.try_recv().unwrap()).unwrap();
+        assert_eq!(position, "P,1,0,100,0,0,0\n");
+        block_edit(&server, 1, 0, 100, 0, 6).unwrap();
+        let placed = String::from_utf8(second.try_recv().unwrap()).unwrap();
+        assert!(placed.contains("B,0,0,0,100,0,6\nR,0,0\n"));
+        block_edit(&server, 1, 0, 100, 0, 0).unwrap();
+        let mined = String::from_utf8(second.try_recv().unwrap()).unwrap();
+        assert!(mined.contains("B,0,0,0,100,0,0\nR,0,0\n"));
+        assert!(first.try_recv().is_err());
+    }
 }

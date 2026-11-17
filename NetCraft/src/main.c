@@ -324,7 +324,7 @@ void get_motion_vector(bool flying, double sz, double sx, double rx, float ry,
     }
 }
 
-GLuint gen_crosshair_buffer() {
+static GLuint gen_crosshair_buffer(void) {
     int x = g->width / 2;
     int y = g->height / 2;
     int p = 10 * g->scale;
@@ -534,7 +534,9 @@ void update_player(Player *player,
     if (interpolate) {
         State *s1 = &player->state1;
         State *s2 = &player->state2;
-        memcpy(s1, s2, sizeof(State));
+        float previous_time = s2->t;
+        memcpy(s1, &player->state, sizeof(State));
+        s1->t = previous_time;
         s2->x = x; s2->y = y; s2->z = z; s2->rx = rx; s2->ry = ry;
         s2->t = glfwGetTime();
         if (s2->rx - s1->rx > PI) {
@@ -557,8 +559,8 @@ void interpolate_player(Player *player) {
     State *s2 = &player->state2;
     float t1 = s2->t - s1->t;
     float t2 = glfwGetTime() - s2->t;
-    t1 = MIN(t1, 1);
-    t1 = MAX(t1, 0.1);
+    t1 = MIN(t1, 0.15);
+    t1 = MAX(t1, 0.05);
     float p = MIN(t2 / t1, 1);
     update_player(
         player,
@@ -1683,6 +1685,17 @@ void force_chunks(Player *player) {
 
     int created = 0;
 
+#ifdef __EMSCRIPTEN__
+    /* Apply edits to existing chunks before spending the frame on new terrain. */
+    for (int i = 0; i < candidate_count && created < MAX_NEW_CHUNKS_FRAME; ++i) {
+        Chunk *chunk = find_chunk(candidates[i].p, candidates[i].q);
+        if (chunk && chunk->dirty) {
+            gen_chunk_buffer(chunk);
+            ++created;
+        }
+    }
+#endif
+
     for (int i = 0; i < candidate_count; ++i) {
         const int p = candidates[i].p;
         const int q = candidates[i].q;
@@ -2237,7 +2250,7 @@ void render_cover(Attrib *attrib, Player *player) {
     del_buffer(buffer);
 }
 
-void render_crosshairs(Attrib *attrib) {
+static void render_crosshairs(Attrib *attrib) {
     float matrix[16];
     set_matrix_2d(matrix, g->width, g->height);
     glUseProgram(attrib->program);
@@ -2291,7 +2304,7 @@ void render_item(Attrib *attrib) {
     }
 }
 
-void render_text(
+static void render_text(
     Attrib *attrib, int justify, float x, float y, float n, char *text)
 {
     float matrix[16];
@@ -3397,9 +3410,11 @@ void parse_buffer(char *buffer, int len) {
                 player->id = pid;
                 player->buffer = 0;
                 snprintf(player->name, MAX_NAME_LENGTH, "player%d", pid);
-                update_player(player, px, py, pz, prx, pry, true); // twice
+                update_player(player, px, py, pz, prx, pry, false);
+                update_player(player, px, py, pz, prx, pry, true);
+                player->state1 = player->state2;
             }
-            if (player) {
+            else if (player) {
                 update_player(player, px, py, pz, prx, pry, true);
             }
         }
@@ -3650,7 +3665,7 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         g->mode = MODE_ONLINE;
         strncpy(g->server_addr, argv[1], MAX_ADDR_LENGTH);
-        g->server_port = (argc == 3 && strcmp(argv[2], "-") != 0 && strlen(argv[2]) != 0) ? atoi(argv[2]) : DEFAULT_PORT;
+        g->server_port = (argc >= 3 && strcmp(argv[2], "-") != 0 && strlen(argv[2]) != 0) ? atoi(argv[2]) : DEFAULT_PORT;
         set_db_path();
 
 #ifdef __EMSCRIPTEN__
@@ -3714,6 +3729,9 @@ int main(int argc, char **argv) {
 void main_inited(void);
 
 void client_opened(int fd, void *userData) {
+#ifdef __EMSCRIPTEN__
+    EM_ASM(Module.setConnectionStatus(''););
+#endif
     add_message("Connected to server");
     client_start();
     client_version(1);
@@ -3730,6 +3748,9 @@ void client_opened(int fd, void *userData) {
 
 void client_closed(int fd, void *userData) {
     add_message("Client closed the connection");
+#ifdef __EMSCRIPTEN__
+    EM_ASM(Module.setGameReady(); Module.setConnectionStatus('Disconnected from game server. Reload to reconnect.'););
+#endif
     client_disable();
 }
 
@@ -3737,6 +3758,9 @@ void client_socket_error(int fd, int err, const char *msg, void *userData) {
     char buf[256];
     snprintf(buf, sizeof(buf), "WebSocket error occurred: %d %s", err, msg);
     add_message(buf);
+#ifdef __EMSCRIPTEN__
+    EM_ASM(Module.setGameReady(); Module.setConnectionStatus('Could not connect to game server. Check the WebSocket domain and reload.'););
+#endif
     client_disable();
 }
 
@@ -3765,6 +3789,7 @@ void main_init(void *unused) {
         snprintf(msg, sizeof(msg), "Connecting to server %s:%d...", g->server_addr, g->server_port);
         add_message(msg);
 #ifdef __EMSCRIPTEN__
+        EM_ASM(Module.setConnectionStatus('Connecting to game server...'););
         emscripten_set_socket_error_callback("error", client_socket_error);
         emscripten_set_socket_open_callback("open", client_opened);
         emscripten_set_socket_message_callback((void *)parse_buffer, client_message);
@@ -3800,6 +3825,9 @@ void main_inited() {
     // BEGIN MAIN LOOP //
     g->previous_iter_timestamp = glfwGetTime();
     g->initialized = true;
+#ifdef __EMSCRIPTEN__
+    EM_ASM(Module.setGameReady(););
+#endif
 }
 
 void main_shutdown() {
