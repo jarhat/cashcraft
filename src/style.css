@@ -2829,7 +2829,14 @@ body.wallet-connected .network i {
 }
 .panel-outline.guide-outline { border-radius: 14px; }
 body { background-attachment: fixed, fixed; }
-.mesh-terrain { height: 100%; }
+.mesh-terrain {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  -webkit-mask-image: radial-gradient(ellipse 55% 90% at 50% 42%, #000 10%, transparent 100%);
+  mask-image: radial-gradient(ellipse 55% 90% at 50% 42%, #000 10%, transparent 100%);
+}
 .topbar {
   border: 1px solid rgb(164 215 255 / 10%);
   border-bottom-color: rgb(164 215 255 / 14%);
