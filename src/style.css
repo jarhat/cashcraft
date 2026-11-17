@@ -2655,8 +2655,8 @@ html[data-theme="aurora"] {
 .topbar .wizard-guide { justify-self: end; align-self: start; }
 .topbar-tools { gap: 10px; }
 .dashboard > .under-topbar {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent max(0px, calc(var(--fade-under-bar) - 20px)), #000 calc(var(--fade-under-bar) + 10px));
-  mask-image: linear-gradient(to bottom, transparent 0, transparent max(0px, calc(var(--fade-under-bar) - 20px)), #000 calc(var(--fade-under-bar) + 10px));
+  -webkit-mask-image: linear-gradient(to bottom, transparent var(--fade-under-bar), #000 calc(var(--fade-under-bar) + 16px));
+  mask-image: linear-gradient(to bottom, transparent var(--fade-under-bar), #000 calc(var(--fade-under-bar) + 16px));
 }
 .swap-note {
   max-width: 430px;
@@ -2676,14 +2676,6 @@ html[data-theme="aurora"] {
   .media-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .media-slide:nth-child(3) { display: none; }
 }
-@media (prefers-reduced-motion: no-preference) {
-  .mesh-sun { animation: moon-drift 12s ease-in-out infinite alternate; }
-  @keyframes moon-drift {
-    from { transform: translateX(-50%) translateY(0) scale(1); }
-    to { transform: translateX(-50%) translateY(8px) scale(1.035); }
-  }
-}
-
 .topbar {
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
@@ -2708,15 +2700,23 @@ html[data-theme="aurora"] {
 body:not(.wallet-connected) .dashboard { padding: clamp(24px, 5vh, 48px) 0 32px; }
 .landing-welcome h2 { max-width: 22ch; margin-inline: auto; line-height: 1.2; }
 .mesh-landscape, body.wallet-connected .mesh-landscape {
-  position: relative;
-  z-index: 0;
-  inset: auto;
+  position: fixed;
+  z-index: -1;
+  inset: 0 0 auto;
   width: 100%;
-  height: clamp(140px, 20vw, 220px);
-  margin-top: 24px;
+  height: min(440px, 60vh);
+  margin: 0;
   opacity: .65;
-  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 78%);
-  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 78%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%);
+  animation: none;
+}
+.mesh-terrain { animation: none; }
+.chain-decoration {
+  position: relative;
+  height: 140px;
+  margin-top: 24px;
+  pointer-events: none;
 }
 @media (max-width: 900px) {
   .topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }

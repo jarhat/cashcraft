@@ -5,12 +5,19 @@ export function updateScrollEffects(topbar) {
 
 export function updatePanelFades(topbar, panels) {
   const bottom = Math.max(0, topbar.getBoundingClientRect().bottom);
-  for (const panel of panels) {
+  const updates = [...panels].map((panel) => {
     const bounds = panel.getBoundingClientRect();
-    if (bounds.height && bounds.top < bottom && bounds.bottom > 0 && !panel.querySelector('.token-options[open]')) {
-      panel.style.setProperty('--fade-under-bar', `${Math.round(bottom - bounds.top)}px`);
-      panel.classList.add('under-topbar');
-    } else {
+    const fade = bounds.height && bounds.top < bottom + 16 && bounds.bottom > 0
+      && !panel.querySelector('.token-options[open]') ? `${bottom - bounds.top}px` : '';
+    return { panel, fade };
+  });
+  for (const { panel, fade } of updates) {
+    if (fade) {
+      if (panel.style.getPropertyValue('--fade-under-bar') !== fade) {
+        panel.style.setProperty('--fade-under-bar', fade);
+      }
+      if (!panel.classList.contains('under-topbar')) panel.classList.add('under-topbar');
+    } else if (panel.classList.contains('under-topbar')) {
       panel.classList.remove('under-topbar');
       panel.style.removeProperty('--fade-under-bar');
     }
@@ -21,10 +28,11 @@ export function setupScrollEffects() {
   const topbar = document.querySelector('.topbar');
   const dashboard = document.querySelector('.dashboard');
   let scheduled = false;
+  const updateFades = () => updatePanelFades(topbar, document.querySelectorAll('.dashboard > .panel, .dashboard > .wizard-dialog'));
   const update = () => {
     scheduled = false;
     updateScrollEffects(topbar);
-    updatePanelFades(topbar, document.querySelectorAll('.dashboard > .panel, .dashboard > .wizard-dialog'));
+    updateFades();
   };
   const schedule = () => {
     if (!scheduled) {
@@ -33,7 +41,7 @@ export function setupScrollEffects() {
     }
   };
   window.addEventListener('resize', schedule);
-  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('scroll', updateFades, { passive: true });
   document.querySelectorAll('.token-options').forEach((options) => options.addEventListener('toggle', schedule));
   if ('ResizeObserver' in window) {
     const observer = new ResizeObserver(schedule);

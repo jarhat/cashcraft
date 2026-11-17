@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { updatePanelFades, updateScrollEffects } from '../src/scroll-effects.js';
+import { setupScrollEffects, updatePanelFades, updateScrollEffects } from '../src/scroll-effects.js';
 
 test('panel scroll offset tracks the actual navbar height', () => {
   const previous = globalThis.document;
@@ -27,19 +27,25 @@ test('only panels crossing the sticky header are masked and the mask follows its
     querySelector(selector) { return selector === '.token-options[open]' && this.menuOpen ? {} : null; },
     style: {
       setProperty(name, value) { this[name] = value; },
+      getPropertyValue(name) { return this[name] || ''; },
       removeProperty(name) { delete this[name]; },
     },
     classList: {
       values: new Set(),
       add(name) { this.values.add(name); },
       remove(name) { this.values.delete(name); },
+      contains(name) { return this.values.has(name); },
     },
   };
   updatePanelFades(bar, [panel]);
   assert.equal(panel.classList.values.has('under-topbar'), false);
-  panel.bounds = { top: 80, bottom: 230, height: 150 };
+  panel.bounds = { top: 132, bottom: 282, height: 150 };
   updatePanelFades(bar, [panel]);
-  assert.equal(panel.style['--fade-under-bar'], '40px');
+  assert.equal(panel.style['--fade-under-bar'], '-12px');
+  assert.equal(panel.classList.values.has('under-topbar'), true);
+  panel.bounds = { top: 80.5, bottom: 230.5, height: 150 };
+  updatePanelFades(bar, [panel]);
+  assert.equal(panel.style['--fade-under-bar'], '39.5px');
   assert.equal(panel.classList.values.has('under-topbar'), true);
   panel.menuOpen = true;
   updatePanelFades(bar, [panel]);
@@ -52,4 +58,43 @@ test('only panels crossing the sticky header are masked and the mask follows its
   updatePanelFades(bar, [panel]);
   assert.equal(panel.classList.values.has('under-topbar'), false);
   assert.equal(panel.style['--fade-under-bar'], undefined);
+});
+
+test('scroll updates the fade immediately without scheduling another frame', () => {
+  const original = { window: globalThis.window, document: globalThis.document, requestAnimationFrame: globalThis.requestAnimationFrame };
+  const listeners = {};
+  let frames = 0;
+  const bar = { getBoundingClientRect: () => ({ height: 100, bottom: 100 }) };
+  const panel = {
+    top: 140,
+    getBoundingClientRect() { return { top: this.top, bottom: this.top + 200, height: 200 }; },
+    querySelector() { return null; },
+    style: {
+      setProperty(name, value) { this[name] = value; },
+      getPropertyValue(name) { return this[name] || ''; },
+      removeProperty(name) { delete this[name]; },
+    },
+    classList: {
+      active: false,
+      add() { this.active = true; },
+      remove() { this.active = false; },
+      contains() { return this.active; },
+    },
+  };
+  globalThis.window = { addEventListener(type, handler) { listeners[type] = handler; } };
+  globalThis.document = {
+    documentElement: { style: { setProperty() {} } },
+    querySelector(selector) { return selector === '.topbar' ? bar : {}; },
+    querySelectorAll(selector) { return selector === '.token-options' ? [] : [panel]; },
+  };
+  globalThis.requestAnimationFrame = () => { frames++; };
+  try {
+    setupScrollEffects();
+    panel.top = 40;
+    listeners.scroll();
+    assert.equal(panel.style['--fade-under-bar'], '60px');
+    assert.equal(frames, 0);
+  } finally {
+    Object.assign(globalThis, original);
+  }
 });
