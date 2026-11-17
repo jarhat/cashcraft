@@ -76,7 +76,6 @@ function fillFromUrl() {
     const description =
       `Send ${sharedLink.amount} token base units to ${sharedLink.address} ` +
       `for CashToken category ${sharedLink.category}.`;
-    document.title = title;
     document.querySelector('meta[name="description"]').content = description;
     document.querySelector('meta[property="og:title"]').content = title;
     document.querySelector('meta[property="og:description"]').content = description;
@@ -138,7 +137,7 @@ let paymentPriceSnapshot = null;
 let walletReceiveAddress = null;
 let walletPairingUri = null;
 let tokenBalances = new Map();
-let pricedPortfolioBch = 0;
+let portfolioPage = 0;
 let rewardCategory = null;
 let rewardCategoryPromise = null;
 let receiptWallet = null;
@@ -180,9 +179,13 @@ function readReceiptState() {
 }
 
 function addReceiptNotice(message) {
-  const notice = document.createElement('p');
-  notice.className = 'notification-message';
-  notice.textContent = translate(message);
+  const notice = document.createElement('div');
+  notice.className = 'notification-message gamba-notice';
+  const art = $('gamba-art').cloneNode(true);
+  art.removeAttribute('id');
+  const label = document.createElement('strong');
+  label.textContent = translate(message);
+  notice.append(art, label);
   $('token-receipt-notifications').prepend(notice);
   $('notifications-empty').hidden = true;
 }
@@ -289,6 +292,16 @@ for (const name of ['theme', 'language']) {
 }
 
 function setConnection(connected) {
+  document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
+  $('advanced-settings').hidden = !connected || !$('advanced-mode').checked;
+  document.body.classList.toggle('wallet-connected', connected);
+  if (!$('wizard-dialog').hidden) {
+    if (connected) $('wizard-next').disabled = false;
+    else {
+      tutorialStep = 0;
+      showTutorialStep();
+    }
+  }
   $('dot').classList.toggle('online', connected);
   $('refresh').disabled = !connected;
   $('send').disabled = sending;
@@ -325,9 +338,7 @@ function clearWalletDisplay() {
     $('notifications-empty').hidden = false;
     $('notification-indicator').hidden = true;
   }
-  pricedPortfolioBch = 0;
-  $('balance-tokens').textContent = 'Connect wallet to load tokens.';
-  $('total-value').textContent = 'Total USD —';
+  portfolioPage = 0;
   $('amount-help').textContent = 'Enter whole base units. Select a token to see its decimals and available balance.';
   $('category-select').replaceChildren(new Option('Enter a category ID manually', ''));
   $('category-select').disabled = true;
@@ -415,6 +426,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
 
   pairingInProgress = true;
   $('connect').disabled = true;
+  $('connect').hidden = true;
   $('log').textContent = '';
   walletReady = false;
   clearWalletDisplay();
@@ -546,6 +558,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
       relay = null;
 
       $('connect').disabled = false;
+      $('connect').hidden = false;
     });
 
     manager.on('messagesent', (message) => {
@@ -662,6 +675,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
     walletPairingUri = null;
     $('open-wallet').disabled = true;
     $('connect').disabled = false;
+    $('connect').hidden = false;
   } finally {
     pairingInProgress = false;
     $('connect').disabled = walletReady;
@@ -682,18 +696,11 @@ async function fetchBchUsd() {
 
     if (typeof data['bitcoin-cash']?.usd === 'number') {
       bchUsd = data['bitcoin-cash'].usd;
-      updateTotalValue();
       if (walletReady && balanceSatoshis !== null) renderBalances(utxos);
     }
   } catch (error) {
     logger.warn('BCH/USD price unavailable:', error);
   }
-}
-
-function updateTotalValue() {
-  if (bchUsd === null || balanceSatoshis === null) return;
-  const total = (Number(balanceSatoshis) / Number(SATOSHIS_PER_BCH) + pricedPortfolioBch) * bchUsd;
-  $('total-value').textContent = `Priced total ≈ $${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatTokenAmount(amount, decimals) {
@@ -780,7 +787,6 @@ async function scanWallet() {
 function renderBalances(scannedUtxos) {
   const version = ++portfolioVersion;
   const pricedTokens = [];
-  pricedPortfolioBch = 0;
   $('portfolio-chart').hidden = true;
   $('portfolio-chart-content').textContent = translate('Loading Cauldron prices…');
   let satoshis = 0n;
@@ -802,54 +808,58 @@ function renderBalances(scannedUtxos) {
         })} USD`;
 
   const balances = new Map();
+  const spendableBalances = new Map();
 
   for (const utxo of scannedUtxos) {
-    if (!utxo.token || utxo.token.nft || utxo.token.amount == null) continue;
+    if (!utxo.token || utxo.token.amount == null) continue;
 
     const amount = BigInt(utxo.token.amount);
     if (amount <= 0n) continue;
 
     const category = String(utxo.token.category).toLowerCase();
     balances.set(category, (balances.get(category) || 0n) + amount);
+    if (!utxo.token.nft) {
+      spendableBalances.set(category, (spendableBalances.get(category) || 0n) + amount);
+    }
   }
 
+  const nfts = scannedUtxos.filter((utxo) => utxo.token?.nft);
   $('token-count').textContent =
     `${balances.size} fungible-token ${
       balances.size === 1 ? 'category' : 'categories'
-    }`;
-  tokenBalances = new Map([...balances].map(([category, amount]) => [category, { amount, metadata: null }]));
+    } · ${nfts.length} NFTs`;
+  tokenBalances = new Map([...spendableBalances].map(([category, amount]) => [category, { amount, metadata: null }]));
   updateAmountHelp();
-  updateTotalValue();
 
   const selector = $('category-select');
   const optionList = $('token-options-list');
   optionList.replaceChildren();
-  $('token-options').hidden = balances.size === 0;
-  $('balance-tokens').replaceChildren();
+  $('token-options').hidden = spendableBalances.size === 0;
   const selectedCategory = $('category').value.trim().toLowerCase();
   selector.replaceChildren(new Option('Enter a category ID manually', ''));
-  for (const [category, amount] of balances) {
+  for (const [category, amount] of spendableBalances) {
     selector.add(new Option(`${category} (${amount} base units)`, category));
   }
-  selector.value = balances.has(selectedCategory) ? selectedCategory : '';
-  selector.disabled = !walletReady || $('category').readOnly || balances.size === 0;
+  selector.value = spendableBalances.has(selectedCategory) ? selectedCategory : '';
+  selector.disabled = !walletReady || $('category').readOnly || spendableBalances.size === 0;
 
   const tokens = $('tokens');
   tokens.replaceChildren();
 
-  if (balances.size === 0) {
+  if (balances.size === 0 && nfts.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty';
     empty.textContent =
       'No fungible-token balances found in the scanned addresses.';
     tokens.append(empty);
     $('portfolio-chart-content').textContent = translate('No priced token balances available.');
-    $('balance-tokens').textContent = 'No fungible tokens found.';
+    paginatePortfolio();
     return;
   }
 
   let remaining = balances.size;
   for (const [category, amount] of balances.entries()) {
+    const spendableAmount = spendableBalances.get(category) || 0n;
     const row = document.createElement('div');
     row.className = 'token-row';
 
@@ -916,22 +926,21 @@ function renderBalances(scannedUtxos) {
     amountElement.textContent = `${amount} base units`;
     const amountGroup = document.createElement('div');
     amountGroup.className = 'token-amount-group';
-    const amountIcon = document.createElement('span');
-    amountIcon.className = 'token-icon';
-    amountIcon.textContent = '◆';
     const amountValues = document.createElement('span');
     const amountPrice = document.createElement('small');
     amountPrice.className = 'token-amount-price';
     amountValues.append(amountElement, amountPrice);
-    amountGroup.append(amountIcon, amountValues);
+    if (spendableAmount < amount) {
+      const attached = document.createElement('small');
+      attached.className = 'token-amount-price';
+      attached.textContent = `${amount - spendableAmount} base units attached to NFTs; unavailable for sending.`;
+      amountValues.append(attached);
+    }
+    amountGroup.append(amountValues);
     summary.append(icon, details, amountGroup);
     row.append(summary);
     tokens.append(row);
 
-    const balanceRow = document.createElement('div');
-    balanceRow.className = 'balance-token-row';
-    balanceRow.textContent = `${category.slice(0, 10)}… · ${amount} base units`;
-    $('balance-tokens').append(balanceRow);
     const option = document.createElement('button');
     option.type = 'button';
     option.className = 'token-option';
@@ -939,7 +948,7 @@ function renderBalances(scannedUtxos) {
     optionIcon.className = 'token-icon';
     optionIcon.textContent = '◆';
     const optionLabel = document.createElement('span');
-    optionLabel.textContent = `${category.slice(0, 10)}… · ${amount} base units`;
+    optionLabel.textContent = `${category.slice(0, 10)}… · ${spendableAmount} base units`;
     option.append(optionIcon, optionLabel);
     option.addEventListener('click', () => {
       $('category').value = category;
@@ -947,7 +956,7 @@ function renderBalances(scannedUtxos) {
       $('token-options').open = false;
       updateAmountHelp();
     });
-    optionList.append(option);
+    if (spendableAmount > 0n) optionList.append(option);
 
     if (mainnet) {
       loadTokenLogo(category).then((image) => {
@@ -955,21 +964,20 @@ function renderBalances(scannedUtxos) {
         image.alt = '';
         icon.replaceChildren(image);
         optionIcon.replaceChildren(image.cloneNode());
-        amountIcon.replaceChildren(image.cloneNode());
       }).catch((error) => logger.warn(`Token logo unavailable for ${category}:`, error));
     }
     const metadataPromise = (mainnet
       ? fetchTokenMetadata(category)
       : Promise.reject(new Error('BCMR metadata is only available for mainnet.'))).then((metadata) => {
         if (version !== portfolioVersion) return metadata;
-        tokenBalances.get(category).metadata = metadata;
+        if (tokenBalances.has(category)) tokenBalances.get(category).metadata = metadata;
         title.textContent = metadata.name || metadata.symbol || translate('Fungible token');
         infoText.textContent = [metadata.name, metadata.symbol, metadata.description, `${metadata.decimals} decimals`,
           metadata.uris && `URIs: ${JSON.stringify(metadata.uris)}`,
           metadata.extensions && `Extensions: ${JSON.stringify(metadata.extensions)}`].filter(Boolean).join(' · ');
         amountElement.textContent = `${formatTokenAmount(amount, metadata.decimals)} ${metadata.symbol || 'tokens'} (${amount} base units)`;
-        optionLabel.textContent = `${metadata.name || metadata.symbol || 'Token'} · ${amountElement.textContent} · loading price`;
-        balanceRow.textContent = optionLabel.textContent;
+        const available = `${formatTokenAmount(spendableAmount, metadata.decimals)} ${metadata.symbol || 'tokens'} (${spendableAmount} base units)`;
+        optionLabel.textContent = `${metadata.name || metadata.symbol || 'Token'} · ${available} · loading price`;
         updateAmountHelp();
         return metadata;
       });
@@ -989,8 +997,7 @@ function renderBalances(scannedUtxos) {
           const usd = bchUsd === null ? '' : ` · ≈ $${(unit * bchUsd).toPrecision(4)} USD / ${denomination} · ≈ $${(value * bchUsd).toFixed(2)} USD`;
           price.textContent = `≈ ${unit.toPrecision(4)} BCH / ${denomination} · ≈ ${value.toPrecision(4)} BCH${usd}`;
           if (bchUsd !== null) amountPrice.textContent = `≈ $${(unit * bchUsd).toPrecision(4)} / ${denomination}`;
-          optionLabel.textContent = `${metadata.name || denomination} (${denomination}) · ${amountElement.textContent}${bchUsd === null ? '' : ` · $${(unit * bchUsd).toPrecision(4)} / token`}`;
-          balanceRow.textContent = `${metadata.name || denomination} · ${amountElement.textContent}${bchUsd === null ? '' : ` · ≈ $${(value * bchUsd).toFixed(2)}`}`;
+          optionLabel.textContent = `${metadata.name || denomination} (${denomination}) · ${formatTokenAmount(spendableAmount, metadata.decimals)} ${denomination} (${spendableAmount} base units)${bchUsd === null ? '' : ` · $${(unit * bchUsd).toPrecision(4)} / token`}`;
           pricedTokens.push({ category, name: metadata?.symbol || metadata?.name || `${category.slice(0, 10)}…`, value });
         } else price.textContent = translate('Cauldron price unavailable.');
       } else {
@@ -998,17 +1005,66 @@ function renderBalances(scannedUtxos) {
         logger.warn(`Cauldron price unavailable for ${category}:`, priceResult.reason);
       }
       if (metadata && !pricedTokens.some((item) => item.category === category)) {
-        optionLabel.textContent = `${metadata.name || metadata.symbol || 'Token'} · ${amountElement.textContent} · price unavailable`;
-        balanceRow.textContent = optionLabel.textContent;
+        optionLabel.textContent = `${metadata.name || metadata.symbol || 'Token'} · ${formatTokenAmount(spendableAmount, metadata.decimals)} ${metadata.symbol || 'tokens'} (${spendableAmount} base units) · price unavailable`;
       }
       if (--remaining === 0) {
-        pricedPortfolioBch = pricedTokens.reduce((sum, item) => sum + item.value, 0);
-        updateTotalValue();
         renderPortfolioChart(pricedTokens);
         $('portfolio-chart').hidden = pricedTokens.length === 0;
       }
     });
   }
+  for (const utxo of nfts) {
+    const category = String(utxo.token.category).toLowerCase();
+    const row = document.createElement('div');
+    row.className = 'token-row nft-row';
+    const heading = document.createElement('strong');
+    heading.textContent = 'NFT';
+    const categoryLine = document.createElement('div');
+    categoryLine.className = 'category-line nft-category-line';
+    const categoryElement = document.createElement('code');
+    categoryElement.textContent = `${category.slice(0, 10)}…${category.slice(-8)}`;
+    categoryElement.title = category;
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'small-button category-copy';
+    copy.setAttribute('aria-label', translate('Copy category ID'));
+    copy.title = translate('Copy category ID');
+    copy.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="13" height="16" rx="2"/><path d="M9 5V3h7v2M9 10h7M9 14h7"/></svg>';
+    copy.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(category);
+        copy.setAttribute('aria-label', translate('Copied'));
+        setTimeout(() => copy.setAttribute('aria-label', translate('Copy category ID')), 1200);
+      } catch (error) {
+        report(error);
+      }
+    });
+    categoryLine.append(categoryElement, copy);
+    const details = document.createElement('p');
+    details.className = 'fine nft-details';
+    const nft = utxo.token.nft;
+    details.textContent = `Capability: ${nft.capability || 'none'} · Commitment: ${nft.commitment || 'empty'} · ${utxo.txid}:${utxo.vout}` +
+      (BigInt(utxo.token.amount || 0) > 0n ? ` · ${utxo.token.amount} attached base units` : '');
+    row.append(heading, categoryLine, details);
+    tokens.append(row);
+  }
+  if (balances.size === 0) $('portfolio-chart-content').textContent = translate('No priced token balances available.');
+  paginatePortfolio();
+}
+
+function paginatePortfolio() {
+  const showNfts = $('show-nfts').checked;
+  const rows = [...$('tokens').children].filter((row) => row.classList.contains('token-row'));
+  const visible = rows.filter((row) => showNfts || !row.classList.contains('nft-row'));
+  const pages = Math.max(1, Math.ceil(visible.length / 6));
+  portfolioPage = Math.min(Math.max(0, portfolioPage), pages - 1);
+  for (const row of rows) row.hidden = true;
+  for (const row of visible.slice(portfolioPage * 6, (portfolioPage + 1) * 6)) row.hidden = false;
+  $('portfolio-pagination').hidden = pages <= 1;
+  $('portfolio-prev').disabled = portfolioPage === 0;
+  $('portfolio-next').disabled = portfolioPage >= pages - 1;
+  $('portfolio-page').textContent = `${portfolioPage + 1} / ${pages}`;
+  $('portfolio-empty-filter').hidden = visible.length > 0 || rows.length === 0;
 }
 
 function renderPortfolioChart(items) {
@@ -1454,15 +1510,11 @@ async function sendFungibleTokens() {
 }
 
 $('connect').addEventListener('click', () => {
-  if (!localStorage.getItem('ctf-connect-help-seen')) {
-    localStorage.setItem('ctf-connect-help-seen', '1');
-    openTutorial();
-  }
   startConnection();
 });
 
 $('open-wallet').addEventListener('click', () => {
-  if (walletPairingUri && !walletReady) window.location.href = walletPairingUri;
+  if (walletPairingUri) window.location.href = walletPairingUri;
 });
 
 $('forget').addEventListener('click', async () => {
@@ -1523,6 +1575,23 @@ $('refresh').addEventListener('click', () => {
     $('status').textContent =
       'Balance refresh failed · previous balances retained';
   });
+});
+
+$('advanced-mode').addEventListener('change', () => {
+  $('advanced-settings').hidden = !walletReady || !$('advanced-mode').checked;
+});
+
+$('show-nfts').addEventListener('change', () => {
+  portfolioPage = 0;
+  paginatePortfolio();
+});
+$('portfolio-prev').addEventListener('click', () => {
+  portfolioPage--;
+  paginatePortfolio();
+});
+$('portfolio-next').addEventListener('click', () => {
+  portfolioPage++;
+  paginatePortfolio();
 });
 
 $('send').addEventListener('click', () => {
@@ -1617,6 +1686,11 @@ $('gamba-close').addEventListener('click', () => $('gamba-dialog').close());
 
 $('view-payment-request').addEventListener('click', () => {
   notificationsDialog.close();
+  if (!walletReady) {
+    $('connection-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('connect').focus({ preventScroll: true });
+    return;
+  }
   setTransferTab('send');
   $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
@@ -1935,6 +2009,7 @@ function showTutorialStep() {
   $('wallet-help').hidden = tutorialStep !== 0;
   $('wizard-progress').textContent = `${tutorialStep + 1} / ${tutorialSteps.length}`;
   $('wizard-prev').disabled = tutorialStep === 0;
+  $('wizard-next').disabled = tutorialStep === 0 && $('balance-section').hidden;
   $('wizard-next').textContent = tutorialStep === tutorialSteps.length - 1 ? 'Done' : 'Next';
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1993,11 +2068,7 @@ const restoreSession = async () => {
     logger.warn('Could not restore previous WizardConnect session:', error);
   }
 };
-if ('requestIdleCallback' in window) {
-  window.requestIdleCallback(restoreSession, { timeout: 3000 });
-} else {
-  setTimeout(restoreSession, 1000);
-}
+void restoreSession();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

@@ -8,11 +8,12 @@ const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8'
 function receiptHarness(stored = new Map(), wallet = 'wallet') {
   const elements = new Map([
     ['token-receipt-notifications', {
-      notices: [], prepend(item) { this.notices.unshift(item.textContent); },
+      notices: [], items: [], prepend(item) { this.notices.unshift(item.textContent); this.items.unshift(item); },
       replaceChildren() { this.notices = []; },
     }],
     ['notifications-empty', { hidden: false }],
     ['notification-indicator', { hidden: true }],
+    ['gamba-art', { cloneNode: () => ({ removeAttribute() {} }) }],
   ]);
   let celebrations = 0;
   const category = 'b'.repeat(64);
@@ -24,7 +25,11 @@ function receiptHarness(stored = new Map(), wallet = 'wallet') {
   const context = {
     network: 'mainnet', API_BASE_URL: '', localStorage,
     addressFor: () => wallet, translate: (text) => text,
-    $: (id) => elements.get(id), document: { createElement: () => ({}) },
+    $: (id) => elements.get(id), document: { createElement: () => ({
+      children: [], append(...children) { this.children.push(...children); },
+      get textContent() { return this.text || this.children.map((child) => child.textContent || '').join(''); },
+      set textContent(value) { this.text = value; },
+    }) },
     showGambaCelebration() { celebrations++; },
     fetch: async () => ({ ok: true, json: async () => ({ category }) }),
   };
@@ -49,6 +54,9 @@ test('celebrates one GAMBA once per wallet, not other tokens or self-sent change
   h.api.notifyTokenReceipts([reward, { ...reward, txid: 'another' }]);
   assert.equal(h.celebrations, 1);
   assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBA']);
+  const notice = h.elements.get('token-receipt-notifications').items[0];
+  assert.equal(notice.className, 'notification-message gamba-notice');
+  assert.equal(notice.children.length, 2);
   assert.equal(h.elements.get('notification-indicator').hidden, false);
 
   const reload = receiptHarness(h.stored);
