@@ -63,16 +63,16 @@ test('snow falls, pauses when hidden, and respects motion preference changes and
   };
 
   const now = performance.now();
-  tick(now + 40);
+  tick(now + 50);
   const first = points.map(({ y }) => y);
   assert.ok(first.length > 0);
-  tick(now + 80);
+  tick(now + 100);
   assert.ok(points.every(({ y }, index) => y > first[index]));
   windowListeners.get('scroll')();
   const beforeScrollFrame = points.map(({ y }) => y);
-  tick(now + 120);
+  tick(now + 150);
   assert.deepEqual(points.map(({ y }) => y), beforeScrollFrame);
-  tick(now + 160);
+  tick(now + 200);
   assert.ok(points.every(({ y }, index) => y > beforeScrollFrame[index]));
   document.hidden = true;
   documentListeners.get('visibilitychange')();

@@ -408,7 +408,7 @@ test('stale wallet callbacks cannot disconnect a newer session', async () => {
   const context = {
     $: element, relay: null, manager: null, walletReady: false,
     pairingInProgress: false, showPairingWhenReady: false,
-    clearWalletDisplay() {}, setConnection() {}, updateReceiveAddress() {},
+    clearWalletDisplay() {}, setConnection() {}, updateReceiveAddress() {}, resumeBeerReward() {},
     addressFor: () => 'recipient', submitCashAddress: async () => { submissions++; },
     refreshBalances: async () => {}, loadWalletDependencies: async () => {},
     loadSession: () => null, DappConnectionManager: Manager,
@@ -524,7 +524,7 @@ test('open in wallet remains available until an address is derived, including re
     walletReady: false, pairingInProgress: false, showPairingWhenReady: false,
     QRCode: { toCanvas: async () => {} }, clearWalletDisplay() {}, setConnection() {},
     pairingReminder: { start() {} },
-    updateReceiveAddress() {},
+    updateReceiveAddress() {}, resumeBeerReward() {},
     addressFor() {
       if (!keyAvailable) throw new Error('Public key missing');
       return 'token-address';
@@ -943,7 +943,7 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
     validateRecipient: (address) => address,
     network: 'mainnet', paymentGeneration: 0, paymentPriceSnapshot: null,
     window: { location: { href: 'https://ctf.example/' } }, URL,
-    document: { createElement: () => ({ width: 512, getContext: () => ({ fillRect() {} }) }) },
+    document: { createElement: () => ({ width: 512, getContext: () => ({ fillRect() {}, drawImage() {} }) }) },
     QRCode: { toCanvas: async () => {} },
     loadTokenLogo: () => new Promise((resolve, reject) => { resolveLogo = resolve; rejectLogo = reject; }),
     fetchCauldronSpot: async () => { if (failPrice) throw new Error('offline'); return 0.001; },

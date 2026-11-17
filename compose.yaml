@@ -79,6 +79,15 @@ services:
         VITE_CONSOLE_LOG_LEVEL: ${VITE_CONSOLE_LOG_LEVEL:-error}
     expose:
       - "8080"
+    volumes:
+      - type: bind
+        source: ${NETCRAFT_BUILD_PATH:-./NetCraft/build}
+        target: /srv/games/netcraft
+        read_only: true
+      - type: bind
+        source: ${PK2_BUILD_PATH:-./PK2/build}
+        target: /srv/games/pk2
+        read_only: true
     environment:
       VIRTUAL_HOST: ${WALLET_DOMAIN:?Set WALLET_DOMAIN in .env}
       VIRTUAL_PORT: "8080"

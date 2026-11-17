@@ -11,6 +11,7 @@ import { inspectNft } from './nft-inspection.js';
 import { setupMarketTicker } from './market-ticker.js';
 import { setupChainTicker } from './chain-ticker.js';
 import { setupWikiGlossary } from './wiki-glossary.js';
+import { setupGames } from './games.js';
 import { setupMediaSlideshow } from './media-slideshow.js';
 import { createLogger } from './logger.js';
 import { submitCashAddress, API_BASE_URL, createShortLink, openShortLink } from './api.js';
@@ -245,7 +246,7 @@ function notifyTokenReceipts(scannedUtxos) {
     state.gambaNotified = true;
     state.messages = [message];
     state.unread = true;
-  } else if (!state.messages.length) {
+  } else if (!state.messages.length && !state.beerNotified) {
     state.unread = false;
   }
   localStorage.setItem(wallet, JSON.stringify(state));
@@ -254,6 +255,7 @@ function notifyTokenReceipts(scannedUtxos) {
     $('token-receipt-notifications').replaceChildren();
     $('gamba-sound-controls').hidden = true;
     if (state.messages.length) addReceiptNotice();
+    if (state.beerNotified) addReceiptNotice();
     if (state.unread) $('notification-indicator').hidden = false;
     receiptWallet = wallet;
   } else if (received) {
@@ -544,6 +546,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         });
         const [scanResult, submissionResult] = await Promise.allSettled([refreshBalances(), submission]);
         if (!walletReady || manager !== connectionManager) return;
+        resumeBeerReward(address);
         if (scanResult.status === 'rejected' && submissionResult.status === 'rejected') {
           report(new Error(
             `Address submission failed: ${submissionResult.reason?.message || submissionResult.reason}\n` +
@@ -1699,7 +1702,7 @@ $('forget').addEventListener('click', async () => {
   }
 });
 
-$('disconnect').addEventListener('click', async () => {
+async function disconnectWallet() {
   if (!window.confirm(translate('Disconnect this wallet from CTF Cash?'))) return;
   try {
     await endWalletSession();
@@ -1709,18 +1712,9 @@ $('disconnect').addEventListener('click', async () => {
   } catch (error) {
     report(error);
   }
-});
-
-$('logout').addEventListener('click', async () => {
-  if (!window.confirm(translate('Log out and leave this site?'))) return;
-  try {
-    await endWalletSession();
-  } catch (error) {
-    report(error);
-  }
-  window.close();
-  setTimeout(() => window.location.replace('https://bch.now'), 150);
-});
+}
+$('disconnect').addEventListener('click', disconnectWallet);
+$('logout').addEventListener('click', disconnectWallet);
 
 $('refresh').addEventListener('click', () => {
   refreshBalances().catch((error) => {
@@ -1757,6 +1751,100 @@ $('wiki-open').addEventListener('click', () => {
 $('wiki-close').addEventListener('click', () => $('wiki-dialog').close());
 $('wiki-language').addEventListener('change', (event) => setLanguage(event.target.value));
 setupWikiGlossary($('wiki-dialog'));
+
+let beerPolling = null;
+function beerKey(address) {
+  return `ctf-beer-reward:${network}:${address.toLowerCase()}`;
+}
+
+function resumeBeerReward(address) {
+  try {
+    if (localStorage.getItem(beerKey(address)) === 'pending') void pollBeerReward(address);
+  } catch (error) {
+    $('game-status').textContent = error.message;
+  }
+}
+
+async function pollBeerReward(address) {
+  if (beerPolling === address || !walletReady || addressFor(0, 0) !== address) return;
+  beerPolling = address;
+  let retry = false;
+  try {
+    if (localStorage.getItem(beerKey(address)) !== 'pending') return;
+    const response = await fetch(`${API_BASE_URL}/api/beer-reward`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cash_address: address }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      if (response.status === 409) localStorage.removeItem(beerKey(address));
+      throw new Error(translate(typeof data.detail === 'string' ? data.detail : `Reward request failed (${response.status}).`));
+    }
+    if (!walletReady || addressFor(0, 0) !== address) return;
+    if (data.status === 'pending') {
+      $('game-status').textContent = translate('Bonus queued. Waiting for the reward transaction…');
+      retry = true;
+      return;
+    }
+    if (data.status !== 'sent' || typeof data.txid !== 'string' || !/^[0-9a-f]{64}$/i.test(data.txid)) {
+      throw new Error('Invalid reward response.');
+    }
+    const scan = await refreshBalances({ quiet: true });
+    if (!walletReady || addressFor(0, 0) !== address) return;
+    if (!scan.utxos.some((utxo) => utxo.txid?.toLowerCase() === data.txid.toLowerCase() &&
+        utxo.token && !utxo.token.nft && String(utxo.token.category).toLowerCase() === rewardCategory &&
+        BigInt(utxo.token.amount || 0) === 1n)) {
+      $('game-status').textContent = translate('Bonus sent. Waiting for the wallet balance to update…');
+      retry = true;
+      return;
+    }
+    const state = readReceiptState();
+    if (!state.beerNotified) {
+      state.beerNotified = true;
+      state.unread = true;
+      localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
+      addReceiptNotice();
+      $('notification-indicator').hidden = false;
+      showGambaCelebration();
+    }
+    localStorage.setItem(beerKey(address), 'complete');
+    $('game-status').textContent = translate('Your bonus GAMBA was sent.');
+  } catch (error) {
+    if (walletReady && addressFor(0, 0) === address) {
+      $('game-status').textContent = error.message;
+      try {
+        retry = localStorage.getItem(beerKey(address)) === 'pending';
+      } catch (storageError) {
+        $('game-status').textContent = storageError.message;
+      }
+    }
+  } finally {
+    beerPolling = null;
+    if (retry) setTimeout(() => { void pollBeerReward(address); }, 15000);
+  }
+}
+
+function claimBeerReward() {
+  try {
+    if (!walletReady) {
+      $('game-status').textContent = translate('Connect your wallet to claim the bonus.');
+      return;
+    }
+    const address = addressFor(0, 0);
+    if (localStorage.getItem(beerKey(address)) === 'complete') {
+      $('game-status').textContent = translate('Your bonus GAMBA was already sent.');
+      return;
+    }
+    localStorage.setItem(beerKey(address), 'pending');
+    void pollBeerReward(address);
+  } catch (error) {
+    $('game-status').textContent = error.message;
+  }
+}
+
+setupGames($, { claimBeer: claimBeerReward, translate });
 
 $('show-nfts').addEventListener('change', () => {
   portfolioPage = 0;
@@ -1805,7 +1893,7 @@ $('funding-connect').addEventListener('click', () => {
 
 
 const notificationsDialog = $('notifications-dialog');
-for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notifications-dialog']) {
+for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notifications-dialog', 'game-dialog']) {
   const dialog = $(id);
   dialog.addEventListener('click', (event) => {
     if (event.target !== dialog) return;
@@ -2070,6 +2158,7 @@ $('generate-payment').addEventListener('click', async () => {
     ) return;
 
     const canvas = $('payment-qr');
+    originalPaymentQr = qr;
     canvas.width = qr.width;
     canvas.height = qr.height;
     canvas.getContext('2d').drawImage(qr, 0, 0);
@@ -2101,12 +2190,14 @@ $('generate-payment').addEventListener('click', async () => {
     if (mainnet) {
       loadTokenLogo(category, { requireCors: true }).then((logo) => {
         if (!currentPayment()) return;
-        const context = canvas.getContext('2d');
         const size = canvas.width * 0.09;
         const start = (canvas.width - size) / 2;
-        context.fillStyle = '#ffffff';
-        context.fillRect(start - 4, start - 4, size + 8, size + 8);
-        context.drawImage(logo, start, start, size, size);
+        for (const target of [canvas, qr]) {
+          const context = target.getContext('2d');
+          context.fillStyle = '#ffffff';
+          context.fillRect(start - 4, start - 4, size + 8, size + 8);
+          context.drawImage(logo, start, start, size, size);
+        }
         const image = logo.cloneNode();
         image.alt = '';
         $('payment-token-icon').replaceChildren(image);
@@ -2121,33 +2212,74 @@ $('generate-payment').addEventListener('click', async () => {
   }
 });
 
+let originalPaymentQr = null;
+let shortLinkGeneration = 0;
 function resetShortLink() {
+  shortLinkGeneration++;
+  if (originalPaymentQr) $('payment-qr').getContext('2d').drawImage(originalPaymentQr, 0, 0);
   $('short-link-result').hidden = true;
   $('short-link-url').textContent = '';
   $('short-link-status').textContent = '';
 }
 
+$('short-link-type').addEventListener('change', () => {
+  const oneTime = $('short-link-type').value === 'one-time';
+  $('short-link-expiry').disabled = oneTime;
+  $('one-time-expiry-hint').hidden = !oneTime;
+  resetShortLink();
+});
+$('short-link-expiry').addEventListener('change', resetShortLink);
+
 $('create-short-link').addEventListener('click', async () => {
   const button = $('create-short-link');
+  const generation = ++shortLinkGeneration;
+  const note = $('receive-note').value.trim();
+  const oneTime = $('short-link-type').value === 'one-time';
+  const expiresIn = oneTime ? '1w' : $('short-link-expiry').value;
+  const sourceUrl = $('payment-url').textContent;
   button.disabled = true;
+  if (originalPaymentQr) $('payment-qr').getContext('2d').drawImage(originalPaymentQr, 0, 0);
+  $('short-link-result').hidden = true;
   $('short-link-status').textContent = translate('Creating short link…');
   try {
-    const url = new URL($('payment-url').textContent);
+    const url = new URL(sourceUrl);
     const link = await createShortLink({
       address: url.searchParams.get('addr'),
       category: url.searchParams.get('category'),
       amount: url.searchParams.get('amount'),
-      note: $('receive-note').value.trim(),
-      one_time: $('short-link-type').value === 'one-time',
-      expires_in: $('short-link-expiry').value,
+      note,
+      one_time: oneTime,
+      expires_in: expiresIn,
     });
-    $('short-link-url').textContent = `${url.origin}/s/${link.id}`;
+    if (generation !== shortLinkGeneration || $('payment-result').classList.contains('hidden')) return;
+    if (typeof link.id !== 'string' || !/^[A-Za-z0-9_-]{8,32}$/.test(link.id) || link.one_time !== oneTime) {
+      throw new Error('Invalid short link response.');
+    }
+    const shortUrl = `${url.origin}/s/${link.id}`;
+    const qr = document.createElement('canvas');
+    await QRCode.toCanvas(qr, shortUrl, {
+      width: 512, margin: 4, errorCorrectionLevel: 'H',
+      color: { dark: '#07111b', light: '#ffffff' },
+    });
+    if (generation !== shortLinkGeneration || $('payment-result').classList.contains('hidden')) return;
+    const canvas = $('payment-qr');
+    canvas.getContext('2d').drawImage(qr, 0, 0);
+    const logo = $('payment-token-icon').querySelector('img');
+    if (logo) {
+      const size = canvas.width * 0.09;
+      const start = (canvas.width - size) / 2;
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#ffffff';
+      context.fillRect(start - 4, start - 4, size + 8, size + 8);
+      context.drawImage(logo, start, start, size, size);
+    }
+    $('short-link-url').textContent = shortUrl;
     $('short-link-result').hidden = false;
     $('short-link-status').textContent = translate(link.one_time
-      ? 'One-time link: it is deleted after the first time it is opened.'
+      ? 'One-time link: it is deleted after the first time it is opened or after 1 week.'
       : 'Persistent link: it can be opened repeatedly until it is removed.');
   } catch (error) {
-    $('short-link-status').textContent = error.message;
+    if (generation === shortLinkGeneration) $('short-link-status').textContent = error.message;
   } finally {
     button.disabled = false;
   }
@@ -2195,7 +2327,7 @@ $('copy-payment-url').addEventListener('click', async () => {
     $('copy-payment-url').textContent = 'Copied';
 
     setTimeout(() => {
-      $('copy-payment-url').textContent = 'Copy link';
+      $('copy-payment-url').textContent = 'Copy original link';
     }, 1200);
   } catch (error) {
     report(error);
@@ -2208,7 +2340,7 @@ function paymentQrImage() {
     $('payment-qr'),
     { amount: url.searchParams.get('amount'), category: url.searchParams.get('category'),
       address: url.searchParams.get('addr'), price: formatPaymentPrice(),
-      note: $('receive-note').value.trim() },
+      note: $('receive-note').value.trim(), logo: $('payment-token-icon').querySelector('img') },
     translate,
   );
 }

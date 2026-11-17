@@ -1,7 +1,14 @@
 :8080 {
   encode gzip
   handle /api/* {
-    reverse_proxy auth:3000
+    reverse_proxy auth:3000 {
+      header_up X-Preview-Origin {scheme}://{host}
+    }
+  }
+  handle /games/* {
+    root * /srv
+    header Access-Control-Allow-Origin *
+    file_server
   }
   @unfurler {
     header_regexp ua User-Agent (?i)(telegrambot|twitterbot|facebookexternalhit|whatsapp|discordbot|slackbot|linkedinbot|skypeuripreview)

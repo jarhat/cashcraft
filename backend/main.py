@@ -164,6 +164,16 @@ def init_db() -> None:
             )
         """)
         db.execute("""
+            CREATE TABLE IF NOT EXISTS beer_rewards (
+                cash_address TEXT PRIMARY KEY,
+                category TEXT NOT NULL,
+                signed_tx TEXT,
+                txid TEXT,
+                sent_at TEXT,
+                FOREIGN KEY (cash_address) REFERENCES token_rewards(cash_address)
+            )
+        """)
+        db.execute("""
             CREATE TABLE IF NOT EXISTS short_links (
                 id TEXT PRIMARY KEY,
                 address TEXT NOT NULL,
@@ -564,6 +574,8 @@ def valid_payment(address: str, category: str, amount: str):
 @app.get("/api/qr.png")
 def payment_qr(request: Request, addr: str = "", category: str = "", amount: str = "", s: str = ""):
     origin = request_origin(request)
+    if not origin:
+        raise HTTPException(status_code=400, detail="Payment link origin unavailable.")
     if s:
         if not peek_short_link(s):
             raise HTTPException(status_code=404, detail="This link is unavailable.")
@@ -652,6 +664,36 @@ def receive_cash_address(
         "token_aware": True,
         "address_type": address_type,
     }
+
+
+@app.post("/api/beer-reward")
+def beer_reward(request: CashAddressRequest) -> dict:
+    try:
+        address, _, _ = validate_token_aware_cashaddr(request.cash_address)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        with open_db(timeout=10) as db:
+            db.execute("BEGIN IMMEDIATE")
+            original = db.execute(
+                "SELECT category FROM token_rewards WHERE cash_address = ? AND sent_at IS NOT NULL",
+                (address,),
+            ).fetchone()
+            if original is None:
+                raise HTTPException(status_code=409, detail="The first reward must be sent before claiming the bonus.")
+            db.execute(
+                "INSERT INTO beer_rewards (cash_address, category) VALUES (?, ?) ON CONFLICT(cash_address) DO NOTHING",
+                (address, original[0]),
+            )
+            row = db.execute(
+                "SELECT txid, sent_at FROM beer_rewards WHERE cash_address = ?", (address,)
+            ).fetchone()
+    except RewardDatabaseError as exc:
+        logger.exception("Beer reward database unavailable.")
+        raise HTTPException(status_code=503, detail="Reward database unavailable.") from exc
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=500, detail="Could not request the bonus.") from exc
+    return {"status": "sent" if row[1] else "pending", "txid": row[0] if row[1] else None}
 
 @app.post("/api/tx-proof")
 def receive_cash_address_with_proof(
@@ -827,17 +869,24 @@ def build_reward_transaction(address: str, category: str) -> tuple[str, str]:
 def process_one_reward() -> bool:
     with open_db(timeout=60) as db:
         db.execute("BEGIN IMMEDIATE")
+        table = "token_rewards"
         row = db.execute(
             """SELECT cash_address, category, signed_tx, txid FROM token_rewards
                WHERE sent_at IS NULL ORDER BY signed_tx IS NULL, rowid LIMIT 1"""
         ).fetchone()
+        if not row:
+            table = "beer_rewards"
+            row = db.execute(
+                """SELECT cash_address, category, signed_tx, txid FROM beer_rewards
+                   WHERE sent_at IS NULL ORDER BY signed_tx IS NULL, rowid LIMIT 1"""
+            ).fetchone()
         if not row:
             return False
         address, category, signed_tx, txid = row
         if not signed_tx:
             signed_tx, txid = build_reward_transaction(address, category)
             db.execute(
-                "UPDATE token_rewards SET signed_tx = ?, txid = ? WHERE cash_address = ?",
+                f"UPDATE {table} SET signed_tx = ?, txid = ? WHERE cash_address = ?",
                 (signed_tx, txid, address),
             )
             # Persist the exact transaction before any broadcast, so retries cannot
@@ -862,7 +911,7 @@ def process_one_reward() -> bool:
             if not isinstance(result, str) or result.lower() != txid:
                 raise RuntimeError("BCHN returned a mismatched broadcast transaction ID.")
         db.execute(
-            "UPDATE token_rewards SET sent_at = CURRENT_TIMESTAMP WHERE cash_address = ?",
+            f"UPDATE {table} SET sent_at = CURRENT_TIMESTAMP WHERE cash_address = ?",
             (address,),
         )
         return True

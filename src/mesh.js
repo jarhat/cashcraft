@@ -12,7 +12,7 @@ export function meshPath(width, height) {
   };
   const point = (x, y) => {
     const depth = y / height;
-    const perspective = 0.38 + 0.62 * depth;
+    const perspective = 0.90 + 0.10 * depth;
     const ripple = 0.7 + 0.3 * Math.cos((x - centerX) / 46 + depth * 5);
     const influence = bump(x - centerX, radiusX) * Math.sin(Math.PI * depth) ** 2 * ripple;
     const projectedX = centerX + (x - centerX) * perspective;
@@ -50,5 +50,9 @@ export function setupMesh(svg) {
     requestAnimationFrame(update);
   };
   window.addEventListener('resize', schedule);
+  if ('ResizeObserver' in window) {
+    const observer = new ResizeObserver(schedule);
+    observer.observe(svg);
+  }
   update();
 }

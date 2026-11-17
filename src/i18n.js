@@ -619,6 +619,13 @@ const german = {
 };
 
 Object.assign(spanish, {
+  'The first reward must be sent before claiming the bonus.': 'La primera recompensa debe enviarse antes de reclamar el premio.',
+  'Switching games ends the current session.': 'Cambiar de juego termina la sesión actual.',
+  'Choose a game': 'Elige un juego',
+  'One bonus per address after its first GAMBA reward has been sent.': 'Un premio por dirección después de enviar su primer GAMBA.',
+  'Disconnect wallet': 'Desconectar cartera',
+  'Copy original link': 'Copiar enlace original',
+  'After creating a short link, the QR, Share and Download QR use it.': 'Después de crear un enlace corto, el QR, Compartir y Descargar QR lo usan.',
   'Finishing wallet setup…': 'Finalizando la configuración de la cartera…',
   'Pairing notifications are unavailable in this browser; reminders will appear here.': 'Las notificaciones de conexión no están disponibles en este navegador; los recordatorios aparecerán aquí.',
   'Enable pairing reminder': 'Activar recordatorio de conexión',
@@ -655,6 +662,13 @@ Object.assign(spanish, {
   'Loading market prices…': 'Cargando precios…',
 });
 Object.assign(french, {
+  'The first reward must be sent before claiming the bonus.': 'La première récompense doit être envoyée avant de réclamer le bonus.',
+  'Switching games ends the current session.': 'Changer de jeu termine la session actuelle.',
+  'Choose a game': 'Choisissez un jeu',
+  'One bonus per address after its first GAMBA reward has been sent.': 'Un bonus par adresse après l’envoi de son premier GAMBA.',
+  'Disconnect wallet': 'Déconnecter le portefeuille',
+  'Copy original link': 'Copier le lien original',
+  'After creating a short link, the QR, Share and Download QR use it.': 'Après création, le QR, le partage et le téléchargement utilisent le lien court.',
   'Finishing wallet setup…': 'Finalisation de la configuration du portefeuille…',
   'Pairing notifications are unavailable in this browser; reminders will appear here.': 'Les notifications de connexion ne sont pas disponibles dans ce navigateur ; les rappels apparaîtront ici.',
   'Enable pairing reminder': 'Activer le rappel de connexion',
@@ -691,6 +705,13 @@ Object.assign(french, {
   'Loading market prices…': 'Chargement des cours…',
 });
 Object.assign(german, {
+  'The first reward must be sent before claiming the bonus.': 'Die erste Belohnung muss gesendet sein, bevor du den Bonus anfordern kannst.',
+  'Switching games ends the current session.': 'Beim Spielwechsel endet die aktuelle Sitzung.',
+  'Choose a game': 'Spiel auswählen',
+  'One bonus per address after its first GAMBA reward has been sent.': 'Ein Bonus pro Adresse, nachdem ihre erste GAMBA-Belohnung gesendet wurde.',
+  'Disconnect wallet': 'Wallet trennen',
+  'Copy original link': 'Originallink kopieren',
+  'After creating a short link, the QR, Share and Download QR use it.': 'Nach dem Erstellen verwenden QR, Teilen und QR herunterladen den Kurzlink.',
   'Finishing wallet setup…': 'Wallet-Einrichtung wird abgeschlossen…',
   'Pairing notifications are unavailable in this browser; reminders will appear here.': 'Verbindungsbenachrichtigungen sind in diesem Browser nicht verfügbar; Erinnerungen erscheinen hier.',
   'Enable pairing reminder': 'Verbindungserinnerung aktivieren',
@@ -771,6 +792,60 @@ Object.assign(german, {
 Object.assign(spanish, wikiTranslations.es);
 Object.assign(french, wikiTranslations.fr);
 Object.assign(german, wikiTranslations.de);
+Object.assign(spanish, {
+  'One-time links are deleted on first open, or after 1 week if unused.': 'Los enlaces de un solo uso se eliminan al abrirse o después de una semana si no se usan.',
+  'One-time link: it is deleted after the first time it is opened or after 1 week.': 'Enlace de un solo uso: se elimina al abrirse o después de una semana.',
+  'PAYMENT REQUEST': 'SOLICITUD DE PAGO',
+  'Scan to open this payment request': 'Escanea para abrir esta solicitud de pago',
+  'Take a break': 'Haz una pausa',
+  'Beer bonus': 'Premio de cerveza',
+  'Play Netcraft': 'Jugar a Netcraft',
+  'Play Pekka Kana 2': 'Jugar a Pekka Kana 2',
+  'Claim beer bonus': 'Reclamar premio de cerveza',
+  'Loading game…': 'Cargando juego…',
+  'Game build unavailable. Check the server mount.': 'Juego no disponible. Comprueba el montaje del servidor.',
+  'Connect your wallet to claim the bonus.': 'Conecta tu cartera para reclamar el premio.',
+  'Bonus queued. Waiting for the reward transaction…': 'Premio en cola. Esperando la transacción…',
+  'Bonus sent. Waiting for the wallet balance to update…': 'Premio enviado. Esperando la actualización del saldo…',
+  'Your bonus GAMBA was sent.': 'Tu GAMBA adicional fue enviado.',
+  'Your bonus GAMBA was already sent.': 'Tu GAMBA adicional ya fue enviado.',
+});
+Object.assign(french, {
+  'One-time links are deleted on first open, or after 1 week if unused.': 'Les liens à usage unique sont supprimés à leur première ouverture ou après une semaine sans utilisation.',
+  'One-time link: it is deleted after the first time it is opened or after 1 week.': 'Lien à usage unique : supprimé à la première ouverture ou après une semaine.',
+  'PAYMENT REQUEST': 'DEMANDE DE PAIEMENT',
+  'Scan to open this payment request': 'Scannez pour ouvrir cette demande de paiement',
+  'Take a break': 'Faites une pause',
+  'Beer bonus': 'Bonus bière',
+  'Play Netcraft': 'Jouer à Netcraft',
+  'Play Pekka Kana 2': 'Jouer à Pekka Kana 2',
+  'Claim beer bonus': 'Réclamer le bonus bière',
+  'Loading game…': 'Chargement du jeu…',
+  'Game build unavailable. Check the server mount.': 'Jeu indisponible. Vérifiez le montage du serveur.',
+  'Connect your wallet to claim the bonus.': 'Connectez votre portefeuille pour réclamer le bonus.',
+  'Bonus queued. Waiting for the reward transaction…': 'Bonus en attente. En attente de la transaction…',
+  'Bonus sent. Waiting for the wallet balance to update…': 'Bonus envoyé. En attente de la mise à jour du solde…',
+  'Your bonus GAMBA was sent.': 'Votre GAMBA bonus a été envoyé.',
+  'Your bonus GAMBA was already sent.': 'Votre GAMBA bonus a déjà été envoyé.',
+});
+Object.assign(german, {
+  'One-time links are deleted on first open, or after 1 week if unused.': 'Einmal-Links werden beim ersten Öffnen oder nach einer Woche ohne Nutzung gelöscht.',
+  'One-time link: it is deleted after the first time it is opened or after 1 week.': 'Einmal-Link: Wird beim ersten Öffnen oder nach einer Woche gelöscht.',
+  'PAYMENT REQUEST': 'ZAHLUNGSANFORDERUNG',
+  'Scan to open this payment request': 'Scannen, um diese Zahlungsanforderung zu öffnen',
+  'Take a break': 'Mach eine Pause',
+  'Beer bonus': 'Bierbonus',
+  'Play Netcraft': 'Netcraft spielen',
+  'Play Pekka Kana 2': 'Pekka Kana 2 spielen',
+  'Claim beer bonus': 'Bierbonus anfordern',
+  'Loading game…': 'Spiel wird geladen…',
+  'Game build unavailable. Check the server mount.': 'Spiel nicht verfügbar. Server-Mount prüfen.',
+  'Connect your wallet to claim the bonus.': 'Verbinde deine Wallet, um den Bonus anzufordern.',
+  'Bonus queued. Waiting for the reward transaction…': 'Bonus vorgemerkt. Warte auf die Transaktion…',
+  'Bonus sent. Waiting for the wallet balance to update…': 'Bonus gesendet. Warte auf die Aktualisierung des Guthabens…',
+  'Your bonus GAMBA was sent.': 'Dein Bonus-GAMBA wurde gesendet.',
+  'Your bonus GAMBA was already sent.': 'Dein Bonus-GAMBA wurde bereits gesendet.',
+});
 const translations = { es: spanish, fr: french, de: german };
 let language = ['es', 'fr', 'de'].includes(localStorage.getItem('ctf-language')) ? localStorage.getItem('ctf-language') : 'en';
 const originals = new WeakMap();

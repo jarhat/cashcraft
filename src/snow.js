@@ -25,13 +25,13 @@ export function setupSnow(canvas) {
   };
 
   const resize = () => {
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const dpr = 1;
     width = window.innerWidth;
     height = window.innerHeight;
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const count = Math.min(130, Math.round((width * height) / 11000));
+    const count = Math.min(80, Math.round((width * height) / 15000));
     flakes = Array.from({ length: count }, makeFlake);
     layers = Array.from({ length: 8 }, () => []);
     for (const flake of flakes) layers[Math.min(7, Math.floor((flake.alpha - 0.25) / 0.6 * 8))].push(flake);
@@ -55,7 +55,7 @@ export function setupSnow(canvas) {
 
   const draw = (time) => {
     const elapsed = time - last;
-    if (elapsed < 1000 / (time - lastScroll < 200 ? 15 : 30)) {
+    if (elapsed < 1000 / (time - lastScroll < 200 ? 12 : 24)) {
       frame = requestAnimationFrame(draw);
       return;
     }

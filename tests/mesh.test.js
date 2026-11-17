@@ -22,6 +22,9 @@ test('perspective mesh converges at the horizon and shares intersections through
   assert.ok(vertical[0][0][0] > vertical[0].at(-1)[0]);
   const css = await readFile(new URL('../src/style.css', import.meta.url), 'utf8');
   assert.match(css, /body::before\s*\{\s*content:\s*none;/);
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  assert.ok(html.indexOf('class="mesh-landscape"') > html.indexOf('<header class="topbar">'));
+  assert.ok(html.indexOf('class="mesh-landscape"') < html.indexOf('</header>'));
 });
 
 test('mesh regenerates once per resize frame with the current dimensions', (t) => {

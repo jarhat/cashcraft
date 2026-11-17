@@ -48,6 +48,12 @@
   <main class="shell">
     <div id="panel-outline-layer" class="panel-outline-layer" aria-hidden="true"></div>
     <header class="topbar">
+      <div class="mesh-landscape" aria-hidden="true">
+        <div class="mesh-sun"></div>
+        <svg class="mesh-terrain" fill="none">
+          <path class="mesh-lines" />
+        </svg>
+      </div>
       <div class="topbar-tools topbar-tools-left">
         <button id="wiki-open" class="theme-toggle" type="button" aria-label="CashTokens wiki" aria-haspopup="dialog" aria-controls="wiki-dialog">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-2-2-5-2-9-1v13c4-1 7-1 9 1m0-13c2-2 5-2 9-1v13c-4-1-7-1-9 1m0-13v13"/></svg>
@@ -95,7 +101,7 @@
         </button>
       </div>
       <aside id="wizard-guide" class="wizard-guide" aria-label="Wizard tutorial">
-        <button id="logout" class="wizard-logout" type="button" aria-label="Log out and leave site" title="Log out and leave site" hidden>
+        <button id="logout" class="wizard-logout" type="button" aria-label="Disconnect wallet" title="Disconnect wallet" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3m6-12 5 4-5 4m5-4H9"/></svg>
         </button>
         <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
@@ -324,7 +330,7 @@
           <div class="payment-url-line">
             <code id="payment-url"></code>
             <button id="copy-payment-url" class="small-button" type="button">
-              Copy link
+              Copy original link
             </button>
           </div>
 
@@ -345,11 +351,13 @@
                 </select>
               </label>
             </div>
+            <p id="one-time-expiry-hint" class="fine" hidden>One-time links are deleted on first open, or after 1 week if unused.</p>
             <button id="create-short-link" class="small-button" type="button">Create short link</button>
             <div id="short-link-result" class="payment-url-line" hidden>
               <code id="short-link-url"></code>
               <button id="copy-short-link" class="small-button" type="button">Copy link</button>
             </div>
+            <p class="fine">After creating a short link, the QR, Share and Download QR use it.</p>
             <p id="short-link-status" class="fine" role="status"></p>
           </fieldset>
         </div>
@@ -439,6 +447,16 @@
     </dialog>
 
     <pre id="log" role="status"></pre>
+    <section class="panel games-panel" aria-labelledby="games-title">
+      <div class="heading"><div><p class="eyebrow">ARCADE</p><h2 id="games-title">Take a break</h2></div></div>
+      <div class="game-actions">
+        <button id="game-netcraft" class="game-button" type="button" aria-label="Play Netcraft"><span aria-hidden="true">⛏️</span><strong>Netcraft</strong></button>
+        <button id="game-pk2" class="game-button" type="button" aria-label="Play Pekka Kana 2"><span aria-hidden="true">🐔</span><strong>Pekka Kana 2</strong></button>
+        <button id="game-beer" class="game-button" type="button" aria-label="Claim beer bonus"><span aria-hidden="true">🍺</span><strong>Beer bonus</strong></button>
+      </div>
+      <p class="fine">One bonus per address after its first GAMBA reward has been sent.</p>
+      <p id="game-status" class="fine" role="status"></p>
+    </section>
     <aside id="media-gallery" class="media-gallery" aria-label="Bitcoin Cash media" data-wallet-panel hidden>
       <div class="media-gallery-heading">
         <div><p class="eyebrow">BCH COMMUNITY</p><h2>Explore the artwork</h2></div>
@@ -460,12 +478,6 @@
       </div>
       <p class="media-credit">Artwork from <a href="https://bch.now" target="_blank" rel="noopener noreferrer">bch.now ↗</a></p>
     </aside>
-    <div class="mesh-landscape" aria-hidden="true">
-      <div class="mesh-sun"></div>
-      <svg class="mesh-terrain" fill="none">
-        <path class="mesh-lines" />
-      </svg>
-    </div>
     <div class="chain-decoration" aria-hidden="true">
       <svg class="chain-art" viewBox="0 0 640 160" fill="none">
         <g class="chain-links" stroke="currentColor">
@@ -483,6 +495,22 @@
     </footer>
 
   </main>
+
+  <dialog id="game-dialog" class="notifications-dialog game-dialog" aria-labelledby="game-title">
+    <div class="notifications-heading">
+      <h2 id="game-title">Game</h2>
+      <button id="game-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
+    </div>
+    <nav class="game-switcher" aria-label="Choose a game">
+      <button id="switch-netcraft" class="small-button" type="button" aria-pressed="false">⛏️ Netcraft</button>
+      <button id="switch-pk2" class="small-button" type="button" aria-pressed="false">🐔 Pekka Kana 2</button>
+    </nav>
+    <p class="fine">Switching games ends the current session.</p>
+    <p id="game-dialog-status" class="fine" role="status"></p>
+    <div class="game-stage">
+      <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen; gamepad" allowfullscreen></iframe>
+    </div>
+  </dialog>
 
   <dialog id="wiki-dialog" class="notifications-dialog wiki-dialog" aria-labelledby="wiki-title">
     <div class="notifications-heading">

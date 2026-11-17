@@ -110,6 +110,10 @@ class RewardTests(unittest.TestCase):
         self.assertNotIn("private-note", page.text)
         qr = client.get(f"/api/qr.png?s={link['id']}", headers=headers)
         self.assertTrue(qr.content.startswith(b"\x89PNG"))
+        with patch.object(backend.segno, "make", wraps=backend.segno.make) as make_qr:
+            self.assertEqual(client.get(f"/api/qr.png?s={link['id']}", headers=headers).status_code, 200)
+            self.assertEqual(make_qr.call_args.args[0], f"https://ctf.example/s/{link['id']}")
+        self.assertEqual(client.get(f"/api/qr.png?s={link['id']}").status_code, 400)
         self.assertEqual(client.post(f"/api/short-link/{link['id']}/open").json()["note"], "private-note")
         self.assertEqual(client.get(f"/api/qr.png?s={link['id']}", headers=headers).status_code, 404)
 
@@ -126,6 +130,30 @@ class RewardTests(unittest.TestCase):
                 db.execute("SELECT cash_address, category FROM token_rewards").fetchall(),
                 [(address, "b" * 64)],
             )
+
+    def test_beer_bonus_requires_sent_reward_and_broadcasts_once(self):
+        address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
+        client = TestClient(backend.app)
+        body = {"cash_address": address}
+        self.assertEqual(client.post("/api/beer-reward", json=body).status_code, 409)
+        client.post("/api/cash-address", json=body)
+        self.assertEqual(client.post("/api/beer-reward", json=body).status_code, 409)
+        with sqlite3.connect(backend.DB_PATH) as db:
+            db.execute("UPDATE token_rewards SET sent_at = CURRENT_TIMESTAMP WHERE cash_address = ?", (address,))
+        self.assertEqual(client.post("/api/beer-reward", json=body).json(), {"status": "pending", "txid": None})
+        self.assertEqual(client.post("/api/beer-reward", json=body).json(), {"status": "pending", "txid": None})
+        with patch.object(backend, "build_reward_transaction", return_value=("abcd", "c" * 64)) as build:
+            self.assertTrue(backend.process_one_reward())
+            with patch.object(backend, "bch_rpc", side_effect=[RuntimeError("timeout"), RuntimeError("unavailable")]):
+                with self.assertRaises(RuntimeError):
+                    backend.process_one_reward()
+            with patch.object(backend, "bch_rpc", return_value="c" * 64):
+                self.assertTrue(backend.process_one_reward())
+            self.assertFalse(backend.process_one_reward())
+            build.assert_called_once_with(address, "b" * 64)
+        self.assertEqual(client.post("/api/beer-reward", json=body).json(), {"status": "sent", "txid": "c" * 64})
+        with sqlite3.connect(backend.DB_PATH) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM beer_rewards").fetchone()[0], 1)
 
     def test_existing_database_is_migrated_without_queueing_old_addresses(self):
         with sqlite3.connect(backend.DB_PATH) as db:

@@ -21,14 +21,16 @@ test('payment image includes the QR, complete payment request and timestamped pr
     const address = `bitcoincash:${'z'.repeat(42)}`;
     const price = '0.001 BCH / base unit · 2026-11-16T00:00:00.000Z';
     const note = 'Thank you!\nFor lunch';
+    const logo = {};
     const translations = { Amount: 'Montant', 'Recipient address': 'Adresse', 'Token category ID': 'Catégorie', 'Indicative token price': 'Prix', 'Sharing note': 'Note' };
-    assert.equal(createPaymentQrImage(qr, { amount, category, address, price, note }, (text) => translations[text] || text), canvas);
+    assert.equal(createPaymentQrImage(qr, { amount, category, address, price, note, logo }, (text) => translations[text] || text), canvas);
     assert.ok(calls.some(([type, image]) => type === 'drawImage' && image === qr));
-    assert.ok(calls.some(([type, color]) => type === 'fillRect' && color === '#000000'));
+    assert.ok(calls.some(([type, image]) => type === 'drawImage' && image === logo));
+    assert.ok(calls.some(([type, color]) => type === 'fillRect' && color === '#081a2b'));
     assert.equal(context.fillStyle, '#ffffff');
     const text = calls.filter(([type]) => type === 'fillText').map(([, value]) => value);
     const amountText = `${amount} token base units`;
-    assert.deepEqual(text, ['Montant', amountText.slice(0, 40), amountText.slice(40),
+    assert.deepEqual(text, ['PAYMENT REQUEST', 'Scan to open this payment request', 'Montant', amountText.slice(0, 40), amountText.slice(40),
       'Adresse', address.slice(0, 40), address.slice(40),
       'Catégorie', category.slice(0, 40), category.slice(40),
       'Prix', price.slice(0, 40), price.slice(40), 'Note', 'Thank you!', 'For lunch', '₿', 'BCH']);

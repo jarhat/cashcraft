@@ -1,4 +1,4 @@
-export function createPaymentQrImage(qr, { amount, category, address, price, note }, translate) {
+export function createPaymentQrImage(qr, { amount, category, address, price, note, logo }, translate) {
   const fields = [
     [translate('Amount'), translate(`${amount} token base units`)],
     [translate('Recipient address'), address],
@@ -26,15 +26,26 @@ export function createPaymentQrImage(qr, { amount, category, address, price, not
     return lines;
   })]);
   canvas.width = 640;
-  canvas.height = 430 + wrapped.reduce((height, [, lines]) => height + 40 + lines.length * 26, 0) + 92;
+  canvas.height = 530 + wrapped.reduce((height, [, lines]) => height + 40 + lines.length * 26, 0) + 92;
 
-  context.fillStyle = '#000000';
+  context.fillStyle = '#081a2b';
   context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = '#d8f3ff';
+  context.font = 'bold 30px sans-serif';
+  context.textBaseline = 'top';
+  context.fillText(translate('PAYMENT REQUEST'), 40, 30);
+  context.fillStyle = '#87bed8';
+  context.font = '18px sans-serif';
+  context.fillText(translate('Scan to open this payment request'), 40, 72);
   context.imageSmoothingEnabled = false;
-  context.drawImage(qr, 130, 24, 380, 380);
+  context.drawImage(qr, 130, 112, 380, 380);
   context.fillStyle = '#ffffff';
   context.textBaseline = 'top';
-  let y = 430;
+  if (logo) {
+    context.imageSmoothingEnabled = true;
+    context.drawImage(logo, 40, 505, 36, 36);
+  }
+  let y = 550;
   for (const [label, lines] of wrapped) {
     context.font = 'bold 20px sans-serif';
     context.fillText(label, 40, y);
