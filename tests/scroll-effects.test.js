@@ -57,10 +57,10 @@ test('only panels crossing the sticky header are masked and the mask follows its
   assert.equal(panel.style['--fade-under-bar'], undefined);
 });
 
-test('scroll updates the fade immediately without scheduling another frame', () => {
+test('scroll updates the fade once per frame using the latest position', () => {
   const original = { window: globalThis.window, document: globalThis.document, requestAnimationFrame: globalThis.requestAnimationFrame };
   const listeners = {};
-  let frames = 0;
+  const frames = [];
   const bar = { getBoundingClientRect: () => ({ height: 100, bottom: 100 }) };
   const panel = {
     top: 140,
@@ -85,13 +85,16 @@ test('scroll updates the fade immediately without scheduling another frame', () 
     createElement() { return { style: {}, remove() {} }; },
     querySelectorAll(selector) { return selector === '.token-options' ? [] : [panel]; },
   };
-  globalThis.requestAnimationFrame = () => { frames++; };
+  globalThis.requestAnimationFrame = (callback) => { frames.push(callback); };
   try {
     setupScrollEffects();
+    panel.top = 70;
+    listeners.scroll();
     panel.top = 40;
     listeners.scroll();
+    assert.equal(frames.length, 1);
+    frames.shift()();
     assert.equal(panel.style['--fade-under-bar'], '60px');
-    assert.equal(frames, 0);
   } finally {
     Object.assign(globalThis, original);
   }

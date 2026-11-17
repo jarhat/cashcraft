@@ -2239,11 +2239,11 @@ html, body { overscroll-behavior-y: none; }
 /* Arcade dashboard */
 body {
   background-image:
+    linear-gradient(rgb(132 205 255 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(132 205 255 / 5%) 1px, transparent 1px),
     radial-gradient(ellipse at 50% -20%, var(--page-halo), transparent 55%),
-    radial-gradient(ellipse at 100% 55%, var(--page-halo-secondary), transparent 38%),
-    linear-gradient(rgb(132 205 255 / 3%) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(132 205 255 / 3%) 1px, transparent 1px);
-  background-size: auto, auto, 40px 40px, 40px 40px;
+    radial-gradient(ellipse at 100% 55%, var(--page-halo-secondary), transparent 38%);
+  background-size: 40px 40px, 40px 40px, auto, auto;
 }
 .topbar {
   border-radius: 4px;

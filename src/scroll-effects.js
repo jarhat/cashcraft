@@ -13,7 +13,7 @@ export function updatePanelFades(topbar, panels, outlines) {
       && (panel.classList.contains('panel') || panel.classList.contains('wizard-dialog'));
     return { panel, bounds, fade, openMenu, showOutline };
   });
-  if (outlines) outlines.layer.style.height = `${bottom}px`;
+  if (outlines && outlines.layer.style.height !== `${bottom}px`) outlines.layer.style.height = `${bottom}px`;
   const active = new Set();
   for (const { panel, bounds, fade, openMenu, showOutline } of updates) {
     if (openMenu) openMenu.open = false;
@@ -35,9 +35,12 @@ export function updatePanelFades(topbar, panels, outlines) {
         outlines.layer.append(outline);
         outlines.items.set(panel, outline);
       }
-      outline.style.transform = `translate(${bounds.left}px, ${bounds.top}px)`;
-      outline.style.width = `${bounds.width}px`;
-      outline.style.height = `${bounds.height}px`;
+      const transform = `translate(${bounds.left}px, ${bounds.top}px)`;
+      const width = `${bounds.width}px`;
+      const height = `${bounds.height}px`;
+      if (outline.style.transform !== transform) outline.style.transform = transform;
+      if (outline.style.width !== width) outline.style.width = width;
+      if (outline.style.height !== height) outline.style.height = height;
     }
   }
   if (outlines) {
@@ -55,10 +58,14 @@ export function setupScrollEffects() {
   const dashboard = document.querySelector('.dashboard');
   const outlines = { layer: document.querySelector('#panel-outline-layer'), items: new Map() };
   let scheduled = false;
+  let geometryDirty = false;
   const updateFades = () => updatePanelFades(topbar, document.querySelectorAll('.dashboard > .panel, .dashboard > .wizard-dialog, .media-gallery, #log, .chain-decoration, footer'), outlines);
   const update = () => {
     scheduled = false;
-    updateScrollEffects(topbar);
+    if (geometryDirty) {
+      geometryDirty = false;
+      updateScrollEffects(topbar);
+    }
     updateFades();
   };
   const schedule = () => {
@@ -67,13 +74,18 @@ export function setupScrollEffects() {
       requestAnimationFrame(update);
     }
   };
-  window.addEventListener('resize', schedule);
-  window.addEventListener('scroll', updateFades, { passive: true });
-  document.querySelectorAll('.token-options').forEach((options) => options.addEventListener('toggle', schedule));
+  const scheduleGeometry = () => {
+    geometryDirty = true;
+    schedule();
+  };
+  window.addEventListener('resize', scheduleGeometry);
+  window.addEventListener('scroll', schedule, { passive: true });
+  document.querySelectorAll('.token-options').forEach((options) => options.addEventListener('toggle', scheduleGeometry));
   if ('ResizeObserver' in window) {
-    const observer = new ResizeObserver(schedule);
+    const observer = new ResizeObserver(scheduleGeometry);
     observer.observe(topbar);
     observer.observe(dashboard);
   }
+  geometryDirty = true;
   update();
 }
