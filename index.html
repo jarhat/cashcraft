@@ -204,7 +204,9 @@
             Amount
             <input
               id="amount"
+              type="text"
               inputmode="numeric"
+              name="send-token-units"
               placeholder="Whole token units"
               autocomplete="off"
             >
@@ -264,7 +266,9 @@
             Amount
             <input
               id="receive-amount"
+              type="text"
               inputmode="numeric"
+              name="receive-token-units"
               placeholder="Whole token units"
               autocomplete="off"
             >
@@ -354,6 +358,7 @@
       </div>
 
       <p id="status" class="status" role="status">Not connected</p>
+      <div id="connection-loading" class="connection-loading" role="status" hidden><span class="connection-spinner" aria-hidden="true"></span><span>Finishing wallet setup…</span></div>
 
       <div id="pairing" class="pairing hidden">
         <canvas id="qr"></canvas>
@@ -385,7 +390,7 @@
       <div id="advanced-settings" hidden>
         <button id="refresh" class="button secondary" disabled>Refresh balances</button>
         <label for="scan-count">Addresses per receive and change path</label>
-        <input id="scan-count" type="number" min="1" max="1000" step="1" value="50">
+        <input id="scan-count" name="scan-address-count" type="number" inputmode="numeric" autocomplete="off" min="1" max="1000" step="1" value="50">
         <p class="fine">Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.</p>
       </div>
     </article>

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { meshPath, setupMesh } from '../src/mesh.js';
 
-test('mesh lines join the 40px grid and share intersections through the bulge', async () => {
+test('perspective mesh converges at the horizon and shares intersections through the bulge', async () => {
   const width = 800;
   const height = 400;
   const lines = meshPath(width, height).split(' M').map((line, index) =>
@@ -12,14 +12,14 @@ test('mesh lines join the 40px grid and share intersections through the bulge', 
   const vertical = lines.slice(9);
   for (const [index, points] of horizontal.entries()) {
     const y = (index + 1) * 40;
-    assert.deepEqual(points[0], [0, y]);
-    assert.deepEqual(points.at(-1), [width, y]);
+    assert.ok(points[0][0] > 0);
+    assert.ok(points.at(-1)[0] < width);
     for (let x = 0; x < width; x += 40) {
       assert.deepEqual(points[x / 8], vertical[x / 40][y / 8]);
     }
   }
-  assert.ok(horizontal[4][50][1] < 200);
-  assert.notEqual(vertical[8][25][0], 320);
+  assert.ok(horizontal[4][50][1] < horizontal[4][0][1]);
+  assert.ok(vertical[0][0][0] > vertical[0].at(-1)[0]);
   const css = await readFile(new URL('../src/style.css', import.meta.url), 'utf8');
   assert.match(css, /body::before\s*\{[^}]*background-size:\s*40px 40px/s);
 });

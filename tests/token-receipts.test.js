@@ -54,19 +54,19 @@ test('celebrates one GAMBA once per wallet, not other tokens or self-sent change
   h.api.notifyTokenReceipts([other, reward]);
   h.api.notifyTokenReceipts([reward, { ...reward, txid: 'another' }]);
   assert.equal(h.celebrations, 1);
-  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBAYour special diamond perk is here!']);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 GAMBA TOKEN']);
   const notice = h.elements.get('token-receipt-notifications').items[0];
   assert.equal(notice.className, 'notification-message gamba-notice');
   assert.equal(notice.children.length, 2);
   assert.equal(h.elements.get('notification-indicator').hidden, false);
   assert.equal(h.elements.get('gamba-sound-controls').hidden, false);
-  assert.match(notice.children[1].children[1].textContent, /diamond perk/);
+  assert.equal(notice.children[1].children.length, 1);
 
   const reload = receiptHarness(h.stored);
   await reload.api.loadRewardCategory();
   reload.api.notifyTokenReceipts([reward]);
   assert.equal(reload.celebrations, 0);
-  assert.deepEqual(reload.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBAYour special diamond perk is here!']);
+  assert.deepEqual(reload.elements.get('token-receipt-notifications').notices, ['1 GAMBA TOKEN']);
 
   const anotherWallet = receiptHarness(h.stored, 'another-wallet');
   await anotherWallet.api.loadRewardCategory();
@@ -86,7 +86,7 @@ test('migrates existing notices without replaying GAMBA or showing other tokens'
   await h.api.loadRewardCategory();
   h.api.notifyTokenReceipts([{ txid: 'reward', token: { category: h.category, amount: 1n } }]);
   assert.equal(h.celebrations, 0);
-  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['Received 1 GAMBAYour special diamond perk is here!']);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 GAMBA TOKEN']);
   assert.deepEqual(JSON.parse(stored.values().next().value).messages, ['Received 1 GAMBA']);
 });
 

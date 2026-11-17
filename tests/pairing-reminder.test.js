@@ -21,11 +21,13 @@ function harness(t, permission = 'default') {
   };
   const timers = new Map();
   let next = 0;
+  let now = 0;
   let uri = 'wiz:private-pairing-uri';
   const globals = {
     window: { isSecureContext: true, Notification: notifications },
     navigator: { serviceWorker: { getRegistration: async () => registration } },
     document,
+    Date: { now: () => now },
     setTimeout: (callback) => { timers.set(++next, callback); return next; },
     clearTimeout: (id) => timers.delete(id),
   };
@@ -46,6 +48,7 @@ function harness(t, permission = 'default') {
   return {
     button, status, openWallet, document, listeners, shown, reminder, timers, registration,
     setUri(value) { uri = value; },
+    advance(ms) { now += ms; },
     get closed() { return closed; },
     fire() {
       const [id, callback] = timers.entries().next().value;
@@ -97,6 +100,45 @@ test('foreground and blocked notifications use the in-page reminder', async (t) 
   await new Promise((resolve) => setImmediate(resolve));
   assert.match(h.status.textContent, /Still connecting/);
   assert.equal(h.shown.length, 0);
+});
+
+test('QR pairing starts one reminder without waiting for a wallet link click', async (t) => {
+  const h = harness(t, 'granted');
+  h.reminder.start();
+  h.openWallet.click();
+  assert.equal(h.timers.size, 1);
+  h.fire();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(h.status.textContent, /Still connecting/);
+});
+
+test('opening the wallet after a foreground reminder starts another timer', async (t) => {
+  const h = harness(t, 'granted');
+  h.reminder.start();
+  h.advance(45_000);
+  h.fire();
+  h.openWallet.click();
+  assert.equal(h.timers.size, 1);
+  h.document.hidden = true;
+  h.advance(45_000);
+  h.fire();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.shown.length, 1);
+});
+
+test('unsupported notification APIs still allow an in-page reminder', async (t) => {
+  const h = harness(t);
+  window.isSecureContext = false;
+  const reminder = setupPairingReminder({
+    button: h.button, status: h.status, openWallet: h.openWallet,
+    pendingUri: () => 'wiz:test', translate: (text) => text, logger: { warn() {} },
+  });
+  assert.equal(h.button.hidden, true);
+  assert.match(h.status.textContent, /unavailable/);
+  reminder.start();
+  h.fire();
+  assert.match(h.status.textContent, /Still connecting/);
+  reminder.cancel();
 });
 
 test('a late notification is cleared if pairing completes while it is being shown', async (t) => {

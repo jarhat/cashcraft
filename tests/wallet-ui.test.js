@@ -177,11 +177,22 @@ test('notification can be dismissed outside and reopened with its request intact
   const indicator = element('notification-indicator');
   dialog.open = true;
   indicator.hidden = false;
-  dialog.listeners.click({ clientX: 50, clientY: 50 });
+  dialog.listeners.click({ target: dialog, clientX: 50, clientY: 50 });
   assert.equal(dialog.open, true);
-  dialog.listeners.click({ clientX: 1, clientY: 50 });
+  dialog.listeners.click({ target: {}, clientX: 1, clientY: 50 });
+  assert.equal(dialog.open, true);
+  dialog.listeners.click({ target: dialog, clientX: 1, clientY: 50 });
   assert.equal(dialog.open, false);
   assert.equal(indicator.hidden, true);
+  for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog']) {
+    const other = element(id);
+    other.listeners.close = () => {};
+    other.showModal();
+    other.listeners.click({ target: other, clientX: 15, clientY: 15 });
+    assert.equal(other.open, true);
+    other.listeners.click({ target: other, clientX: 1, clientY: 50 });
+    assert.equal(other.open, false);
+  }
   element('notifications-toggle').listeners.click();
   assert.equal(dialog.open, true);
   assert.equal(indicator.hidden, true);
@@ -511,6 +522,7 @@ test('open in wallet remains available until an address is derived, including re
     $: element, relay: null, manager: null, walletPairingUri: null,
     walletReady: false, pairingInProgress: false, showPairingWhenReady: false,
     QRCode: { toCanvas: async () => {} }, clearWalletDisplay() {}, setConnection() {},
+    pairingReminder: { start() {} },
     updateReceiveAddress() {},
     addressFor() {
       if (!keyAvailable) throw new Error('Public key missing');
@@ -550,16 +562,19 @@ test('open in wallet remains available until an address is derived, including re
   scanPending = true;
   const pendingReady = instance.handlers.walletready({});
   await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(element('connection-loading').hidden, false);
   assert.match(reported.message, /registration unavailable/);
   assert.match(element('status').textContent, /address submission failed/);
   resolveScan();
   await pendingReady;
+  assert.equal(element('connection-loading').hidden, true);
   scanPending = false;
   scanFails = true;
   await instance.handlers.walletready({});
   assert.match(reported.message, /registration unavailable/);
   assert.match(reported.message, /scan unavailable/);
   assert.match(element('status').textContent, /address submission and balance scan failed/);
+  assert.equal(element('connection-loading').hidden, true);
   relayCallback({ client: {}, status: { status: 'reconnecting' } });
   assert.equal(element('open-wallet').hidden, false);
   relayCallback({ client: {}, status: { status: 'connected' } });

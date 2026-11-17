@@ -194,17 +194,21 @@ function readReceiptState() {
   return state;
 }
 
-function addReceiptNotice(message) {
+function addReceiptNotice() {
   const notice = document.createElement('div');
   notice.className = 'notification-message gamba-notice';
   const art = $('gamba-art').cloneNode(true);
   art.removeAttribute('id');
   const label = document.createElement('strong');
-  label.textContent = translate(message);
+  const labelText = document.createElement('span');
+  labelText.className = 'visually-hidden';
+  labelText.textContent = '1 GAMBA TOKEN';
+  const wordmark = document.createElement('img');
+  wordmark.src = '/gamba-wordmark.svg';
+  wordmark.alt = '';
+  label.append(labelText, wordmark);
   const details = document.createElement('div');
-  const description = document.createElement('p');
-  description.textContent = translate('Your special diamond perk is here!');
-  details.append(label, description);
+  details.append(label);
   notice.append(art, details);
   $('token-receipt-notifications').prepend(notice);
   $('notifications-empty').hidden = true;
@@ -245,11 +249,11 @@ function notifyTokenReceipts(scannedUtxos) {
   if (receiptWallet !== wallet) {
     $('token-receipt-notifications').replaceChildren();
     $('gamba-sound-controls').hidden = true;
-    for (const message of state.messages) addReceiptNotice(message);
+    if (state.messages.length) addReceiptNotice();
     if (state.unread) $('notification-indicator').hidden = false;
     receiptWallet = wallet;
   } else if (received) {
-    addReceiptNotice(message);
+    addReceiptNotice();
   }
   if (received) {
     $('notification-indicator').hidden = false;
@@ -315,6 +319,7 @@ for (const name of ['theme', 'language']) {
 
 function setConnection(connected) {
   pairingReminder.cancel();
+  if (!connected) $('connection-loading').hidden = true;
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
   $('advanced-settings').hidden = !connected;
   document.body.classList.toggle('wallet-connected', connected);
@@ -445,6 +450,7 @@ async function showPairingUri(uri) {
     errorCorrectionLevel: 'M',
     color: { dark: '#07111b', light: '#ffffff' },
   });
+  if (!walletReady && walletPairingUri === uri) pairingReminder.start();
 }
 
 async function startConnection({ fresh = false, restoring = false } = {}) {
@@ -497,10 +503,12 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
     let connectedAt = 0;
     let relayConnected = false;
     let relayInterrupted = false;
+    let readyGeneration = 0;
 
     manager.on('walletready', async (message) => {
       if (manager !== connectionManager) return;
 
+      const currentReady = ++readyGeneration;
       let addressReady = false;
       try {
         walletReady = true;
@@ -519,6 +527,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         $('log').textContent = '';
         $('address').textContent = address;
         addressReady = true;
+        $('connection-loading').hidden = false;
         const submission = submitCashAddress(address).catch((error) => {
           if (walletReady && manager === connectionManager) {
             report(new Error(`Address submission failed: ${error?.message || error}`));
@@ -555,6 +564,10 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         }
         report(error, { log: false });
         $('status').textContent = 'Wallet connected · balance scan failed';
+      } finally {
+        if (manager === connectionManager && currentReady === readyGeneration) {
+          $('connection-loading').hidden = true;
+        }
       }
     });
 
@@ -1041,10 +1054,12 @@ function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
         if (version !== portfolioVersion) return metadata;
         if (tokenBalances.has(category)) tokenBalances.get(category).metadata = metadata;
         title.textContent = metadata.name || metadata.symbol || translate('Fungible token');
+        title.title = title.textContent;
         infoText.textContent = [metadata.name, metadata.symbol, metadata.description, `${metadata.decimals} decimals`,
           metadata.uris && `URIs: ${JSON.stringify(metadata.uris)}`,
           metadata.extensions && `Extensions: ${JSON.stringify(metadata.extensions)}`].filter(Boolean).join(' · ');
         amountElement.textContent = `${formatTokenAmount(amount, metadata.decimals)} ${metadata.symbol || 'tokens'} (${amount} base units)`;
+        amountElement.title = amountElement.textContent;
         const available = `${formatTokenAmount(spendableAmount, metadata.decimals)} ${metadata.symbol || 'tokens'} (${spendableAmount} base units)`;
         optionLabel.textContent = `${metadata.name || metadata.symbol || 'Token'} · ${available} · loading price`;
         updateAmountHelp();
@@ -1192,7 +1207,7 @@ function renderPortfolioChart(items) {
     const name = document.createElement('span');
     name.className = 'allocation-name';
     name.textContent = item.name;
-    name.title = item.category;
+    name.title = `${item.name} · ${item.category}`;
     const value = document.createElement('span');
     value.className = 'allocation-value';
     value.textContent = `${(item.value / total * 100).toFixed(1)}% · ${item.value.toPrecision(4)} BCH`;
@@ -1738,6 +1753,15 @@ $('funding-connect').addEventListener('click', () => {
 });
 
 const notificationsDialog = $('notifications-dialog');
+for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notifications-dialog']) {
+  const dialog = $(id);
+  dialog.addEventListener('click', (event) => {
+    if (event.target !== dialog) return;
+    const rect = dialog.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right ||
+        event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
+  });
+}
 function markNotificationsRead() {
   $('notification-indicator').hidden = true;
 }
@@ -1746,11 +1770,6 @@ $('notifications-toggle').addEventListener('click', () => {
   markNotificationsRead();
 });
 $('notifications-close').addEventListener('click', () => notificationsDialog.close());
-notificationsDialog.addEventListener('click', (event) => {
-  const rect = notificationsDialog.getBoundingClientRect();
-  if (event.clientX < rect.left || event.clientX > rect.right ||
-      event.clientY < rect.top || event.clientY > rect.bottom) notificationsDialog.close();
-});
 notificationsDialog.addEventListener('close', () => {
   markNotificationsRead();
   $('notifications-toggle').focus({ preventScroll: true });

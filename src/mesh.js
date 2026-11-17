@@ -3,18 +3,20 @@ const SAMPLE_SIZE = 8;
 
 export function meshPath(width, height) {
   const centerX = width / 2;
-  const centerY = height * 0.46;
   const radiusX = Math.min(width * 0.42, 320);
-  const radiusY = Math.min(height * 0.42, 160);
-  const amplitude = Math.min(height * 0.14, 50);
+  const horizon = height * 0.16;
+  const amplitude = Math.min(height * 0.23, 80);
   const bump = (distance, radius) => {
     if (Math.abs(distance) >= radius) return 0;
     return (1 + Math.cos(Math.PI * distance / radius)) / 2;
   };
   const point = (x, y) => {
-    const influence = bump(x - centerX, radiusX) * bump(y - centerY, radiusY);
-    const bulgeX = x + amplitude * 0.7 * (x - centerX) / radiusX * influence;
-    return `${bulgeX.toFixed(2)},${(y - amplitude * influence).toFixed(2)}`;
+    const depth = y / height;
+    const perspective = 0.38 + 0.62 * depth;
+    const influence = bump(x - centerX, radiusX) * Math.sin(Math.PI * depth) ** 2;
+    const projectedX = centerX + (x - centerX) * perspective;
+    const projectedY = horizon + (height - horizon) * depth - amplitude * influence;
+    return `${projectedX.toFixed(2)},${projectedY.toFixed(2)}`;
   };
   const path = [];
 

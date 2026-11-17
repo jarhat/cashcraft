@@ -57,9 +57,10 @@ export function setupScrollEffects() {
   const topbar = document.querySelector('.topbar');
   const dashboard = document.querySelector('.dashboard');
   const outlines = { layer: document.querySelector('#panel-outline-layer'), items: new Map() };
+  const panels = document.querySelectorAll('.dashboard > .panel, #wizard-dialog, .media-gallery, #log, .chain-decoration, footer');
   let scheduled = false;
   let geometryDirty = false;
-  const updateFades = () => updatePanelFades(topbar, document.querySelectorAll('.dashboard > .panel, .dashboard > .wizard-dialog, .media-gallery, #log, .chain-decoration, footer'), outlines);
+  const updateFades = () => updatePanelFades(topbar, panels, outlines);
   const update = () => {
     scheduled = false;
     if (geometryDirty) {

@@ -617,6 +617,8 @@ const german = {
 };
 
 Object.assign(spanish, {
+  'Finishing wallet setup…': 'Finalizando la configuración de la cartera…',
+  'Pairing notifications are unavailable in this browser; reminders will appear here.': 'Las notificaciones de conexión no están disponibles en este navegador; los recordatorios aparecerán aquí.',
   'Enable pairing reminder': 'Activar recordatorio de conexión',
   'Pairing reminders are enabled; delivery may be delayed while the app is inactive.': 'Los recordatorios están activados; pueden retrasarse mientras la aplicación esté inactiva.',
   'Pairing notifications are blocked in your browser settings.': 'Las notificaciones de conexión están bloqueadas en la configuración del navegador.',
@@ -651,6 +653,8 @@ Object.assign(spanish, {
   'Loading market prices…': 'Cargando precios…',
 });
 Object.assign(french, {
+  'Finishing wallet setup…': 'Finalisation de la configuration du portefeuille…',
+  'Pairing notifications are unavailable in this browser; reminders will appear here.': 'Les notifications de connexion ne sont pas disponibles dans ce navigateur ; les rappels apparaîtront ici.',
   'Enable pairing reminder': 'Activer le rappel de connexion',
   'Pairing reminders are enabled; delivery may be delayed while the app is inactive.': 'Les rappels sont activés ; ils peuvent être retardés lorsque l’application est inactive.',
   'Pairing notifications are blocked in your browser settings.': 'Les notifications de connexion sont bloquées dans les paramètres du navigateur.',
@@ -685,6 +689,8 @@ Object.assign(french, {
   'Loading market prices…': 'Chargement des cours…',
 });
 Object.assign(german, {
+  'Finishing wallet setup…': 'Wallet-Einrichtung wird abgeschlossen…',
+  'Pairing notifications are unavailable in this browser; reminders will appear here.': 'Verbindungsbenachrichtigungen sind in diesem Browser nicht verfügbar; Erinnerungen erscheinen hier.',
   'Enable pairing reminder': 'Verbindungserinnerung aktivieren',
   'Pairing reminders are enabled; delivery may be delayed while the app is inactive.': 'Erinnerungen sind aktiviert; bei inaktiver App können sie verzögert eintreffen.',
   'Pairing notifications are blocked in your browser settings.': 'Verbindungsbenachrichtigungen sind in den Browsereinstellungen blockiert.',

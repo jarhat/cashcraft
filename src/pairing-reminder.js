@@ -3,9 +3,7 @@ const REMINDER_TAG = 'pairing-reminder';
 
 export function setupPairingReminder({ button, status, openWallet, pendingUri, translate, logger }) {
   const notifications = window.Notification;
-  if (!window.isSecureContext || !notifications || !navigator.serviceWorker?.getRegistration) {
-    return { cancel() {} };
-  }
+  const supported = window.isSecureContext && notifications && navigator.serviceWorker?.getRegistration;
 
   let timer;
   let generation = 0;
@@ -14,6 +12,11 @@ export function setupPairingReminder({ button, status, openWallet, pendingUri, t
   let deadline = 0;
 
   function updatePermission() {
+    if (!supported) {
+      button.hidden = true;
+      status.textContent = translate('Pairing notifications are unavailable in this browser; reminders will appear here.');
+      return;
+    }
     button.hidden = notifications.permission !== 'default';
     status.textContent = notifications.permission === 'granted'
       ? translate('Pairing reminders are enabled; delivery may be delayed while the app is inactive.')
@@ -26,7 +29,8 @@ export function setupPairingReminder({ button, status, openWallet, pendingUri, t
     generation++;
     clearTimeout(timer);
     pending = null;
-    if (shown) {
+    updatePermission();
+    if (shown && supported) {
       shown = false;
       navigator.serviceWorker.getRegistration().then((registration) =>
         registration?.getNotifications({ tag: REMINDER_TAG })).then((items) => {
@@ -38,7 +42,7 @@ export function setupPairingReminder({ button, status, openWallet, pendingUri, t
   async function remind(expectedGeneration) {
     if (expectedGeneration !== generation || !pending || pendingUri() !== pending) return;
     status.textContent = translate('Still connecting? Approve in your wallet, then return here.');
-    if (!document.hidden || notifications.permission !== 'granted') return;
+    if (!document.hidden || !supported || notifications.permission !== 'granted') return;
     try {
       const registration = await navigator.serviceWorker.getRegistration();
       if (expectedGeneration !== generation || pendingUri() !== pending || !document.hidden) return;
@@ -68,20 +72,22 @@ export function setupPairingReminder({ button, status, openWallet, pendingUri, t
       logger.warn('Could not enable pairing notifications:', error);
     }
   });
-  openWallet.addEventListener('click', () => {
+  function start(restartExpired = false) {
     const uri = pendingUri();
-    if (!uri) return;
+    if (!uri || (uri === pending && (!restartExpired || Date.now() < deadline))) return;
     cancel();
     pending = uri;
     deadline = Date.now() + REMINDER_DELAY_MS;
     const expectedGeneration = generation;
     timer = setTimeout(() => { void remind(expectedGeneration); }, REMINDER_DELAY_MS);
-  });
+  }
+  openWallet.addEventListener('click', () => start(true));
   document.addEventListener('visibilitychange', () => {
+    if (!pending) updatePermission();
     if (!document.hidden && pending && Date.now() >= deadline) {
       void remind(generation);
     }
   });
   updatePermission();
-  return { cancel };
+  return { start, cancel };
 }
