@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#081522"/><stop offset="1" stop-color="#070b18"/></linearGradient>
+    <radialGradient id="halo"><stop stop-color="#328b9d" stop-opacity=".48"/><stop offset="1" stop-color="#132638" stop-opacity="0"/></radialGradient>
+    <linearGradient id="moon" x2="1" y2="1"><stop stop-color="#c1fff0"/><stop offset="1" stop-color="#4ccbab"/></linearGradient>
+    <pattern id="grid" width="42" height="42" patternUnits="userSpaceOnUse"><path d="M42 0H0V42" fill="none" stroke="#92e7dd" stroke-opacity=".06"/></pattern>
+  </defs>
+  <path fill="url(#bg)" d="M0 0h1200v630H0z"/>
+  <path fill="url(#grid)" d="M0 0h1200v630H0z"/>
+  <circle cx="934" cy="275" r="290" fill="url(#halo)"/>
+  <circle cx="934" cy="260" r="146" fill="none" stroke="#a3f4df" stroke-opacity=".16"/>
+  <circle cx="934" cy="260" r="112" fill="#10382f" stroke="#8fead0" stroke-width="4"/>
+  <circle cx="934" cy="260" r="90" fill="url(#moon)"/>
+  <path d="M905 190h9v16h14v-16h9v16c22 2 32 12 32 27 0 10-5 17-13 20 12 4 17 12 17 23 0 17-13 27-36 28v16h-9v-16h-14v16h-9v-16h-17v-12h11v-73h-11v-13h17zm9 29v27h17c14 0 21-4 21-14s-7-13-21-13zm0 40v33h20c14 0 21-5 21-16s-7-17-21-17z" fill="#124b3d"/>
+  <path d="M740 458h415M782 420l-68 100m154-100-20 100m78-100 20 100m68-100 68 100M738 458q196-95 417 0M720 491q214-80 452 0" fill="none" stroke="#83e9d8" stroke-opacity=".25" stroke-width="2"/>
+  <path d="M74 76h12v12H74zm30 0h12v12h-12zm15 15h12v12h-12zM725 95h5v15h-5zm-5 5h15v5h-15zM1100 117h5v15h-5zm-5 5h15v5h-15z" fill="#aaf5dc" opacity=".8"/>
+  <text x="74" y="115" fill="#a0f2cf" font-family="Arial,sans-serif" font-size="24" font-weight="700" letter-spacing="5">CTF / CASH</text>
+  <text x="74" y="250" fill="#f3fffd" font-family="Arial,sans-serif" font-size="76" font-weight="700">CashTokens.</text>
+  <text x="74" y="338" fill="#b4f4e3" font-family="Arial,sans-serif" font-size="76" font-weight="700">Made simple.</text>
+  <text x="78" y="408" fill="#a4bdc5" font-family="Arial,sans-serif" font-size="25">Send, receive and explore on Bitcoin Cash.</text>
+  <rect x="76" y="470" width="354" height="52" rx="26" fill="#142e35" stroke="#6acbb4" stroke-opacity=".5"/>
+  <text x="100" y="503" fill="#b7f4df" font-family="Arial,sans-serif" font-size="19" font-weight="700" letter-spacing="2">YOUR KEYS. YOUR WALLET.</text>
+</svg>

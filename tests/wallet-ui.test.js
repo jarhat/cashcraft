@@ -23,7 +23,7 @@ test('theme preferences migrate and select the correct palette', () => {
       setItem(key, value) { this[key] = value; },
     };
     const start = source.indexOf('const savedTheme =');
-    const end = source.indexOf("\nfor (const name of ['theme', 'language', 'settings'])", start);
+    const end = source.indexOf("\nfor (const name of ['theme', 'language'])", start);
     runInNewContext(source.slice(start, end), { document, localStorage });
     assert.equal(document.documentElement.dataset.theme, expected);
     assert.equal(localStorage['ctf-theme'], expected);
@@ -39,7 +39,8 @@ test('wizard highlights and scrolls to each tutorial panel without moving the na
   let scrolled;
   const guide = { scrollIntoView() {}, contains() { return false; }, classList: { add() {}, remove() {} } };
   const target = (position) => ({ before(node) {
-    assert.equal(node, guide);
+    assert.equal(node, elements.get('wizard-dialog'));
+    node.parent = position;
     guidePosition = position;
   } });
   const grid = target('grid');
@@ -69,6 +70,7 @@ test('wizard highlights and scrolls to each tutorial panel without moving the na
       addEventListener(type, handler) { this[type] = handler; },
       setAttribute() {},
       contains() { return false; },
+      scrollIntoView() {},
     });
   }
   const document = {
@@ -77,24 +79,26 @@ test('wizard highlights and scrolls to each tutorial panel without moving the na
   };
   const start = source.indexOf('const tutorialSteps =');
   const end = source.indexOf('\n\nfetchBchUsd();', start);
-  runInNewContext(source.slice(start, end), { document, $: (id) => elements.get(id) });
+  elements.set('connection-dialog', { open: false, close() { this.open = false; } });
+  runInNewContext(source.slice(start, end), { document, $: (id) => elements.get(id), requestAnimationFrame: (fn) => fn(), openConnectionDialog() { elements.get('connection-dialog').open = true; } });
 
   elements.get('wizard-toggle').click();
-  assert.equal(guidePosition, 'hero');
-  assert.equal(scrolled, 'connection-section');
+  assert.equal(guidePosition, 'connection-section');
+  assert.equal(elements.get('connection-dialog').open, true);
   assert.equal(elements.get('wizard-dialog').parent, 'connection-section');
   assert.equal(elements.get('wizard-progress').textContent, '1 / 4');
   elements.get('wizard-next').click();
-  assert.equal(scrolled, 'balance-section');
+  assert.equal(guidePosition, 'balance-section');
+  assert.equal(elements.get('connection-dialog').open, false);
   assert.equal(elements.get('wizard-dialog').parent, 'balance-section');
   elements.get('wizard-next').click();
-  assert.equal(scrolled, 'transfer-section');
+  assert.equal(guidePosition, 'transfer-section');
   elements.get('wizard-next').click();
-  assert.equal(scrolled, 'earn-section');
+  assert.equal(guidePosition, 'earn-section');
   elements.get('wizard-prev').click();
-  assert.equal(scrolled, 'transfer-section');
+  assert.equal(guidePosition, 'transfer-section');
   elements.get('wizard-toggle').click();
-  assert.equal(guidePosition, 'hero');
+  assert.equal(guidePosition, 'transfer-section');
   assert.equal(elements.get('wizard-dialog').hidden, true);
   assert.equal(highlighted.size, 0);
 });
@@ -167,7 +171,7 @@ test('notification can be dismissed outside and reopened with its request intact
   const start = source.indexOf("const notificationsDialog = $('notifications-dialog')");
   const end = source.indexOf("\nif (document.readyState", start);
   runInNewContext(source.slice(start, end), {
-    $: element, setTransferTab() {},
+    $: element, setTransferTab() {}, document: { addEventListener() {} },
   });
   const dialog = element('notifications-dialog');
   const indicator = element('notification-indicator');
@@ -241,7 +245,7 @@ test('connect during relay startup displays a fresh pairing after it is ready', 
     showPairingUri: async (uri) => { calls.push(uri); },
     sendFungibleTokens() { throw new Error('must not send'); },
     report(error) { throw error; },
-    openTutorial() {},
+    openTutorial() {}, openConnectionDialog() {},
   };
   runInNewContext(`${source.slice(connectionStart, connectionEnd)}\n${source.slice(sendStart, sendEnd)}`, context);
   const restoring = context.startConnection({ restoring: true });
@@ -799,9 +803,6 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   context.setConnection(true);
   assert.ok(panels.every((panel) => !panel.hidden));
   assert.equal($('wizard-guide').hidden, false);
-  assert.equal($('advanced-settings').hidden, true);
-  $('advanced-mode').checked = true;
-  context.setConnection(true);
   assert.equal($('advanced-settings').hidden, false);
   $('wizard-dialog').hidden = false;
   $('wizard-next').disabled = true;
@@ -815,34 +816,6 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   assert.equal($('advanced-settings').hidden, true);
   assert.equal(context.tutorialStep, 0);
   assert.equal(context.tutorialUpdated, true);
-});
-
-test('advanced mode shows scan controls only while connected', () => {
-  const nodes = {
-    'advanced-mode': { checked: false, addEventListener(_type, fn) { this.change = fn; } },
-    'advanced-settings': { hidden: true },
-    'show-nfts-control': { hidden: true },
-    'show-nfts': { checked: false },
-  };
-  const start = source.indexOf("$('advanced-mode').addEventListener('change'");
-  const end = source.indexOf("\n$('wiki-open')", start);
-  const nft = { hidden: true, open: false };
-  const context = { $: (id) => nodes[id], walletReady: true, document: { querySelectorAll: () => [nft] } };
-  runInNewContext(source.slice(start, end), context);
-  nodes['advanced-mode'].checked = true;
-  nodes['advanced-mode'].change();
-  assert.equal(nodes['advanced-settings'].hidden, false);
-  assert.equal(nodes['show-nfts-control'].hidden, false);
-  assert.equal(nft.hidden, false);
-  nft.open = true;
-  nodes['advanced-mode'].checked = false;
-  nodes['advanced-mode'].change();
-  assert.equal(nft.hidden, true);
-  assert.equal(nft.open, false);
-  nodes['advanced-mode'].checked = true;
-  context.walletReady = false;
-  nodes['advanced-mode'].change();
-  assert.equal(nodes['advanced-settings'].hidden, true);
 });
 
 test('NFT inspection validates capabilities and commitment bytes', () => {
@@ -978,10 +951,11 @@ test('wizard follows the panels in reading order and resets when closed', () => 
       },
       setAttribute() {},
       addEventListener(type, handler) { this.listeners[type] = handler; },
-      scrollIntoView() { guidePosition = id; },
+      scrollIntoView() {},
       prepend(node) { node.parent = id; },
       contains() { return false; },
-      before() { guidePosition = id; },
+      before(node) { node.parent = id; guidePosition = id; },
+      close() { this.open = false; },
       closest(selector) {
         assert.equal(selector, '.grid');
         return id === 'connection-section' || id === 'balance-section' ? element('grid') : null;
@@ -1000,7 +974,7 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   };
   const start = source.indexOf('const tutorialSteps =');
   const end = source.indexOf('\n\nfetchBchUsd();', start);
-  runInNewContext(source.slice(start, end), { $, document });
+  runInNewContext(source.slice(start, end), { $, document, requestAnimationFrame: (fn) => fn(), openConnectionDialog() { element('connection-dialog').open = true; } });
   function $ (id) { return element(id); }
   element('wizard-toggle').listeners.click();
   assert.deepEqual([...highlighted], ['connection-section']);

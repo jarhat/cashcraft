@@ -2518,18 +2518,28 @@ label[for="category"] { display: block; }
 .media-gallery {
   margin-top: 28px;
   color: var(--muted);
-  font-size: .72rem;
+  font-size: .78rem;
 }
-.media-gallery p { margin: 6px 0 0; }
+.media-gallery-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.media-gallery-heading h2 { font-size: 1.15rem; }
 .media-gallery a { color: var(--ice); }
+.media-slide { overflow: hidden; border: 1px solid var(--glass-border); border-radius: 17px; background: var(--glass-tint); }
 .media-image {
-  display: block;
+  display: grid;
   width: 100%;
-  height: clamp(100px, 16vw, 190px);
-  border: 1px solid var(--glass-border);
-  border-radius: 17px;
-  background: var(--glass-tint) url("https://pub-0dcd642e0e954a94b4fd240efe006ed9.r2.dev/some-money-is-more-equal/a5fed29a3d/thumb.webp") center / cover no-repeat;
+  height: clamp(220px, 35vw, 360px);
+  place-items: center;
+  background: radial-gradient(ellipse at center, var(--page-halo), transparent 70%), rgb(0 0 0 / 25%);
 }
+.media-image img { display: block; width: 100%; height: 100%; object-fit: contain; transition: opacity .45s ease; }
+.media-image img[hidden], .media-unavailable[hidden] { display: none; }
+.media-unavailable { padding: 20px; text-align: center; }
+.media-caption { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; }
+.media-caption strong { display: block; color: #e9f4ff; font-size: .9rem; }
+.media-caption #media-category { display: block; }
+.media-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.media-controls .small-button { min-height: 44px; border-radius: 10px; }
+.media-credit { margin: 10px 0 0; }
 @media (max-width: 480px) {
   .token-summary { grid-template-columns: 36px minmax(0, 1fr); }
   .token-summary > .token-amount-group { grid-column: 2; justify-self: start; text-align: left; }
@@ -2548,3 +2558,85 @@ label[for="category"] { display: block; }
 .settings-menu { min-width: 190px; }
 .settings-menu .advanced-control { display: flex; margin: 0; white-space: nowrap; }
 #show-nfts-control[hidden] { display: none; }
+
+.topbar {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: color-mix(in srgb, var(--glow-color) 45%, transparent);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.topbar .wizard-guide { grid-column: 2; grid-row: 1; margin: 0; justify-content: start; }
+.topbar .quick-nav { grid-column: 3; grid-row: 1; }
+.topbar .topbar-tools { grid-column: 4; grid-row: 1; }
+.brand-snowflake { background: none; mask: none; -webkit-mask: none; background-image: url("/icon.svg"); background-size: contain; }
+.mesh-landscape, body.wallet-connected .mesh-landscape {
+  display: block;
+  position: fixed;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: min(440px, 60vh);
+  opacity: .65;
+  mask-image: linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%);
+}
+.mesh-sun { top: 0; }
+.mesh-terrain { bottom: 0; }
+.space-pixels { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--ice); opacity: .65; }
+body:not(.wallet-connected) .dashboard { padding: clamp(80px, 16vh, 160px) 0 38px; }
+body.wallet-connected .landing-welcome { display: none; }
+.landing-welcome { text-align: center; }
+.landing-welcome .button { max-width: 290px; margin: 22px auto 0; }
+body.wallet-connected .dashboard {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas: none;
+  grid-auto-flow: row;
+}
+body.wallet-connected #balance-section,
+body.wallet-connected #transfer-section,
+body.wallet-connected #earn-section { grid-area: auto; }
+body.wallet-connected #earn-section { grid-column: 1 / -1; }
+.dashboard > .wizard-dialog { grid-column: 1 / -1; margin: 0; scroll-margin-top: calc(var(--topbar-height, 100px) + 12px); }
+.connection-dialog { width: min(560px, calc(100% - 32px)); max-height: min(90vh, 850px); padding: 16px; border-radius: 18px; }
+.connection-dialog .panel { padding: 20px; box-shadow: none; }
+.connection-dialog > .wizard-dialog { margin: 0 0 14px; }
+.connection-dialog .heading { align-items: center; }
+.connection-dialog .heading > div { flex: 1; }
+.connection-dialog::backdrop { background: rgb(2 8 14 / 78%); }
+.tool-dropdown {
+  z-index: 30;
+  max-width: min(280px, calc(100vw - 32px));
+  border-radius: 12px;
+  background: var(--glass-tint);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 55%);
+}
+.tool-dropdown button { min-height: 44px; }
+#category-selector { position: static; }
+.token-options summary { position: absolute; top: 0; right: 0; }
+.nft-toggle { border-radius: 10px; }
+.nft-toggle input { appearance: auto; clip-path: none; width: 16px; height: 16px; accent-color: var(--glow-color); }
+.nft-toggle input::before { content: none; }
+.nft-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tutorial-highlight { outline: 2px solid color-mix(in srgb, var(--glow-color) 70%, white); box-shadow: 0 0 24px color-mix(in srgb, var(--glow-color) 40%, transparent), inset 0 0 25px color-mix(in srgb, var(--glow-color) 10%, transparent); }
+.tutorial-highlight::after, .wallet-link::after, .wizard-toggle::after, .transfer-tab.active::after {
+  background: conic-gradient(from var(--glow-angle), transparent 0 62%, color-mix(in srgb, var(--glow-color) 30%, transparent) 73%, var(--glow-color) 82%, #fff 85%, var(--glow-color) 88%, transparent 96%);
+  filter: drop-shadow(0 0 6px var(--glow-color));
+}
+@media (max-width: 760px) {
+  .topbar { grid-template-columns: 1fr auto; gap: 8px; }
+  .topbar .brand { grid-column: 1; grid-row: 1; }
+  .topbar .wizard-guide { grid-column: 2; grid-row: 1; }
+  .topbar .topbar-tools { grid-column: 1 / -1; grid-row: 2; justify-content: center; flex-wrap: wrap; max-width: none; }
+  .topbar .quick-nav { grid-column: 1 / -1; grid-row: 3; justify-self: center; }
+  body.wallet-connected .dashboard { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; }
+  body.wallet-connected #earn-section { grid-column: auto; }
+  .dashboard > .wizard-dialog { grid-column: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-highlight::after, .wallet-link::after, .wizard-toggle::after, .transfer-tab.active::after { animation: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .wizard-dialog:not([hidden]), .connection-dialog[open] { animation: guide-fade .22s ease-out both; }
+  @keyframes guide-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+}

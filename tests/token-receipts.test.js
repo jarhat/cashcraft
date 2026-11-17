@@ -143,11 +143,12 @@ test('celebration offers sound when autoplay is blocked and plays on a click', a
     ['gamba-sound', { addEventListener(_type, fn) { this.click = fn; } }],
     ['gamba-close', { addEventListener(_type, fn) { this.click = fn; } }],
   ]);
-  const start = source.indexOf('async function playGambaSound(');
+  const start = source.indexOf('let notificationAudio;');
   const end = source.indexOf("\n$('view-payment-request')", start);
   const context = {
     window: { AudioContext }, $: (id) => elements.get(id),
     translate: (text) => text, logger: { warn() {} },
+    document: { addEventListener() {} },
   };
   runInNewContext(source.slice(start, end), context);
   context.showGambaCelebration();
@@ -159,4 +160,35 @@ test('celebration offers sound when autoplay is blocked and plays on a click', a
   assert.equal(elements.get('gamba-sound-status').textContent, '');
   elements.get('gamba-close').click();
   assert.equal(elements.get('gamba-dialog').open, false);
+});
+
+test('a prior user gesture unlocks sound before a later GAMBA receipt', async () => {
+  const calls = [];
+  class AudioContext {
+    constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = {}; calls.push('created'); }
+    async resume() { this.state = 'running'; calls.push('resumed'); }
+    createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; }
+    createOscillator() { return { frequency: {}, connect() {}, start() { calls.push('tone'); }, stop() {} }; }
+  }
+  const listeners = {};
+  const elements = new Map([
+    ['gamba-dialog', { open: false, showModal() { this.open = true; }, close() {} }],
+    ['gamba-sound-status', { textContent: '' }],
+    ['gamba-sound', { addEventListener() {} }],
+    ['gamba-close', { addEventListener() {} }],
+  ]);
+  const start = source.indexOf('let notificationAudio;');
+  const end = source.indexOf("\n$('view-payment-request')", start);
+  const context = {
+    window: { AudioContext }, $: (id) => elements.get(id),
+    document: { addEventListener(type, handler) { listeners[type] = handler; } },
+    translate: (text) => text, logger: { warn() {} },
+  };
+  runInNewContext(source.slice(start, end), context);
+  listeners.pointerdown();
+  await new Promise((resolve) => setImmediate(resolve));
+  context.showGambaCelebration();
+  assert.equal(calls.filter((call) => call === 'created').length, 1);
+  assert.equal(calls.filter((call) => call === 'tone').length, 3);
+  assert.equal(elements.get('gamba-sound-status').textContent, '');
 });

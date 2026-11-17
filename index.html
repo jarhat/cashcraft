@@ -23,7 +23,7 @@
   <meta property="og:image:alt" content="CTF Cash: send and receive CashTokens">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:image" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/social-preview.png'>
-  <title>CTF / CASH 🐉</title>
+  <title>CTF / CASH</title>
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -54,6 +54,12 @@
         CTF
         <span class="brand-dim">/ CASH</span>
       </a>
+      <aside id="wizard-guide" class="wizard-guide" aria-label="Wizard tutorial">
+        <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
+          <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true"><path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/><path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/><path fill="#f0c7ae" d="M13 18h10v8H13z"/><path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/><path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/><path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/><path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/><path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/><path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/></svg>
+          <span>Wizard help</span>
+        </button>
+      </aside>
       <nav class="quick-nav" aria-label="Wallet actions" data-wallet-panel hidden>
         <button id="top-send" class="quick-action" type="button" aria-controls="send-panel">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M12 5l7 7-7 7" /></svg>
@@ -89,30 +95,15 @@
         <button id="wiki-open" class="theme-toggle" type="button" aria-label="CashTokens wiki" aria-haspopup="dialog" aria-controls="wiki-dialog">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-2-2-5-2-9-1v13c4-1 7-1 9 1m0-13c2-2 5-2 9-1v13c-4-1-7-1-9 1m0-13v13"/></svg>
         </button>
-        <div class="tool-menu">
-          <button id="settings-toggle" class="theme-toggle" type="button" aria-label="Settings" aria-expanded="false" aria-controls="settings-menu">
-            <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6m8 4v6"/><circle cx="8" cy="7" r="2"/><circle cx="16" cy="17" r="2"/></svg>
-          </button>
-          <div id="settings-menu" class="tool-dropdown settings-menu" hidden>
-            <label id="advanced-control" class="advanced-control">
-              <input id="advanced-mode" type="checkbox" role="switch" aria-controls="advanced-settings show-nfts-control">
-              <span>Advanced mode</span>
-            </label>
-          </div>
-        </div>
+        <button id="connection-open" class="theme-toggle" type="button" aria-label="Wallet connection" aria-haspopup="dialog" aria-controls="connection-dialog">
+          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M4 6V5a2 2 0 0 1 2-2h12v3m3 5h-5a2 2 0 0 0 0 4h5"/><circle cx="16" cy="13" r=".6"/></svg>
+        </button>
         <button id="notifications-toggle" class="theme-toggle notification-toggle" type="button" aria-label="Notifications" aria-controls="notifications-dialog" aria-describedby="notification-indicator" aria-haspopup="dialog">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9ZM10 20h4"/></svg>
           <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread notification</span></span>
         </button>
       </div>
     </header>
-
-    <aside id="wizard-guide" class="wizard-guide" aria-label="Wizard tutorial">
-      <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
-        <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true"><path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/><path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/><path fill="#f0c7ae" d="M13 18h10v8H13z"/><path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/><path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/><path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/><path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/><path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/><path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/></svg>
-        <span>Wizard help</span>
-      </button>
-    </aside>
 
       <div id="wizard-dialog" class="wizard-dialog" hidden>
         <strong id="wizard-title"></strong>
@@ -162,6 +153,16 @@
             <path d="m540 72 9 8-9 8"/>
           </g>
         </svg>
+        <svg class="space-pixels" viewBox="0 0 640 200" shape-rendering="crispEdges">
+          <path fill="currentColor" d="M78 26h3v3h3v3h-3v3h-3v-3h-3v-3h3zm76 35h3v3h-3zm388-24h3v3h3v3h-3v3h-3v-3h-3v-3h3zM485 96h3v3h-3zM240 22h2v2h-2zm164 55h2v2h-2z"/>
+          <path fill="currentColor" d="M112 108h8v4h-8zm-4 4h16v4h-16zm4 4h4v4h-4zm8 0h4v4h-4zm-8 4h4v4h-4zm8 0h4v4h-4zM510 124h4v-8h4v-8h8v8h4v8h-4v4h-12z"/>
+        </svg>
+      </div>
+      <div class="landing-welcome panel">
+        <p class="eyebrow">BITCOIN CASH · CASHTOKENS</p>
+        <h2>Your wallet, your universe.</h2>
+        <p class="muted">Connect a wallet to explore your balances and send CashTokens.</p>
+        <button id="landing-connect" class="button primary" type="button">Connect wallet <span aria-hidden="true">→</span></button>
       </div>
       <article id="balance-section" class="panel" data-wallet-panel hidden>
         <div class="heading">
@@ -361,7 +362,7 @@
         </div>
       </div>
       <p id="token-count" class="muted">—</p>
-      <label id="show-nfts-control" class="nft-toggle" hidden><input id="show-nfts" type="checkbox"> Show NFTs</label>
+      <label id="show-nfts-control" class="nft-toggle"><input id="show-nfts" type="checkbox"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM7 16l3-3 2 2 3-4 2 2M8 8h.01"/></svg><span>Show NFTs</span></label>
       <div id="tokens" class="token-list">
         <div class="empty">Connect your wallet to load balances.</div>
       </div>
@@ -377,13 +378,16 @@
         <div id="portfolio-chart-content" aria-live="polite">Connect a wallet to view allocation.</div>
       </details>
     </section>
+    </div>
+    <dialog id="connection-dialog" class="notifications-dialog connection-dialog" aria-labelledby="connection-title">
     <article id="connection-section" class="panel">
       <div class="heading">
         <div>
           <p class="eyebrow">WALLET SESSION</p>
-          <h2>Connection</h2>
+          <h2 id="connection-title">Connection</h2>
         </div>
         <span id="dot" class="dot"></span>
+        <button id="connection-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
       </div>
 
       <p id="status" class="status" role="status">Not connected</p>
@@ -420,12 +424,25 @@
         <p class="fine">Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.</p>
       </div>
     </article>
-    </div>
+    </dialog>
 
     <pre id="log" role="status"></pre>
-    <aside class="media-gallery" aria-label="Bitcoin Cash media">
-      <a class="media-image" href="https://bch.now" target="_blank" rel="noopener noreferrer" aria-label="Explore Bitcoin Cash media on bch.now"></a>
-      <p>Explore Bitcoin Cash media on <a href="https://bch.now" target="_blank" rel="noopener noreferrer">bch.now ↗</a></p>
+    <aside id="media-gallery" class="media-gallery" aria-label="Bitcoin Cash media">
+      <div class="media-gallery-heading">
+        <div><p class="eyebrow">BCH COMMUNITY</p><h2>Explore the artwork</h2></div>
+        <a href="https://bch.now" target="_blank" rel="noopener noreferrer">bch.now ↗</a>
+      </div>
+      <div class="media-slide">
+        <a id="media-link" class="media-image" href="https://bch.now/media/private-shadow" target="_blank" rel="noopener noreferrer">
+          <img id="media-image" src="https://pub-0dcd642e0e954a94b4fd240efe006ed9.r2.dev/private-shadow/7971982929/thumb.webp" alt="Stencil on a peeling wall: CCTV camera beam lights two silhouettes handing a green coin through a torn hole in the wall." width="480" height="480" loading="lazy" decoding="async">
+          <span id="media-unavailable" class="media-unavailable" hidden>Image unavailable</span>
+        </a>
+        <div class="media-caption">
+          <div><strong id="media-title">Private Shadow</strong><span id="media-category">Privacy</span></div>
+          <span id="media-position">1 / 16</span>
+        </div>
+      </div>
+      <p class="media-credit">Artwork from <a href="https://bch.now" target="_blank" rel="noopener noreferrer">bch.now ↗</a></p>
     </aside>
     <footer>
       <span>PRIVATE KEYS REMAIN IN YOUR WALLET</span>

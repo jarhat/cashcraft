@@ -1,4 +1,14 @@
 const spanish = {
+  'Wallet connection': 'Conexión de la cartera',
+  'Your wallet, your universe.': 'Tu cartera, tu universo.',
+  'Connect a wallet to explore your balances and send CashTokens.': 'Conecta una cartera para explorar tus saldos y enviar CashTokens.',
+  'BCH COMMUNITY': 'COMUNIDAD BCH',
+  'Explore the artwork': 'Explora las obras',
+  'Slideshow controls': 'Controles de la galería',
+  'Pause slideshow': 'Pausar galería',
+  'Play slideshow': 'Reproducir galería',
+  'Image unavailable': 'Imagen no disponible',
+  'Artwork from': 'Obras de',
   'Settings': 'Configuración',
   'CashTokens wiki': 'Wiki de CashTokens',
   'Inspect NFT': 'Inspeccionar NFT',
@@ -188,6 +198,16 @@ const spanish = {
 };
 
 const french = {
+  'Wallet connection': 'Connexion du portefeuille',
+  'Your wallet, your universe.': 'Votre portefeuille, votre univers.',
+  'Connect a wallet to explore your balances and send CashTokens.': 'Connectez un portefeuille pour consulter vos soldes et envoyer des CashTokens.',
+  'BCH COMMUNITY': 'COMMUNAUTÉ BCH',
+  'Explore the artwork': 'Découvrir les œuvres',
+  'Slideshow controls': 'Commandes du diaporama',
+  'Pause slideshow': 'Mettre le diaporama en pause',
+  'Play slideshow': 'Lancer le diaporama',
+  'Image unavailable': 'Image indisponible',
+  'Artwork from': 'Œuvres de',
   'Settings': 'Paramètres',
   'CashTokens wiki': 'Wiki CashTokens',
   'Inspect NFT': 'Examiner le NFT',
@@ -377,6 +397,16 @@ const french = {
 };
 
 const german = {
+  'Wallet connection': 'Wallet-Verbindung',
+  'Your wallet, your universe.': 'Deine Wallet, dein Universum.',
+  'Connect a wallet to explore your balances and send CashTokens.': 'Verbinde eine Wallet, um Guthaben anzusehen und CashTokens zu senden.',
+  'BCH COMMUNITY': 'BCH-COMMUNITY',
+  'Explore the artwork': 'Kunstwerke entdecken',
+  'Slideshow controls': 'Diashow-Steuerung',
+  'Pause slideshow': 'Diashow pausieren',
+  'Play slideshow': 'Diashow starten',
+  'Image unavailable': 'Bild nicht verfügbar',
+  'Artwork from': 'Kunstwerke von',
   'Settings': 'Einstellungen',
   'CashTokens wiki': 'CashTokens-Wiki',
   'Inspect NFT': 'NFT untersuchen',

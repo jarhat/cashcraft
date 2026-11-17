@@ -6,6 +6,7 @@ import { fetchTokenMetadata, fetchCauldronSpot } from './portfolio-data.js';
 import { loadTokenLogo } from './token-logo.js';
 import { inspectNft } from './nft-inspection.js';
 import { setupMarketTicker } from './market-ticker.js';
+import { setupMediaSlideshow } from './media-slideshow.js';
 import { createLogger } from './logger.js';
 import { submitCashAddress, API_BASE_URL } from './api.js';
 import {
@@ -91,6 +92,7 @@ const mainnet = network === 'mainnet';
 const prefix = mainnet ? 'bitcoincash' : 'bchtest';
 const $ = (id) => document.getElementById(id);
 setupMarketTicker($('market-ticker'), translate, logger);
+setupMediaSlideshow($);
 let QRCode, decodeCashAddress, encodeCashAddress, hash160, initiateDappRelay;
 let DappConnectionManager, loadSession, sourceOutputToRelay, transactionToHex;
 let TransactionBuilder, placeholderP2PKHUnlocker, provider;
@@ -254,7 +256,7 @@ function setTheme(theme) {
 const migratedTheme = { dark: 'frost', blue: 'frost', green: 'aurora', bch: 'aurora', 'bch-sunrise': 'aurora' }[savedTheme] || savedTheme;
 setTheme(['frost', 'aurora'].includes(migratedTheme) ? migratedTheme : 'frost');
 
-for (const name of ['theme', 'language', 'settings']) {
+for (const name of ['theme', 'language']) {
   const toggle = $(`${name}-toggle`);
   const menu = $(`${name}-menu`);
   const close = () => {
@@ -294,7 +296,7 @@ for (const name of ['theme', 'language', 'settings']) {
 
 function setConnection(connected) {
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
-  $('advanced-settings').hidden = !connected || !$('advanced-mode').checked;
+  $('advanced-settings').hidden = !connected;
   document.body.classList.toggle('wallet-connected', connected);
   if (!$('wizard-dialog').hidden) {
     if (connected) $('wizard-next').disabled = false;
@@ -1065,7 +1067,6 @@ function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
     const inspection = inspectNft(nft);
     const advanced = document.createElement('details');
     advanced.className = 'advanced-nft';
-    advanced.hidden = !$('advanced-mode').checked;
     const summary = document.createElement('summary');
     summary.textContent = translate('Inspect NFT');
     const info = document.createElement('p');
@@ -1615,19 +1616,15 @@ $('refresh').addEventListener('click', () => {
   });
 });
 
-$('advanced-mode').addEventListener('change', () => {
-  const enabled = $('advanced-mode').checked;
-  $('advanced-settings').hidden = !walletReady || !enabled;
-  $('show-nfts-control').hidden = !enabled;
-  if (!enabled && $('show-nfts').checked) {
-    $('show-nfts').checked = false;
-    portfolioPage = 0;
-    paginatePortfolio();
-  }
-  document.querySelectorAll('.advanced-nft').forEach((details) => {
-    details.hidden = !enabled;
-    if (details.hidden) details.open = false;
-  });
+function openConnectionDialog() {
+  if (!$('connection-dialog').open) $('connection-dialog').showModal();
+}
+
+$('connection-open').addEventListener('click', openConnectionDialog);
+$('landing-connect').addEventListener('click', openConnectionDialog);
+$('connection-close').addEventListener('click', () => $('connection-dialog').close());
+$('connection-dialog').addEventListener('close', () => {
+  if (!$('connection-dialog').open && !$('wizard-dialog').hidden && tutorialStep === 0) closeTutorial();
 });
 
 $('wiki-open').addEventListener('click', () => {
@@ -1668,7 +1665,7 @@ function showFundingDialog(message) {
 $('funding-close').addEventListener('click', () => $('funding-dialog').close());
 $('funding-connect').addEventListener('click', () => {
   $('funding-dialog').close();
-  $('connection-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  openConnectionDialog();
   $('connect').focus({ preventScroll: true });
   if (relay?.uri && !loadSession()?.paths?.length) showPairingUri(relay.uri).catch(report);
   else if (!relay && !pairingInProgress) $('connect').click();
@@ -1694,12 +1691,32 @@ notificationsDialog.addEventListener('close', () => {
   $('notifications-toggle').focus({ preventScroll: true });
 });
 
-async function playGambaSound(fromClick = false) {
-  let audio;
+let notificationAudio;
+
+function prepareNotificationAudio() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) throw new Error('Audio is not supported.');
+  if (!notificationAudio || notificationAudio.state === 'closed') notificationAudio = new AudioContext();
+  return notificationAudio;
+}
+
+function unlockNotificationAudio() {
   try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) throw new Error('Audio is not supported.');
-    audio = new AudioContext();
+    const audio = prepareNotificationAudio();
+    if (audio.state !== 'running') {
+      audio.resume().catch((error) => logger.warn('Could not enable notification sound:', error));
+    }
+  } catch (error) {
+    logger.warn('Could not enable notification sound:', error);
+  }
+}
+
+document.addEventListener('pointerdown', unlockNotificationAudio, { once: true });
+document.addEventListener('keydown', unlockNotificationAudio, { once: true });
+
+async function playGambaSound(fromClick = false) {
+  try {
+    const audio = prepareNotificationAudio();
     if (audio.state !== 'running' && fromClick) await audio.resume();
     if (audio.state !== 'running') throw new Error('Audio playback requires a user gesture.');
 
@@ -1716,15 +1733,10 @@ async function playGambaSound(fromClick = false) {
       volume.connect(audio.destination);
       tone.start(time);
       tone.stop(time + 0.16);
-      if (index === 2) {
-        tone.onended = () => audio.close().catch((error) => logger.warn('Could not close audio:', error));
-      }
     });
     $('gamba-sound-status').textContent = '';
   } catch (error) {
-    if (audio && audio.state !== 'closed') {
-      audio.close().catch((closeError) => logger.warn('Could not close audio:', closeError));
-    }
+    logger.warn('Notification sound unavailable:', error);
     $('gamba-sound-status').textContent = translate('Sound unavailable. Tap Play sound to try again.');
   }
 }
@@ -1741,7 +1753,7 @@ $('gamba-close').addEventListener('click', () => $('gamba-dialog').close());
 $('view-payment-request').addEventListener('click', () => {
   notificationsDialog.close();
   if (!walletReady) {
-    $('connection-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    openConnectionDialog();
     $('connect').focus({ preventScroll: true });
     return;
   }
@@ -2060,7 +2072,9 @@ function showTutorialStep() {
   const dialog = $('wizard-dialog');
   const focused = dialog.contains(document.activeElement) ? document.activeElement : null;
   panel.classList.add('tutorial-highlight');
-  panel.prepend(dialog);
+  if (tutorialStep === 0) openConnectionDialog();
+  panel.before(dialog);
+  if (tutorialStep !== 0 && $('connection-dialog').open) $('connection-dialog').close();
   $('wizard-title').textContent = step.title;
   $('wizard-message').textContent = step.message;
   $('wallet-help').hidden = tutorialStep !== 0;
@@ -2069,7 +2083,9 @@ function showTutorialStep() {
   $('wizard-next').disabled = tutorialStep === 0 && $('balance-section').hidden;
   $('wizard-next').textContent = tutorialStep === tutorialSteps.length - 1 ? 'Done' : 'Next';
   if (focused) (focused.disabled ? $('wizard-next') : focused).focus({ preventScroll: true });
-  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  requestAnimationFrame(() => {
+    if (!dialog.hidden) dialog.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 }
 
 function closeTutorial() {
@@ -2079,7 +2095,7 @@ function closeTutorial() {
   $('wizard-toggle').setAttribute('aria-expanded', 'false');
   guide.classList.remove('walking');
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
-  if (focused) $('wizard-toggle').focus({ preventScroll: true });
+  if (focused) ($('connection-dialog').open ? $('connection-close') : $('wizard-toggle')).focus({ preventScroll: true });
 }
 
 function openTutorial() {
