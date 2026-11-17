@@ -295,11 +295,12 @@ function setConnection(connected) {
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
   $('advanced-settings').hidden = !connected || !$('advanced-mode').checked;
   document.body.classList.toggle('wallet-connected', connected);
-  $('wizard-guide').hidden = connected;
-  if (connected && !$('wizard-dialog').hidden) closeTutorial();
-  else if (!connected && !$('wizard-dialog').hidden) {
-    tutorialStep = 0;
-    showTutorialStep();
+  if (!$('wizard-dialog').hidden) {
+    if (connected) $('wizard-next').disabled = false;
+    else {
+      tutorialStep = 0;
+      showTutorialStep();
+    }
   }
   $('dot').classList.toggle('online', connected);
   $('refresh').disabled = !connected;

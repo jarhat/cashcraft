@@ -138,7 +138,7 @@
         </div>
       </div>
 
-    <section class="grid">
+    <div class="dashboard">
       <div class="mesh-landscape" aria-hidden="true">
         <div class="mesh-sun"></div>
         <svg class="mesh-terrain" viewBox="0 0 640 260" preserveAspectRatio="none" fill="none">
@@ -154,50 +154,6 @@
           </g>
         </svg>
       </div>
-      <article id="connection-section" class="panel">
-        <div class="heading">
-          <div>
-            <p class="eyebrow">WALLET SESSION</p>
-            <h2>Connection</h2>
-          </div>
-          <span id="dot" class="dot"></span>
-        </div>
-
-        <p id="status" class="status" role="status">Not connected</p>
-
-        <div id="pairing" class="pairing hidden">
-          <canvas id="qr"></canvas>
-          <p class="pair-title">Connect your wallet</p>
-          <p class="muted">
-            On another device, scan this code with your wallet’s WizardConnect scanner.
-          </p>
-          <details>
-            <summary>Show pairing URI</summary>
-            <div class="uri-line">
-              <code id="pair-uri"></code>
-              <button id="copy-uri" class="small-button">Copy</button>
-            </div>
-          </details>
-        </div>
-
-        <button id="connect" class="button primary">
-          Connect wallet <span>↗</span>
-        </button>
-        <button id="open-wallet" class="button secondary wallet-link" type="button" disabled>
-          Open in wallet <span aria-hidden="true">↗</span>
-        </button>
-        <p id="pairing-help" class="fine">Choose Connect wallet, then open your wallet and approve the connection. Return to this browser to continue.</p>
-        <button id="forget" class="button secondary" hidden>
-          Forget saved session and pair again
-        </button>
-        <div id="advanced-settings" hidden>
-          <button id="refresh" class="button secondary" disabled>Refresh balances</button>
-          <label for="scan-count">Addresses per receive and change path</label>
-          <input id="scan-count" type="number" min="1" max="1000" step="1" value="50">
-          <p class="fine">Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.</p>
-        </div>
-      </article>
-
       <article id="balance-section" class="panel" data-wallet-panel hidden>
         <div class="heading">
           <div>
@@ -217,7 +173,6 @@
           <button id="copy-address" class="small-button" disabled>Copy</button>
         </div>
       </article>
-    </section>
 
     <section id="transfer-section" class="panel section transfer-panel" data-wallet-panel hidden>
       <div class="heading">
@@ -414,6 +369,50 @@
         <div id="portfolio-chart-content" aria-live="polite">Connect a wallet to view allocation.</div>
       </details>
     </section>
+    <article id="connection-section" class="panel">
+      <div class="heading">
+        <div>
+          <p class="eyebrow">WALLET SESSION</p>
+          <h2>Connection</h2>
+        </div>
+        <span id="dot" class="dot"></span>
+      </div>
+
+      <p id="status" class="status" role="status">Not connected</p>
+
+      <div id="pairing" class="pairing hidden">
+        <canvas id="qr"></canvas>
+        <p class="pair-title">Connect your wallet</p>
+        <p class="muted">
+          On another device, scan this code with your wallet’s WizardConnect scanner.
+        </p>
+        <details>
+          <summary>Show pairing URI</summary>
+          <div class="uri-line">
+            <code id="pair-uri"></code>
+            <button id="copy-uri" class="small-button">Copy</button>
+          </div>
+        </details>
+      </div>
+
+      <button id="connect" class="button primary">
+        Connect wallet <span>↗</span>
+      </button>
+      <button id="open-wallet" class="button secondary wallet-link" type="button" disabled>
+        Open in wallet <span aria-hidden="true">↗</span>
+      </button>
+      <p id="pairing-help" class="fine">Choose Connect wallet, then open your wallet and approve the connection. Return to this browser to continue.</p>
+      <button id="forget" class="button secondary" hidden>
+        Forget saved session and pair again
+      </button>
+      <div id="advanced-settings" hidden>
+        <button id="refresh" class="button secondary" disabled>Refresh balances</button>
+        <label for="scan-count">Addresses per receive and change path</label>
+        <input id="scan-count" type="number" min="1" max="1000" step="1" value="50">
+        <p class="fine">Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.</p>
+      </div>
+    </article>
+    </div>
 
     <pre id="log" role="status"></pre>
     <footer>

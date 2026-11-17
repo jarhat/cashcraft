@@ -759,20 +759,29 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   const end = source.indexOf('\nfunction clearWalletDisplay', start);
   const context = {
     $, document: { querySelectorAll: () => panels, body: { classList: { toggle() {} } } }, sending: false,
-    pairingInProgress: false, transferInteracted: false,
+    pairingInProgress: false, transferInteracted: false, tutorialStep: 2,
+    showTutorialStep() { context.tutorialUpdated = true; },
   };
   runInNewContext(source.slice(start, end), context);
   context.setConnection(true);
   assert.ok(panels.every((panel) => !panel.hidden));
-  assert.equal($('wizard-guide').hidden, true);
+  assert.equal($('wizard-guide').hidden, false);
   assert.equal($('advanced-settings').hidden, true);
   $('advanced-mode').checked = true;
   context.setConnection(true);
   assert.equal($('advanced-settings').hidden, false);
+  $('wizard-dialog').hidden = false;
+  $('wizard-next').disabled = true;
+  context.setConnection(true);
+  assert.equal($('wizard-dialog').hidden, false);
+  assert.equal($('wizard-next').disabled, false);
+  assert.equal(context.tutorialUpdated, undefined);
   context.setConnection(false);
   assert.ok(panels.every((panel) => panel.hidden));
   assert.equal($('wizard-guide').hidden, false);
   assert.equal($('advanced-settings').hidden, true);
+  assert.equal(context.tutorialStep, 0);
+  assert.equal(context.tutorialUpdated, true);
 });
 
 test('advanced mode shows scan controls only while connected', () => {

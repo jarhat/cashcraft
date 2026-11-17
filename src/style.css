@@ -1163,7 +1163,7 @@ textarea:focus-visible {
 }
 
 .section,
-.grid .panel {
+.dashboard .panel {
   scroll-margin-top: 140px;
 }
 
@@ -2120,8 +2120,9 @@ footer { margin-top: auto; padding-top: 24px; }
 .topbar-tools { grid-column: 3; }
 .wizard-guide { display: flex; justify-content: center; margin: 22px 0 12px; }
 .wizard-guide[hidden], #connect[hidden] { display: none; }
-.grid { position: relative; }
-body:not(.wallet-connected) .grid {
+.dashboard { position: relative; }
+body:not(.wallet-connected) .dashboard {
+  display: grid;
   grid-template-columns: minmax(0, 520px);
   justify-content: center;
   padding: 165px 0 38px;
@@ -2184,7 +2185,7 @@ body.wallet-connected .mesh-landscape { display: none; }
   .topbar { grid-template-columns: 1fr auto; }
   .topbar-tools { grid-column: 2; }
   .quick-nav { grid-column: 1 / -1; grid-row: 2; justify-self: center; }
-  body:not(.wallet-connected) .grid { padding: 125px 0 28px; }
+  body:not(.wallet-connected) .dashboard { padding: 125px 0 28px; }
   .mesh-landscape { height: 190px; }
   .wizard-guide { margin: 16px 0 4px; }
 }
@@ -2261,4 +2262,156 @@ html, body { overscroll-behavior-y: none; }
     visibility: hidden;
   }
   .hero[data-wallet-panel] .hero-slide { animation: none; }
+}
+
+/* Arcade dashboard */
+body {
+  background-image:
+    radial-gradient(ellipse at 50% -20%, var(--page-halo), transparent 55%),
+    radial-gradient(ellipse at 100% 55%, var(--page-halo-secondary), transparent 38%),
+    linear-gradient(rgb(132 205 255 / 3%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(132 205 255 / 3%) 1px, transparent 1px);
+  background-size: auto, auto, 40px 40px, 40px 40px;
+}
+.topbar {
+  border-radius: 4px;
+  border-bottom: 2px solid var(--glow-color);
+  box-shadow: 4px 4px 0 rgb(0 0 0 / 30%), 0 5px 25px color-mix(in srgb, var(--glow-color) 12%, transparent);
+}
+.brand { font-family: var(--mono); font-size: .9rem; }
+.brand-snowflake { filter: drop-shadow(0 0 6px var(--glow-color)); }
+body.wallet-connected .wizard-guide {
+  justify-content: flex-start;
+  margin: 18px 0 12px;
+}
+.wizard-toggle {
+  border-radius: 4px;
+  background: linear-gradient(110deg, color-mix(in srgb, var(--glow-color) 19%, #10172b), #10172b);
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--glow-color) 35%, transparent);
+  font-weight: 700;
+}
+.wizard-dialog, .notifications-dialog { border-radius: 4px; }
+body.wallet-connected .dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  grid-template-areas: "balance transfer" "portfolio transfer" "connection transfer";
+  align-items: start;
+  gap: 16px;
+}
+body.wallet-connected #connection-section { grid-area: connection; }
+body.wallet-connected #balance-section { grid-area: balance; }
+body.wallet-connected #transfer-section { grid-area: transfer; }
+body.wallet-connected #earn-section { grid-area: portfolio; }
+body.wallet-connected .dashboard .section { margin-top: 0; }
+.panel {
+  border-radius: 4px;
+  border-color: color-mix(in srgb, var(--glow-color) 35%, transparent);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--glow-color) 12%, transparent), transparent 40%),
+    repeating-linear-gradient(0deg, transparent 0 5px, rgb(255 255 255 / 1%) 5px 6px),
+    var(--glass-tint);
+  box-shadow: 5px 5px 0 rgb(0 0 0 / 28%), 0 16px 38px rgb(0 0 0 / 22%);
+}
+.panel::before {
+  inset: 0 auto auto 0;
+  width: 76px;
+  height: 3px;
+  background: repeating-linear-gradient(90deg, var(--glow-color) 0 12px, transparent 12px 16px);
+}
+.panel h2 { font-size: clamp(1.35rem, 2vw, 1.7rem); letter-spacing: -.035em; }
+.panel .eyebrow { font-weight: 700; }
+#balance-section {
+  background:
+    radial-gradient(circle at 90% 15%, color-mix(in srgb, var(--glow-color) 22%, transparent), transparent 38%),
+    linear-gradient(135deg, color-mix(in srgb, var(--glow-color) 12%, transparent), transparent 60%),
+    var(--glass-tint);
+}
+#balance-section .balance { color: #fff; text-shadow: 0 0 24px color-mix(in srgb, var(--glow-color) 35%, transparent); }
+.coin {
+  border-radius: 4px;
+  border: 2px solid var(--ice);
+  background: color-mix(in srgb, var(--glow-color) 22%, #101b32);
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--glow-color) 40%, transparent);
+  font-weight: 800;
+}
+.button, .small-button, .transfer-tab, .quick-action, .theme-toggle,
+input:not([type="checkbox"]), textarea, select {
+  border-radius: 4px;
+}
+.primary {
+  background: linear-gradient(115deg, #fff, var(--ice));
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--glow-color) 45%, transparent);
+}
+.transfer-tabs { border-radius: 4px; }
+.transfer-tab.active { border-bottom: 2px solid var(--ice); }
+.token-row { padding: 14px 0; }
+.token-row:hover { background: color-mix(in srgb, var(--glow-color) 5%, transparent); }
+.notification-indicator:not([hidden]) {
+  top: -4px;
+  right: -4px;
+  width: 13px;
+  height: 13px;
+  border: 2px solid #fff;
+  border-radius: 2px;
+  background: #fa244b;
+  box-shadow: 0 0 0 2px #8f1638, 0 0 12px #ff244b;
+}
+.advanced-control, .nft-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  background: rgb(0 0 0 / 22%);
+  color: #d3e6f4;
+  font: 700 .72rem var(--mono);
+  cursor: pointer;
+}
+.advanced-control:has(input:checked), .nft-toggle:has(input:checked) {
+  border-color: var(--ice);
+  background: color-mix(in srgb, var(--glow-color) 18%, #10182a);
+  color: #fff;
+}
+.advanced-control input, .nft-toggle input {
+  appearance: none;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #617488;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  cursor: pointer;
+}
+.advanced-control input::before, .nft-toggle input::before {
+  width: 8px;
+  height: 8px;
+  margin: 0;
+  border-radius: 0;
+  background: #10182a;
+  transform: none;
+  transition: none;
+  content: "";
+}
+.advanced-control input:checked, .nft-toggle input:checked { background: var(--ice); }
+.advanced-control input:checked::before, .nft-toggle input:checked::before {
+  background: #fff;
+  transform: none;
+}
+.advanced-control:focus-within, .nft-toggle:focus-within { outline: 2px solid var(--ice); outline-offset: 3px; }
+@media (max-width: 760px) {
+  body.wallet-connected .dashboard {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "balance" "transfer" "portfolio" "connection";
+    gap: 12px;
+  }
+  body.wallet-connected .wizard-guide { margin: 14px 0 12px; }
+  .panel { padding: 20px; }
 }
