@@ -15,6 +15,8 @@ const MAX_LINE: u64 = 4096;
 const MAX_COORD: i32 = 262_000;
 const CACHE_CHUNKS: usize = 24;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(20);
+const MAX_ANIMALS: usize = 8;
+const ANIMAL_TICK: Duration = Duration::from_secs(1);
 type Blocks = HashMap<(i32, i32, i32), i32>;
 
 extern "C" {
@@ -78,6 +80,27 @@ struct State {
     db: Connection,
     players: HashMap<u32, Player>,
     next_id: u32,
+    animals: Vec<Animal>,
+    next_animal_id: u32,
+    animal_tick: u64,
+}
+
+#[derive(Clone, Debug)]
+struct Animal {
+    id: u32,
+    x: f64,
+    y: f64,
+    z: f64,
+    heading: u8,
+}
+
+impl Animal {
+    fn message(&self) -> String {
+        format!(
+            "M,{},{:.2},{:.2},{:.2},{}\n",
+            self.id, self.x, self.y, self.z, self.heading
+        )
+    }
 }
 
 struct Server {
@@ -107,6 +130,137 @@ fn broadcast(state: &State, except: Option<u32>, message: &str) {
             send(player, message.as_bytes().to_vec());
         }
     }
+}
+
+fn animal_ground(
+    terrain: &mut Terrain,
+    db: &Connection,
+    x: i32,
+    z: i32,
+) -> rusqlite::Result<Option<i32>> {
+    if x.abs() >= MAX_COORD || z.abs() >= MAX_COORD {
+        return Ok(None);
+    }
+    let (p, q) = (chunked(x), chunked(z));
+    let blocks = terrain.chunk(p, q);
+    let mut edits = HashMap::new();
+    let mut stmt =
+        db.prepare_cached("SELECT y,w FROM block WHERE p=?1 AND q=?2 AND x=?3 AND z=?4")?;
+    for row in stmt.query_map(params![p, q, x, z], |r| {
+        Ok((r.get::<_, i32>(0)?, r.get::<_, i32>(1)?))
+    })? {
+        let (y, w) = row?;
+        edits.insert(y, w);
+    }
+    for y in (1..=254).rev() {
+        let w = edits
+            .get(&y)
+            .copied()
+            .unwrap_or_else(|| *blocks.get(&(x, y, z)).unwrap_or(&0));
+        if w == 0 || w == 16 || (17..=23).contains(&w) {
+            continue;
+        }
+        return Ok(if matches!(w, 1 | 2 | 6 | 7 | 9 | 11) {
+            Some(y)
+        } else {
+            None
+        });
+    }
+    Ok(None)
+}
+
+fn update_animals(server: &Server) -> rusqlite::Result<()> {
+    let mut terrain = server.terrain.lock().unwrap();
+    let mut state = server.state.lock().unwrap();
+    state.animal_tick += 1;
+    let tick = state.animal_tick;
+    let positions: Vec<_> = state
+        .players
+        .values()
+        .map(|p| p.position)
+        .filter(|p| p[1] > 1.0)
+        .collect();
+    let mut removed = String::new();
+    state.animals.retain(|a| {
+        let nearby = positions
+            .iter()
+            .any(|p| (p[0] - a.x).powi(2) + (p[2] - a.z).powi(2) < 64.0 * 64.0);
+        if !nearby {
+            removed.push_str(&format!("MD,{}\n", a.id));
+        }
+        nearby
+    });
+    if !removed.is_empty() {
+        broadcast(&state, None, &removed);
+    }
+
+    let mut animals = state.animals.clone();
+    for animal in &mut animals {
+        if (tick + u64::from(animal.id)) % 5 == 0 {
+            animal.heading = ((tick / 5 + u64::from(animal.id) * 3) % 4) as u8;
+        }
+        let (dx, dz) = match animal.heading {
+            0 => (0.0, -0.6),
+            1 => (0.6, 0.0),
+            2 => (0.0, 0.6),
+            _ => (-0.6, 0.0),
+        };
+        let (x, z) = (animal.x + dx, animal.z + dz);
+        if let Some(y) = animal_ground(&mut terrain, &state.db, x.round() as i32, z.round() as i32)?
+        {
+            let feet = f64::from(y) + 0.5;
+            if (feet - animal.y).abs() <= 1.0 {
+                animal.x = x;
+                animal.y = feet;
+                animal.z = z;
+            } else {
+                animal.heading = (animal.heading + 1) % 4;
+            }
+        } else {
+            animal.heading = (animal.heading + 1) % 4;
+        }
+    }
+    state.animals = animals;
+
+    if state.animals.len() < MAX_ANIMALS {
+        let eligible: Vec<_> = positions
+            .iter()
+            .filter(|p| {
+                state
+                    .animals
+                    .iter()
+                    .filter(|a| (p[0] - a.x).powi(2) + (p[2] - a.z).powi(2) < 32.0 * 32.0)
+                    .count()
+                    < 2
+            })
+            .collect();
+        if !eligible.is_empty() {
+            let p = eligible[tick as usize % eligible.len()];
+            let angle = ((tick * 7 + u64::from(state.next_animal_id) * 13) % 32) as f64
+                * std::f64::consts::TAU
+                / 32.0;
+            let x = (p[0] + angle.cos() * 12.0).round() as i32;
+            let z = (p[2] + angle.sin() * 12.0).round() as i32;
+            if let Some(y) = animal_ground(&mut terrain, &state.db, x, z)? {
+                if (f64::from(y) - p[1]).abs() <= 10.0 {
+                    let id = state.next_animal_id;
+                    state.next_animal_id = state.next_animal_id.wrapping_add(1).max(1);
+                    state.animals.push(Animal {
+                        id,
+                        x: f64::from(x),
+                        y: f64::from(y) + 0.5,
+                        z: f64::from(z),
+                        heading: (id % 4) as u8,
+                    });
+                }
+            }
+        }
+    }
+    let updates: String = state.animals.iter().map(Animal::message).collect();
+    if !updates.is_empty() {
+        broadcast(&state, None, &updates);
+    }
+    Ok(())
 }
 
 fn open_database(path: &str) -> rusqlite::Result<Connection> {
@@ -633,16 +787,19 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
             &player,
             format!("U,{id},0,0,0,0,0\nE,{now},600\nT,Welcome to NetCraft!\n").into_bytes(),
         );
+        let mut snapshot = String::new();
         for (other_id, other) in &state.players {
             let [x, y, z, rx, ry] = other.position;
-            send(
-                &player,
-                format!(
-                    "P,{other_id},{x},{y},{z},{rx},{ry}\nN,{other_id},{}\n",
-                    other.name
-                )
-                .into_bytes(),
-            );
+            snapshot.push_str(&format!(
+                "P,{other_id},{x},{y},{z},{rx},{ry}\nN,{other_id},{}\n",
+                other.name
+            ));
+        }
+        for animal in &state.animals {
+            snapshot.push_str(&animal.message());
+        }
+        if !snapshot.is_empty() {
+            send(&player, snapshot.into_bytes());
         }
         broadcast(
             &state,
@@ -759,12 +916,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             db: open_database(&database)?,
             players: HashMap::new(),
             next_id: 1,
+            animals: Vec::new(),
+            next_animal_id: 1,
+            animal_tick: 0,
         }),
         terrain: Mutex::new(Terrain::default()),
         reward_categories,
         default_reward_category,
         address_prefix,
     });
+    {
+        let server = server.clone();
+        thread::spawn(move || loop {
+            thread::sleep(ANIMAL_TICK);
+            if let Err(error) = update_animals(&server) {
+                eprintln!("animal simulation failed: {error}");
+            }
+        });
+    }
     let listener = TcpListener::bind(&address)?;
     eprintln!("NetCraft listening on {address}, database {database}");
     for stream in listener.incoming() {
@@ -793,6 +962,9 @@ mod tests {
                 db: open_database(":memory:").unwrap(),
                 players: HashMap::new(),
                 next_id: 3,
+                animals: Vec::new(),
+                next_animal_id: 1,
+                animal_tick: 0,
             }),
             terrain: Mutex::new(Terrain::default()),
             reward_categories: HashMap::from([(6, "a".repeat(64))]),
@@ -946,5 +1118,89 @@ mod tests {
         assert_eq!(line, "T,hello\n");
         drop(sender);
         writer.join().unwrap();
+    }
+
+    #[test]
+    fn animals_move_and_despawn_for_all_players() {
+        let (server, first, second) = setup();
+        {
+            let mut state = server.state.lock().unwrap();
+            for player in state.players.values_mut() {
+                player.position = [0.0, 200.5, 0.0, 0.0, 0.0];
+            }
+            for z in [0, -1] {
+                state
+                    .db
+                    .execute(
+                        "INSERT INTO block (p,q,x,y,z,w) VALUES (?1,?2,0,200,?3,6)",
+                        params![0, chunked(z), z],
+                    )
+                    .unwrap();
+            }
+            state.animals.push(Animal {
+                id: 7,
+                x: 0.0,
+                y: 200.5,
+                z: 0.0,
+                heading: 0,
+            });
+        }
+        update_animals(&server).unwrap();
+        let one = String::from_utf8(first.try_recv().unwrap()).unwrap();
+        let two = String::from_utf8(second.try_recv().unwrap()).unwrap();
+        assert_eq!(one, two);
+        assert!(one.contains("M,7,0.00,200.50,-0.60,0\n"));
+        {
+            let mut state = server.state.lock().unwrap();
+            for player in state.players.values_mut() {
+                player.position[0] = 1000.0;
+            }
+        }
+        update_animals(&server).unwrap();
+        assert_eq!(first.try_recv().unwrap(), b"MD,7\n");
+        assert_eq!(second.try_recv().unwrap(), b"MD,7\n");
+    }
+
+    #[test]
+    fn animals_do_not_walk_through_built_blocks() {
+        let (server, _, _) = setup();
+        let mut terrain = server.terrain.lock().unwrap();
+        let state = server.state.lock().unwrap();
+        state
+            .db
+            .execute("INSERT INTO block (p,q,x,y,z,w) VALUES (0,0,0,200,0,6)", [])
+            .unwrap();
+        assert_eq!(
+            animal_ground(&mut terrain, &state.db, 0, 0).unwrap(),
+            Some(200)
+        );
+        state
+            .db
+            .execute("INSERT INTO block (p,q,x,y,z,w) VALUES (0,0,0,201,0,8)", [])
+            .unwrap();
+        assert_eq!(animal_ground(&mut terrain, &state.db, 0, 0).unwrap(), None);
+    }
+
+    #[test]
+    fn animals_spawn_near_players_and_are_shared() {
+        let (server, first, second) = setup();
+        {
+            let mut state = server.state.lock().unwrap();
+            for player in state.players.values_mut() {
+                player.position = [0.0, 200.5, 0.0, 0.0, 0.0];
+            }
+            state
+                .db
+                .execute(
+                    "INSERT INTO block (p,q,x,y,z,w) VALUES (-1,-1,-8,200,-8,6)",
+                    [],
+                )
+                .unwrap();
+        }
+        update_animals(&server).unwrap();
+        let one = String::from_utf8(first.try_recv().unwrap()).unwrap();
+        let two = String::from_utf8(second.try_recv().unwrap()).unwrap();
+        assert_eq!(one, two);
+        assert_eq!(one, "M,1,-8.00,200.50,-8.00,1\n");
     }
 }

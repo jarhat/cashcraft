@@ -17,6 +17,7 @@
 #include "inventory.h"
 #include <unistd.h>
 #include "auth.h"
+#include "animals.h"
 #include "chunk.h"
 #include "client.h"
 #include "config.h"
@@ -2264,6 +2265,7 @@ void render_players(Attrib *attrib, Player *player) {
             draw_player(attrib, other);
         }
     }
+    animals_render(attrib, matrix, s->x, s->y, s->z, g->render_radius);
 }
 
 void render_sky(Attrib *attrib, Player *player, GLuint buffer) {
@@ -3444,6 +3446,15 @@ void parse_buffer(char *buffer, int len) {
     char *line = tokenize(buffer, "\n", &key);
     while (line) {
         int pid;
+        unsigned int animal_id;
+        float ax, ay, az;
+        int heading;
+        if (sscanf(line, "M,%u,%f,%f,%f,%d", &animal_id, &ax, &ay, &az, &heading) == 5) {
+            animals_update(animal_id, ax, ay, az, heading);
+        }
+        if (sscanf(line, "MD,%u", &animal_id) == 1) {
+            animals_remove(animal_id);
+        }
         float ux, uy, uz, urx, ury;
         if (sscanf(line, "U,%d,%f,%f,%f,%f,%f",
             &pid, &ux, &uy, &uz, &urx, &ury) == 6)
@@ -3855,6 +3866,7 @@ void client_connection_failed(void) {
     if (!connecting && !online_ready) return;
     connecting = false;
     online_ready = false;
+    animals_clear();
     client_stop();
     client_disable();
     while (g->player_count > 1) {
@@ -3977,6 +3989,7 @@ void main_shutdown() {
     client_stop();
     client_disable();
     del_buffer(sky_buffer);
+    animals_shutdown();
     delete_all_chunks();
     delete_all_players();
 }

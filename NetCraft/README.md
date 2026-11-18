@@ -189,6 +189,11 @@ to help keep proxy connections open. The browser retries disconnected
 connections with backoff and refreshes loaded chunks after reconnecting.
 Block edits are paused while disconnected; they are not queued.
 
+The server simulates up to eight passive, sheep-like animals near active
+players. Their movement is shared with all connected clients and follows the
+current terrain and block edits. Animals despawn when no players are nearby;
+they are not persisted across server restarts and have no survival interactions.
+
 Compose enables mining rewards by default. A connected token-aware address
 receives one base unit for a naturally generated, previously unedited block;
 placed blocks do not earn another reward. `NETCRAFT_BLOCK_CATEGORY_<id>`
