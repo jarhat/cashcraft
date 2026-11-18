@@ -16,6 +16,9 @@ function receiptHarness(stored = new Map(), wallet = 'wallet') {
     ['notifications-empty', { hidden: false }],
     ['notification-indicator', { hidden: true }],
     ['gamba-sound-controls', { hidden: true }],
+    ['mina-receipt-history', { hidden: true }],
+    ['mina-receipt-count', { textContent: '' }],
+    ['mina-receipt-transactions', { items: [], replaceChildren() { this.items = []; }, append(item) { this.items.push(item); } }],
     ['gamba-art', { cloneNode: () => ({ removeAttribute() {} }) }],
     ['mining-reward-queue-notice', {
       querySelector(selector) { return selector === 'strong' ? this.label : this.details; },
@@ -24,6 +27,7 @@ function receiptHarness(stored = new Map(), wallet = 'wallet') {
     }],
   ]);
   let celebrations = 0;
+  let queuedSounds = 0;
   const category = 'b'.repeat(64);
   const localStorage = {
     getItem: (key) => stored.get(key) ?? null,
@@ -39,12 +43,25 @@ function receiptHarness(stored = new Map(), wallet = 'wallet') {
       set textContent(value) { this.text = value; },
     }) },
     showGambaCelebration(count) { celebrations += count; },
+    playGambaSound() { queuedSounds++; },
     refreshBalances: () => new Promise(() => {}),
     fetch: async () => ({ ok: true, json: async () => ({ category }) }),
   };
   const api = runInNewContext(`${script}\n({ loadRewardCategory, notifyTokenReceipts, rememberSentTransaction, queueMinedRewardNotification, reportMinedRewardFailure })`, context);
-  return { api, category, elements, stored, get celebrations() { return celebrations; } };
+  return { api, category, elements, stored, get celebrations() { return celebrations; }, get queuedSounds() { return queuedSounds; } };
 }
+
+test('tracks received MINA amounts and transaction IDs across scans', async () => {
+  const h = receiptHarness();
+  await h.api.loadRewardCategory();
+  const a = { txid: 'a'.repeat(64), vout: 0, token: { category: h.category, amount: 2n } };
+  const b = { txid: 'b'.repeat(64), vout: 1, token: { category: h.category, amount: 1n } };
+  h.api.notifyTokenReceipts([a, b]);
+  h.api.notifyTokenReceipts([a, b]);
+  assert.equal(h.elements.get('mina-receipt-count').textContent, '3x MINA received (tracked receipts)');
+  assert.deepEqual(h.elements.get('mina-receipt-transactions').items.map((item) => item.textContent),
+    [`1x MINA · ${b.txid}`, `2x MINA · ${a.txid}`]);
+});
 
 test('announces each distinct MINA output once, not other tokens or self-sent change', async () => {
   const h = receiptHarness();
@@ -148,6 +165,11 @@ test('shows a pending mining payout immediately', () => {
   assert.equal(state.unread, true);
   assert.equal(h.elements.get('notification-indicator').hidden, false);
   assert.equal(h.elements.get('mining-reward-queue-notice').label.textContent, '1 MINA mining payout pending');
+  assert.equal(h.queuedSounds, 1);
+  h.api.queueMinedRewardNotification('another-wallet');
+  assert.equal(h.queuedSounds, 1);
+  h.api.queueMinedRewardNotification('wallet');
+  assert.equal(h.queuedSounds, 2);
 });
 
 test('reports an unsuccessful payout without leaving it pending', () => {
@@ -200,6 +222,8 @@ test('refresh renders the new balance before announcing the reward', async () =>
   const calls = [];
   const elements = new Map([
     ['status', { textContent: '' }],
+    ['mina-balance', {}],
+    ['notification-mina', {}],
     ['log', { textContent: '' }],
   ]);
   const manager = {};
@@ -207,7 +231,7 @@ test('refresh renders the new balance before announcing the reward', async () =>
   const start = source.indexOf('async function refreshBalances(');
   const end = source.indexOf('\nfunction validateRecipient', start);
   const context = {
-    walletReady: true, manager, refreshPromise: null, scanAddressRecords: [],
+    walletReady: true, manager, rewardCategory: 'a'.repeat(64), refreshPromise: null, scanAddressRecords: [],
     addresses: [], utxos: [], balanceSatoshis: null, emptyBalanceNotified: false,
     deriveScanAddresses: () => [], scanWallet: async () => scanned,
     renderBalances: () => calls.push('balance'),

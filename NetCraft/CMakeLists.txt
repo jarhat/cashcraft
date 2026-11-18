@@ -63,6 +63,9 @@ if (EMSCRIPTEN)
     set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " --pre-js ${CMAKE_SOURCE_DIR}/src/pre.js --shell-file ${CMAKE_SOURCE_DIR}/src/shell.html")
     set_property(TARGET craft APPEND PROPERTY LINK_DEPENDS
         "${CMAKE_SOURCE_DIR}/src/pre.js" "${CMAKE_SOURCE_DIR}/src/shell.html")
+    file(GLOB_RECURSE CRAFT_ASSETS CONFIGURE_DEPENDS
+        "${CMAKE_SOURCE_DIR}/shaders/*" "${CMAKE_SOURCE_DIR}/textures/*" "${CMAKE_SOURCE_DIR}/sounds/*")
+    set_property(TARGET craft APPEND PROPERTY LINK_DEPENDS ${CRAFT_ASSETS})
 
     # Increase memory limit from 16 MB default
     set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s TOTAL_MEMORY=33554432")

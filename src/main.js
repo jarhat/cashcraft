@@ -39,7 +39,7 @@ if (craftRoute) {
   document.querySelector('meta[property="og:title"]').content = document.title;
 }
 for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
-  document.querySelector(selector).content = new URL(craftRoute ? '/api/craft-preview.png' : '/social-preview.png', window.location.origin).href;
+  document.querySelector(selector).content = new URL('/api/craft-preview.png?v=4', window.location.origin).href;
 }
 
 if (!['mainnet', 'chipnet'].includes(network)) {
@@ -105,8 +105,11 @@ function fillFromUrl(params = new URLSearchParams(window.location.search), note 
 }
 
 const mainnet = network === 'mainnet';
+// ParyonUSD mainnet category and precision: https://paryonusd.com
+const PUSD_CATEGORY = '2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544';
 const prefix = mainnet ? 'bitcoincash' : 'bchtest';
 const $ = (id) => document.getElementById(id);
+if (mainnet && !$('receive-category').value) $('receive-category').value = PUSD_CATEGORY;
 setupMarketTicker($('market-ticker'), translate, logger);
 setupChainTicker($('chain-ticker'), logger);
 setupMediaSlideshow($);
@@ -200,7 +203,7 @@ function receiptStorageKey() {
 
 function readReceiptState() {
   const saved = localStorage.getItem(receiptStorageKey());
-  if (!saved) return { seen: [], sent: [], messages: [], unread: false, pendingMiningRewards: 0 };
+  if (!saved) return { seen: [], sent: [], messages: [], receipts: [], unread: false, pendingMiningRewards: 0 };
   const state = JSON.parse(saved);
   if (!Array.isArray(state.seen) || !Array.isArray(state.sent) || !Array.isArray(state.messages)) {
     throw new Error('Invalid saved token notification state.');
@@ -208,7 +211,23 @@ function readReceiptState() {
   state.pendingMiningRewards = Number.isSafeInteger(state.pendingMiningRewards)
     ? Math.max(0, state.pendingMiningRewards)
     : 0;
+  if (!Array.isArray(state.receipts)) state.receipts = [];
   return state;
+}
+
+function renderMinaReceiptHistory(state) {
+  const receipts = state.receipts.filter((entry) =>
+    /^[0-9a-f]{64}$/i.test(entry.txid) && /^[1-9]\d*$/.test(entry.amount));
+  const total = receipts.reduce((sum, entry) => sum + BigInt(entry.amount), 0n);
+  $('mina-receipt-history').hidden = receipts.length === 0;
+  $('mina-receipt-count').textContent = `${total}x MINA received (tracked receipts)`;
+  const transactions = $('mina-receipt-transactions');
+  transactions.replaceChildren();
+  for (const entry of receipts.slice().reverse()) {
+    const row = document.createElement('code');
+    row.textContent = `${entry.amount}x MINA · ${entry.txid}`;
+    transactions.append(row);
+  }
 }
 
 function addReceiptNotice(amount = '1') {
@@ -284,6 +303,8 @@ function queueMinedRewardNotification(address) {
     localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
     $('notification-indicator').hidden = false;
     renderQueuedMiningRewards(state.pendingMiningRewards);
+    $('gamba-sound-controls').hidden = false;
+    void playGambaSound();
     void refreshMinedRewardReceipts();
   } catch (error) {
     logger.warn('Could not show the queued mining reward:', error);
@@ -352,6 +373,9 @@ function notifyTokenReceipts(scannedUtxos) {
   }
   if (received.length && !legacy) {
     state.gambaNotified = true;
+    state.receipts.push(...received.map((utxo) => ({
+      txid: utxo.txid.toLowerCase(), amount: String(BigInt(utxo.token.amount)),
+    })));
     state.messages.push(...received.map((utxo) => `Received ${BigInt(utxo.token.amount)} MINA`));
     state.messages = state.messages.slice(-100);
     state.unread = true;
@@ -359,6 +383,7 @@ function notifyTokenReceipts(scannedUtxos) {
     state.unread = false;
   }
   localStorage.setItem(wallet, JSON.stringify(state));
+  renderMinaReceiptHistory(state);
 
   if (receiptWallet !== wallet) {
     $('token-receipt-notifications').replaceChildren();
@@ -480,6 +505,11 @@ function clearWalletDisplay() {
   $('address').textContent = 'Connect wallet to derive address';
   $('bch').innerHTML = `— <small>BCH</small>`;
   $('usd').textContent = 'USD value unavailable';
+  $('tokens-usd').textContent = 'USD value unavailable';
+  $('mina-balance').textContent = 'Unavailable';
+  $('wallet-notification-summary').hidden = true;
+  $('mina-receipt-history').hidden = true;
+  $('mina-receipt-transactions').replaceChildren();
   $('token-count').textContent = '—';
   $('tokens').innerHTML =
     '<div class="empty">Connect a wallet to view token balances.</div>';
@@ -864,6 +894,7 @@ async function fetchBchUsd() {
     if (typeof data['bitcoin-cash']?.usd === 'number') {
       bchUsd = data['bitcoin-cash'].usd;
       if (walletReady && balanceSatoshis !== null) renderBalances(utxos);
+      if (paymentPriceSnapshot) $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;
     }
   } catch (error) {
     logger.warn('BCH/USD price unavailable:', error);
@@ -1004,6 +1035,12 @@ function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
   }
 
   const nfts = scannedUtxos.filter((utxo) => utxo.token?.nft);
+  const minaAmount = rewardCategory ? (balances.get(rewardCategory) || 0n).toString() : 'Unavailable';
+  $('mina-balance').textContent = minaAmount;
+  $('notification-mina').textContent = minaAmount;
+  $('notification-bch').textContent = `${bchText} BCH`;
+  $('wallet-notification-summary').hidden = false;
+  $('tokens-usd').textContent = balances.size ? 'Calculating…' : '≈ $0.00';
   $('token-count').textContent =
     `${balances.size} fungible-token ${
       balances.size === 1 ? 'category' : 'categories'
@@ -1221,6 +1258,10 @@ function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
         optionLabel.textContent = `${metadata.name || metadata.symbol || 'Token'} · ${formatTokenAmount(spendableAmount, metadata.decimals)} ${metadata.symbol || 'tokens'} (${spendableAmount} base units) · price unavailable`;
       }
       if (--remaining === 0) {
+        const total = pricedTokens.reduce((sum, token) => sum + token.value, 0);
+        $('tokens-usd').textContent = bchUsd === null || !pricedTokens.length
+          ? 'USD value unavailable'
+          : `≈ $${(total * bchUsd).toFixed(2)}${pricedTokens.length < balances.size ? ' (partial)' : ''}`;
         renderPortfolioChart(pricedTokens);
         $('portfolio-chart').hidden = pricedTokens.length === 0;
       }
@@ -1378,7 +1419,14 @@ async function refreshBalances({ quiet = false } = {}) {
     let receiptError;
     try {
       await loadRewardCategory();
-      if (walletReady && manager === scanManager) notifyTokenReceipts(utxos);
+      if (walletReady && manager === scanManager) {
+        const mina = utxos.reduce((sum, utxo) => utxo.token &&
+          String(utxo.token.category).toLowerCase() === rewardCategory
+          ? sum + BigInt(utxo.token.amount || 0) : sum, 0n).toString();
+        $('mina-balance').textContent = mina;
+        $('notification-mina').textContent = mina;
+        notifyTokenReceipts(utxos);
+      }
     } catch (error) {
       receiptError = error;
     }
@@ -2237,10 +2285,7 @@ function updateReceiveAddress() {
 }
 
 const shortLinkId = /^\/s\/([A-Za-z0-9_-]{8,32})\/?$/.exec(window.location.pathname)?.[1];
-const openedPaymentRequest = ['addr', 'category', 'amount'].every(
-  (name) => new URLSearchParams(window.location.search).get(name)?.trim(),
-) || Boolean(shortLinkId);
-setTransferTab(openedPaymentRequest ? 'send' : 'receive');
+setTransferTab('send');
 
 if (shortLinkId) {
   openShortLink(shortLinkId).then((link) => {
@@ -2272,18 +2317,21 @@ $('generate-payment').addEventListener('click', async () => {
   try {
     $('payment-result').classList.add('hidden');
     resetShortLink();
-    await loadWalletDependencies();
-    const address = validateRecipient($('receive-address').value);
     const category = $('receive-category').value.trim().toLowerCase();
     const amount = $('receive-amount').value.trim();
-
     if (!/^[0-9a-f]{64}$/.test(category)) {
-      throw new Error('Category ID must be exactly 64 hexadecimal characters.');
+      $('payment-input-status').textContent = translate('Enter a token category ID with exactly 64 hexadecimal characters.');
+      $('receive-category').focus();
+      return;
     }
-
     if (!/^[1-9][0-9]*$/.test(amount)) {
-      throw new Error('Amount must be a positive whole number.');
+      $('payment-input-status').textContent = translate('Enter a positive whole number of token base units.');
+      $('receive-amount').focus();
+      return;
     }
+    $('payment-input-status').textContent = '';
+    await loadWalletDependencies();
+    const address = validateRecipient($('receive-address').value);
 
     // Keep the current site and path, replacing any existing query parameters.
     const paymentUrl = new URL(window.location.href);
@@ -2340,11 +2388,15 @@ $('generate-payment').addEventListener('click', async () => {
       !$('payment-result').classList.contains('hidden') &&
       $('payment-url').textContent === paymentUrl.toString() &&
       $('receive-address').value.trim() === address;
-    fetchCauldronSpot(category, network).then((spot) => {
+    const metadata = mainnet ? fetchTokenMetadata(category).catch((error) => {
+      logger.warn(`Token metadata unavailable for ${category}:`, error);
+      return category === PUSD_CATEGORY ? { decimals: 2, symbol: 'PUSD' } : null;
+    }) : Promise.resolve(null);
+    Promise.all([fetchCauldronSpot(category, network), metadata]).then(([spot, token]) => {
       if (!Number.isFinite(spot) || spot <= 0) throw new Error('Invalid Cauldron spot price.');
       if (!currentPayment()) return;
       const timestamp = new Date().toISOString();
-      paymentPriceSnapshot = { spot, timestamp };
+      paymentPriceSnapshot = { spot, timestamp, decimals: token?.decimals, symbol: token?.symbol };
       $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;
     }).catch((error) => {
       logger.warn(`Cauldron price unavailable for ${category}:`, error);
@@ -2464,6 +2516,8 @@ $('receive-note').addEventListener('input', resetShortLink);
 for (const id of ['receive-address', 'receive-category', 'receive-amount']) {
   $(id).addEventListener('input', () => {
     resetShortLink();
+    paymentPriceSnapshot = null;
+    $('payment-input-status').textContent = '';
     $('payment-result').classList.add('hidden');
     if (id === 'receive-address') {
       walletReceiveAddress = null;
@@ -2511,7 +2565,11 @@ function paymentQrImage() {
 
 function formatPaymentPrice() {
   if (!paymentPriceSnapshot) return null;
-  return `${paymentPriceSnapshot.spot.toPrecision(4)} BCH / ${translate('base unit')} · ${paymentPriceSnapshot.timestamp}`;
+  const { spot, timestamp, decimals, symbol } = paymentPriceSnapshot;
+  const usd = Number.isFinite(bchUsd) && bchUsd > 0 && Number.isInteger(decimals)
+    ? `≈ $${(spot * 10 ** decimals * bchUsd).toPrecision(4)} USD / 1 ${symbol || translate('token')}`
+    : translate('USD price per token unavailable');
+  return `${usd} · ${spot.toPrecision(4)} BCH / ${translate('base unit')} · ${timestamp}`;
 }
 
 $('download-payment-qr').addEventListener('click', () => {
@@ -2563,14 +2621,14 @@ const tutorialSteps = [
     message: 'Your BCH balance and first receive address appear here after connecting.',
   },
   {
-    id: 'transfer-section',
-    title: 'Send or receive',
-    message: 'Select a token to send, or switch to Receive to create a payment QR. Amounts are whole base units; review every transaction in your wallet.',
-  },
-  {
     id: 'earn-section',
     title: 'Explore your portfolio',
     message: 'Your fungible token balances and category IDs appear here after the wallet scan.',
+  },
+  {
+    id: 'transfer-section',
+    title: 'Crafting table',
+    message: 'Select a token to send, or switch to Receive to create a payment QR. Amounts are whole base units; review every transaction in your wallet.',
   },
 ];
 let tutorialStep = 0;

@@ -11,6 +11,8 @@ test('game buttons minimize and restore without unloading the active game', asyn
     if (!elements.has(id)) elements.set(id, {
       listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute(name, value) { this[name] = value; },
+      appendChild(child) { child.parentNode = this; },
+      insertBefore(child) { child.parentNode = this; },
       classList: { add() {}, remove() {}, contains() { return false; }, toggle() {} },
       focus() { this.focused = true; },
       show() { this.open = true; }, close() { this.open = false; this.listeners.close(); },
@@ -35,7 +37,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   setupGames($, { translate: (text) => text, getRewardAddress: () => address });
   let wallet = 0;
   $('connection-open').click = () => { wallet++; };
-  await $('game-wallet').listeners.click();
+  await $('game-notifications').listeners.click();
   assert.equal(wallet, 1);
   $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); documentListeners.fullscreenchange(); };
   await $('game-fullscreen').listeners.click();
@@ -51,6 +53,8 @@ test('game buttons minimize and restore without unloading the active game', asyn
   await $('game-fullscreen').listeners.click();
   assert.match($('game-dialog-status').textContent, /unavailable/);
   await $('game-netcraft').listeners.click();
+  assert.equal($('game-netcraft').hidden, true);
+  assert.equal($('top-send').parentNode, $('game-wallet-actions'));
   assert.equal(url, '/games/netcraft/craftw.html');
   assert.equal($('game-frame').src, url);
   assert.equal($('game-frame').title, 'CashCraft');
@@ -61,14 +65,18 @@ test('game buttons minimize and restore without unloading the active game', asyn
   assert.equal($('game-frame').src, url);
   assert.equal($('game-dialog').hidden, true);
   assert.equal($('game-minimized-controls').hidden, false);
+  assert.equal($('game-netcraft').hidden, true);
+  assert.equal($('top-send').parentNode, $('minimized-wallet-actions'));
   $('game-restore').listeners.click();
   assert.equal($('game-dialog').hidden, false);
+  assert.equal($('top-send').parentNode, $('game-wallet-actions'));
   assert.equal($('game-frame').src, url);
   address = 'bitcoincash:ztest';
-  $('earn-section').scrollIntoView = () => { $('earn-section').scrolled = true; };
-  await $('game-wallet').listeners.click();
-  assert.equal($('game-dialog').hidden, true);
-  assert.equal($('earn-section').scrolled, true);
+  let notifications = 0;
+  $('notifications-toggle').click = () => { notifications++; };
+  await $('game-notifications').listeners.click();
+  assert.equal($('game-dialog').hidden, false);
+  assert.equal(notifications, 1);
   assert.equal($('game-frame').src, url);
   address = null;
   $('game-restore').listeners.click();
@@ -115,6 +123,7 @@ test('NetCraft receives the connected token address when launched', async (t) =>
     if (!elements.has(id)) elements.set(id, {
       listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute(name, value) { this[name] = value; }, removeAttribute(name) { delete this[name]; },
+      appendChild(child) { child.parentNode = this; }, insertBefore(child) { child.parentNode = this; },
       focus() {}, classList: { add() {}, remove() {}, contains() { return false; } },
       show() { this.open = true; },
     });
@@ -130,16 +139,15 @@ test('NetCraft receives the connected token address when launched', async (t) =>
   address = null;
   update(address);
   $('game-frame').listeners.load();
-  assert.equal($('game-wallet')['aria-label'], 'Connect wallet');
+  assert.equal($('game-notifications')['aria-label'], 'Connect wallet');
   assert.deepEqual(messages, [
     { message: { type: 'netcraft-reward-address', address: '' }, origin: '*' },
     { message: { type: 'netcraft-reward-address', address: '' }, origin: '*' },
   ]);
   update('bitcoincash:zother');
   assert.equal(messages[2].message.address, 'bitcoincash:zother');
-  assert.equal($('game-wallet')['aria-label'], 'Open wallet balances');
-  assert.equal($('game-wallet')['aria-controls'], 'earn-section');
-  assert.equal($('game-wallet')['aria-haspopup'], undefined);
+  assert.equal($('game-notifications')['aria-label'], 'Wallet and notifications');
+  assert.equal($('game-notifications')['aria-controls'], 'notifications-dialog');
 });
 
 test('fullscreen game regains keyboard focus without stealing focus from other dialogs', async (t) => {
@@ -158,6 +166,7 @@ test('fullscreen game regains keyboard focus without stealing focus from other d
         listeners: {}, open: false,
         addEventListener(type, fn) { this.listeners[type] = fn; },
         setAttribute() {},
+        appendChild(child) { child.parentNode = this; }, insertBefore(child) { child.parentNode = this; },
         classList: { add: (value) => classes.add(value), remove: (value) => classes.delete(value), contains: (value) => classes.has(value), toggle: (value, force) => force ? classes.add(value) : classes.delete(value) },
         show() { this.open = true; document.activeElement = $('game-close'); },
         focus() { document.activeElement = this; },
@@ -175,20 +184,20 @@ test('fullscreen game regains keyboard focus without stealing focus from other d
   $('game-frame').listeners.load();
   assert.equal(document.activeElement, $('game-frame'));
 
-  document.activeElement = $('game-wallet');
+  document.activeElement = $('game-notifications');
   $('connection-dialog').open = true;
   $('game-frame').listeners.load();
-  assert.equal(document.activeElement, $('game-wallet'));
+  assert.equal(document.activeElement, $('game-notifications'));
   $('connection-dialog').open = false;
   $('connection-dialog').listeners.close();
   callbacks.shift()();
   assert.equal(document.activeElement, $('game-frame'));
 
-  document.activeElement = $('game-wallet');
+  document.activeElement = $('game-notifications');
   $('notifications-dialog').listeners.close();
   $('connection-dialog').open = true;
   callbacks.shift()();
-  assert.equal(document.activeElement, $('game-wallet'));
+  assert.equal(document.activeElement, $('game-notifications'));
   $('connection-dialog').open = false;
   document.activeElement = $('game-close');
   $('notifications-dialog').listeners.close();
@@ -197,7 +206,7 @@ test('fullscreen game regains keyboard focus without stealing focus from other d
 
   $('game-dialog').classList.remove('game-auto-open');
   document.fullscreenElement = $('game-stage');
-  document.activeElement = $('game-wallet');
+  document.activeElement = $('game-notifications');
   $('notifications-dialog').listeners.close();
   callbacks.shift()();
   assert.equal(document.activeElement, $('game-frame'));

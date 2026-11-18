@@ -73,7 +73,7 @@ button {
   top: 20px;
   right: max(20px, calc((100% - 1040px) / 2));
   width: clamp(240px, 30vw, 400px);
-  opacity: .48;
+  opacity: .38;
   pointer-events: none;
   clip-path: polygon(30% 0, 70% 0, 70% 5%, 85% 5%, 85% 15%, 95% 15%, 95% 30%, 100% 30%, 100% 70%, 95% 70%, 95% 85%, 85% 85%, 85% 95%, 70% 95%, 70% 100%, 30% 100%, 30% 95%, 15% 95%, 15% 85%, 5% 85%, 5% 70%, 0 70%, 0 30%, 5% 30%, 5% 15%, 15% 15%, 15% 5%, 30% 5%);
   background:
@@ -2601,7 +2601,7 @@ body.wallet-connected .dashboard {
 body.wallet-connected #balance-section,
 body.wallet-connected #transfer-section,
 body.wallet-connected #earn-section { grid-area: auto; }
-body.wallet-connected #earn-section { grid-column: 1 / -1; }
+body.wallet-connected #transfer-section { grid-column: 1 / -1; }
 .dashboard > .wizard-dialog { grid-column: 1 / -1; margin: 0; scroll-margin-top: calc(var(--topbar-height, 100px) + 12px); }
 .connection-dialog { width: min(560px, calc(100% - 32px)); max-height: min(90vh, 850px); padding: 16px; border-radius: 18px; }
 .connection-dialog .panel { padding: 20px; box-shadow: none; }
@@ -2635,7 +2635,7 @@ body.wallet-connected #earn-section { grid-column: 1 / -1; }
   .topbar .topbar-tools { grid-column: 1 / -1; grid-row: 2; justify-content: center; flex-wrap: wrap; max-width: none; }
   .topbar .quick-nav { grid-column: 1 / -1; grid-row: 3; justify-self: center; }
   body.wallet-connected .dashboard { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; }
-  body.wallet-connected #earn-section { grid-column: auto; }
+  body.wallet-connected #transfer-section { grid-column: auto; }
   .dashboard > .wizard-dialog { grid-column: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2762,11 +2762,6 @@ html[data-theme="aurora"] {
 .topbar { gap: clamp(10px, 1.618vw, 20px); }
 .topbar .wizard-guide { justify-self: end; align-self: start; }
 .topbar-tools { gap: 10px; }
-.dashboard > .under-topbar, .media-gallery.under-topbar, #log.under-topbar,
-.chain-decoration.under-topbar, footer.under-topbar {
-  -webkit-mask-image: linear-gradient(to bottom, transparent var(--fade-under-bar), #000 calc(var(--fade-under-bar) + 16px));
-  mask-image: linear-gradient(to bottom, transparent var(--fade-under-bar), #000 calc(var(--fade-under-bar) + 16px));
-}
 .swap-note {
   max-width: 430px;
   margin: 20px auto 0;
@@ -2774,6 +2769,8 @@ html[data-theme="aurora"] {
   font-size: .78rem;
   line-height: 1.618;
 }
+.cauldron-link { max-width: none; }
+.cauldron-link img { width: 22px; height: 22px; vertical-align: middle; margin-right: 4px; }
 .swap-note a { color: var(--ice); }
 .media-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(10px, 1.618vw, 18px); }
 .media-slide { min-width: 0; }
@@ -2837,24 +2834,6 @@ body.wallet-connected .network i {
   background: #56e69a;
   box-shadow: 0 0 10px rgb(86 230 154 / 65%);
 }
-.panel-outline-layer {
-  position: fixed;
-  z-index: 9;
-  top: 0;
-  left: 0;
-  width: 100%;
-  overflow: hidden;
-  pointer-events: none;
-}
-.panel-outline {
-  position: absolute;
-  top: 0;
-  left: 0;
-  border: 1px solid #68cfff;
-  border-radius: 17px;
-  box-shadow: inset 0 0 5px rgb(69 186 255 / 55%), 0 0 6px rgb(69 186 255 / 40%);
-}
-.panel-outline.guide-outline { border-radius: 14px; }
 body { background-attachment: fixed, fixed; }
 .mesh-terrain {
   inset: 0;
@@ -3003,20 +2982,30 @@ body::before { content: none; display: none; }
   inset: 0;
   width: 100%;
   height: 100%;
-  opacity: .75;
+  opacity: .62;
   -webkit-mask-image: none;
   mask-image: none;
 }
-.topbar .mesh-sun {
-  width: 72px;
-  top: 50%;
+.topbar > .mesh-sun {
+  position: absolute;
+  z-index: 0;
+  width: clamp(120px, 16vw, 190px);
+  top: -55px;
   left: auto;
   right: 12%;
-  transform: translateY(-50%);
-  opacity: .38;
+  transform: none;
+  opacity: .18;
   box-shadow: none;
+  pointer-events: none;
 }
-.topbar > :not(.mesh-landscape) { position: relative; z-index: 1; }
+.topbar .mesh-lines { stroke: url(#mesh-rgb); stroke-width: 1; }
+.balance-extras { display: grid; gap: 6px; margin: 14px 0; }
+.balance-extras p, .wallet-notification-summary p { display: flex; justify-content: space-between; gap: 12px; margin: 0; }
+.balance-extras strong { text-align: right; }
+.mina-gem { color: #44de90; }
+.wallet-notification-summary { display: grid; gap: 8px; margin-bottom: 16px; }
+#mina-receipt-transactions code { display: block; overflow-wrap: anywhere; margin-top: 6px; }
+.topbar > :not(.mesh-landscape):not(.mesh-sun) { position: relative; z-index: 1; }
 .tutorial-highlight::after, .wallet-link::after, .wizard-toggle::after, .transfer-tab.active::after {
   animation: none;
 }
@@ -3030,7 +3019,9 @@ body::before { content: none; display: none; }
 .game-toast:empty { display: none; }
 .game-dialog { position: relative; inset: auto; width: 100%; max-width: none; max-height: none; margin: 16px 0; }
 .game-dialog[hidden], #game-minimized-controls[hidden] { display: none; }
-.game-minimized-controls { display: flex; justify-content: flex-end; gap: 8px; margin: 12px 0; }
+.game-minimized-controls { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 12px 0; }
+.game-minimized-buttons, .minimized-wallet-actions, .game-wallet-actions { display: flex; align-items: center; gap: 8px; }
+.minimized-wallet-actions[hidden], .game-wallet-actions[hidden], #game-netcraft[hidden] { display: none; }
 .game-minimized-icon {
   display: grid; place-items: center; width: 48px; height: 48px; padding: 8px;
   border: 1px solid var(--glass-border); border-radius: 12px;
@@ -3038,7 +3029,7 @@ body::before { content: none; display: none; }
   color: var(--ice); cursor: pointer; box-shadow: 0 8px 20px rgb(0 0 0 / 20%);
 }
 .game-minimized-icon:hover { border-color: var(--ice); transform: translateY(-1px); }
-.game-minimized-icon svg { width: 100%; height: 100%; }
+.game-minimized-icon svg, .game-minimized-icon img { width: 100%; height: 100%; }
 #game-restore { width: 54px; height: 54px; padding: 4px; }
 #game-minimized-fullscreen svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 #game-invite svg { width: 20px; height: 20px; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 1.8; }
@@ -3046,6 +3037,12 @@ body::before { content: none; display: none; }
 .game-switcher[hidden], #game-pk2[hidden] { display: none; }
 .game-switcher [aria-pressed="true"] { border-color: var(--ice); color: var(--ice); }
 .game-stage { position: relative; overflow: hidden; border: 1px solid var(--glass-border); border-radius: 12px; background: #080e17; -webkit-touch-callout: none; }
+.game-wallet-actions { position: absolute; top: 12px; left: 12px; z-index: 1; }
+.game-wallet-actions .quick-action { min-height: 44px; }
+@media (max-width: 520px) {
+  .game-wallet-actions .quick-action { width: 44px; padding: 10px; }
+  .game-wallet-actions .quick-action span { display: none; }
+}
 .game-controls { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; z-index: 1; }
 .game-controls-right { right: 12px; }
 .game-controls button { display: grid; place-items: center; width: 44px; height: 44px; padding: 10px; border: 1px solid rgba(255,255,255,.5); border-radius: 50%; background: rgba(0,0,0,.55); color: white; cursor: pointer; touch-action: manipulation; }
@@ -3054,12 +3051,16 @@ body::before { content: none; display: none; }
 .game-dialog iframe { display: block; width: 100%; height: min(65vh, 640px); border: 0; background: #080e17; }
 .game-stage:fullscreen { width: 100%; height: 100%; border: 0; border-radius: 0; }
 .game-stage:fullscreen iframe { height: 100%; }
-.game-stage:fullscreen #game-wallet { display: none; }
+.game-stage:fullscreen #game-invite { display: none; }
+.game-stage:fullscreen .game-wallet-actions { display: none; }
 .game-dialog.is-fullscreen #game-close, .game-dialog.is-fullscreen .game-share { display: none; }
 .game-share svg { width: 20px; height: 20px; }
-.game-wallet-indicator { display: none; position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border: 2px solid #102333; border-radius: 50%; background: #35d779; }
-.wallet-connected .game-wallet-indicator { display: block; }
 .game-controls button { position: relative; }
+#game-notification-indicator:not([hidden]) {
+  display: grid; place-items: center; position: absolute; left: -12px; right: auto; top: 50%;
+  transform: translateY(-50%); width: 17px; height: 17px; border: 0;
+  background: #102b25; color: #43ed94; font-size: 15px; line-height: 1;
+}
 body.cashcraft-playing .topbar #notifications-toggle { display: none; }
 .topbar { background: var(--page-base); isolation: isolate; }
 #browser-wallet-section { margin: 14px 0; }
@@ -3074,10 +3075,12 @@ body.cashcraft-playing .topbar #notifications-toggle { display: none; }
 @media (prefers-reduced-motion: reduce) { .game-dialog[open], .game-shift-in { animation: none; } }
 #log:empty { display: none; }
 .media-gallery { margin-top: 16px; }
+.media-gallery summary { cursor: pointer; }
+.media-gallery summary h2 { display: inline; }
 body:not(.wallet-connected) .dashboard { padding-bottom: 0; }
 @media (max-width: 900px) {
   body.wallet-connected .dashboard { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  body.wallet-connected #earn-section, .dashboard > .wizard-dialog { grid-column: auto; }
+  body.wallet-connected #transfer-section, .dashboard > .wizard-dialog { grid-column: auto; }
 }
 @media (min-width: 800px) and (max-width: 900px) {
   .topbar { grid-template-columns: auto minmax(0, 1fr) auto auto auto; gap: 8px; }

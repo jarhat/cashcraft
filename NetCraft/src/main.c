@@ -3395,6 +3395,7 @@ void handle_movement(double dt) {
     static float dy = 0;
 #ifdef __EMSCRIPTEN__
     static float step_distance = 0;
+    static double last_grounded = 0;
     float old_x = g->players->state.x, old_z = g->players->state.z;
     bool grounded = false;
 #endif
@@ -3509,7 +3510,8 @@ void handle_movement(double dt) {
         s->y = highest_block(s->x, s->z) + 2;
     }
 #ifdef __EMSCRIPTEN__
-    if (grounded && !g->flying) {
+    if (grounded) last_grounded = glfwGetTime();
+    if (!g->flying && (grounded || (dy < 0 && glfwGetTime() - last_grounded < 0.25))) {
         step_distance += hypotf(s->x - old_x, s->z - old_z);
         if (step_distance >= 2.0f) {
             step_distance = 0;
@@ -4387,6 +4389,25 @@ void render_scene() {
             render_item(&block_attrib);
             render_item_counts(&text_attrib);
         }
+        if (g->show_ui) {
+            if (!item_buffers[Item_MINA_ORE]) {
+                item_buffers[Item_MINA_ORE] = gen_cube_buffer(0, 0, 0, 0.5, Item_MINA_ORE);
+            }
+            float matrix[16];
+            set_matrix_item(matrix, g->width, g->height, g->scale);
+            matrix[12] = -38.0f * g->scale / g->width;
+            matrix[13] = 1.0f - 58.0f * g->scale / g->height;
+            glUseProgram(block_attrib.program);
+            glUniform3f(block_attrib.camera, 0, 0, 5);
+            glUniform1i(block_attrib.sampler, 0);
+            glUniform1i(block_attrib.extra1, 2);
+            glUniform1f(block_attrib.extra2, 1);
+            glUniform1f(block_attrib.extra3, 100000);
+            glUniform1i(block_attrib.extra4, 0);
+            glUniform1f(block_attrib.timer, time_of_day());
+            glUniformMatrix4fv(block_attrib.matrix, 1, GL_FALSE, matrix);
+            draw_cube(&block_attrib, item_buffers[Item_MINA_ORE]);
+        }
     } else {
         face_count = 0;
     }
@@ -4396,8 +4417,8 @@ void render_scene() {
     float tx = ts / 2;
     float ty = g->height - ts;
     if (g->show_ui && g->initialized) {
-        snprintf(text_buffer, sizeof(text_buffer), "MINA ore mined: %u", (unsigned)g->mina_mined);
-        render_text(&text_attrib, ALIGN_CENTER, g->width / 2, g->height - ts, ts, text_buffer);
+        snprintf(text_buffer, sizeof(text_buffer), "x%u", (unsigned)g->mina_mined);
+        render_text(&text_attrib, ALIGN_LEFT, g->width / 2 + 5 * g->scale, g->height - 29 * g->scale, ts, text_buffer);
     }
     if (g->show_info_text && g->show_ui && g->initialized) {
         static char *build_info_string =

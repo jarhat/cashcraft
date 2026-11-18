@@ -121,13 +121,15 @@
       #mobile-jump { right: 16px; bottom: 100px; }
       #mobile-next { right: 168px; bottom: 20px; }
       .mobile-controls svg, #sound-toggle svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-      #sound-toggle { display: grid !important; place-items: center; position: fixed; right: 12px; top: 68px; z-index: 25; width: 44px; height: 44px; padding: 9px; border: 1px solid rgba(255,255,255,.5); border-radius: 50%; background: rgba(0,0,0,.55); color: white; cursor: pointer; }
+      #sound-toggle { display: grid !important; place-items: center; position: fixed; right: 168px; top: 12px; z-index: 25; width: 44px; height: 44px; padding: 9px; border: 1px solid rgba(255,255,255,.5); border-radius: 50%; background: rgba(0,0,0,.55); color: white; cursor: pointer; }
       #sound-toggle[aria-pressed="true"] .sound-muted { display: none; }
       #connection-status { display: block !important; position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 26; max-width: 90%; padding: 8px 12px; background: rgba(0,0,0,.8); color: white; text-align: center; }
       #connection-status[hidden] { display: none !important; }
       #game-error { display: block !important; position: fixed; top: 110px; left: 50%; transform: translateX(-50%); z-index: 41; width: min(90%, 600px); padding: 14px; background: #351c1c; color: white; font: 14px system-ui, sans-serif; text-align: center; overflow-wrap: anywhere; }
       #game-error[hidden] { display: none !important; }
       @media (any-pointer: coarse) { .mobile-controls { display: block !important; } }
+      @media (max-width: 360px) { #sound-toggle { left: 12px; right: auto; top: 68px; } }
+      .mobile-controls.touch-enabled { display: block !important; }
     </style>
   </head>
   <body>
@@ -1463,7 +1465,7 @@
             var rate = name === 'step' ? .88 : name === 'mine' ? .96 : .92;
             source.playbackRate.value = rate + Math.random() * (name === 'step' ? .2 : .1);
             var effectGain = context.createGain();
-            effectGain.gain.value = (name === 'step' ? .58 : .82) * (.9 + Math.random() * .2);
+            effectGain.gain.value = (name === 'step' ? .20 : .35) * (.9 + Math.random() * .2);
             source.connect(effectGain);
             effectGain.connect(context.destination);
             source.start();
@@ -1476,6 +1478,9 @@
           var stick = document.getElementById('mobile-stick');
           var knob = document.getElementById('mobile-stick-knob');
           var stickPointer = null;
+          window.addEventListener('pointerdown', function(event) {
+            if (event.pointerType === 'touch') controls.classList.add('touch-enabled');
+          });
           function call(name, args) {
             if (Module['_' + name]) Module.ccall(name, null, args.map(function() { return 'number'; }), args);
           }

@@ -141,16 +141,13 @@ fn start_reward_wake() -> Result<Option<SyncSender<(i64, Player)>>, String> {
                 }
                 if !response.starts_with("HTTP/1.1 204 ") && !response.starts_with("HTTP/1.0 204 ")
                 {
-                    return Err(io::Error::other("mining payout request failed"));
+                    let status = response.split_whitespace().nth(1).unwrap_or("invalid");
+                    return Err(io::Error::other(format!("mining payout API returned HTTP {status}")));
                 }
                 Ok(())
             })();
             if let Err(error) = result {
                 eprintln!("Mining reward {reward_id} failed ({error}); check the payout backend");
-                send(
-                    &player,
-                    format!("T,MINA payout not confirmed: {error}. Contact the operator.\n"),
-                );
                 if let Some(address) = player.reward_address.as_deref() {
                     send(&player, format!("F,{address}\n"));
                 }
@@ -610,10 +607,6 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
             sender.try_send((reward_id, player.clone())).is_err()
         }) {
             eprintln!("Could not dispatch mining reward {reward_id}; check the payout backend");
-            send(
-                &player,
-                "T,MINA payout could not start. Contact the operator.\n",
-            );
             if let Some(address) = player.reward_address.as_deref() {
                 send(&player, format!("F,{address}\n"));
             }

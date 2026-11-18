@@ -6,6 +6,21 @@ import { inspectNft } from '../src/nft-inspection.js';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
+test('payment defaults to PUSD only on mainnet and preserves an existing category', async () => {
+  const start = source.indexOf('const mainnet =');
+  const end = source.indexOf('\nsetupMarketTicker', start);
+  const pusd = '2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544';
+  for (const [network, initial, expected] of [['mainnet', '', pusd], ['chipnet', '', ''], ['mainnet', 'existing', 'existing']]) {
+    const field = { value: initial };
+    runInNewContext(source.slice(start, end), { network, document: { getElementById: () => field } });
+    assert.equal(field.value, expected);
+  }
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  assert.ok(html.indexOf('id="earn-section"') < html.indexOf('id="transfer-section"'));
+  assert.match(source, /setTransferTab\('send'\);/);
+  assert.match(html, /href="https:\/\/cauldron\.quest\/"/);
+});
+
 test('theme preferences migrate and select the correct palette', () => {
   for (const [saved, expected] of [[null, 'aurora'], ['bch', 'aurora'], ['bch-sunrise', 'aurora'], ['green', 'aurora'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'aurora'], ['frost', 'frost'], ['mina', 'aurora'], ['unknown', 'aurora']]) {
     const buttons = ['frost', 'aurora'].map((themeOption) => ({
@@ -92,13 +107,13 @@ test('wizard highlights and scrolls to each tutorial panel without moving the na
   assert.equal(elements.get('connection-dialog').open, false);
   assert.equal(elements.get('wizard-dialog').parent, 'balance-section');
   elements.get('wizard-next').click();
-  assert.equal(guidePosition, 'transfer-section');
-  elements.get('wizard-next').click();
   assert.equal(guidePosition, 'earn-section');
+  elements.get('wizard-next').click();
+  assert.equal(guidePosition, 'transfer-section');
   elements.get('wizard-prev').click();
-  assert.equal(guidePosition, 'transfer-section');
+  assert.equal(guidePosition, 'earn-section');
   elements.get('wizard-toggle').click();
-  assert.equal(guidePosition, 'transfer-section');
+  assert.equal(guidePosition, 'earn-section');
   assert.equal(elements.get('wizard-dialog').hidden, true);
   assert.equal(highlighted.size, 0);
 });
@@ -779,7 +794,7 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   const start = source.indexOf('function renderBalances(');
   const end = source.indexOf('\nasync function refreshBalances', start);
   runInNewContext(`${source.slice(start, end)}\nrenderBalances(utxos);`, {
-    $: element, walletReady: true, bchUsd: null, portfolioVersion: 0, mainnet: true, network: 'mainnet', SATOSHIS_PER_BCH: 100_000_000n,
+    $: element, walletReady: true, bchUsd: null, rewardCategory: null, portfolioVersion: 0, mainnet: true, network: 'mainnet', SATOSHIS_PER_BCH: 100_000_000n,
     tokenBalances: new Map(), portfolioPage: 0, updateAmountHelp() {},
     loadTokenLogo: () => new Promise(() => {}),
     fetchTokenMetadata: () => new Promise(() => {}), fetchCauldronSpot: () => new Promise(() => {}),
@@ -830,7 +845,7 @@ test('portfolio paginates fungible tokens and optionally includes each NFT', asy
   const end = source.indexOf('\nasync function refreshBalances', start);
   let copied;
   const context = {
-    $, walletReady: true, bchUsd: null, portfolioVersion: 0, portfolioPage: 0,
+    $, walletReady: true, bchUsd: null, rewardCategory: null, portfolioVersion: 0, portfolioPage: 0,
     mainnet: false, network: 'chipnet', SATOSHIS_PER_BCH: 100_000_000n,
     tokenBalances: new Map(), updateAmountHelp() {}, formatBch: () => '0',
     Option: class { constructor(text, value) { this.text = text; this.value = value; } },
@@ -967,7 +982,7 @@ test('priced metadata updates balances, token choices and allocation', async () 
   const helpers = source.slice(source.indexOf('function formatTokenAmount('), source.indexOf('\nasync function fetchAddressUtxosWithRetry'));
   const render = source.slice(source.indexOf('function renderBalances('), source.indexOf('\nasync function refreshBalances'));
   const context = {
-    $: element, walletReady: true, bchUsd: 200, balanceSatoshis: 100_000_000n,
+    $: element, walletReady: true, bchUsd: 200, rewardCategory: category, balanceSatoshis: 100_000_000n,
     portfolioVersion: 0, tokenBalances: new Map(), portfolioPage: 0, mainnet: true, network: 'mainnet',
     SATOSHIS_PER_BCH: 100_000_000n, formatBch: () => '1.00000000',
     Option: class { constructor(text, value) { this.text = text; this.value = value; } },
@@ -981,6 +996,8 @@ test('priced metadata updates balances, token choices and allocation', async () 
   context.renderBalances([{ satoshis: 100_000_000n, token: { category, amount: 125n } }]);
   assert.equal(element('portfolio-chart').hidden, true);
   await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(element('tokens-usd').textContent, '≈ $2.50');
+  assert.equal(element('mina-balance').textContent, '125');
   assert.equal(element('portfolio-chart').hidden, false);
   assert.match(element('tokens').children[0].children[0].children[2].children[0].children[0].textContent, /1\.25 EX/);
   const supply = element('tokens').children[0].children[0].children[2].children[1];
@@ -1004,10 +1021,11 @@ test('priced metadata updates balances, token choices and allocation', async () 
 test('payment QR draws the loaded token logo and ignores a stale result', async () => {
   const nodes = new Map();
   const canvasDraws = [];
-  let handler;
+  let handler, focused;
   const element = (id) => {
     if (!nodes.has(id)) nodes.set(id, {
       value: '', textContent: '',
+      focus() { focused = id; },
       classList: {
         hidden: false,
         add() { this.hidden = true; },
@@ -1029,7 +1047,7 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
   const start = source.indexOf("$('generate-payment').addEventListener('click'");
   const end = source.indexOf("\nfor (const id of ['receive-address'", start);
   const helpers = source.slice(source.indexOf('function paymentQrImage()'), source.indexOf("\n$('download-payment-qr')"));
-  runInNewContext(`${source.slice(start, end)}\n${helpers}`, {
+  const context = {
     $: element, walletReady: false, mainnet: true, loadWalletDependencies: async () => {},
     validateRecipient: (address) => address,
     network: 'mainnet', paymentGeneration: 0, paymentPriceSnapshot: null,
@@ -1038,8 +1056,21 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
     QRCode: { toCanvas: async () => {} },
     loadTokenLogo: () => new Promise((resolve, reject) => { resolveLogo = resolve; rejectLogo = reject; }),
     fetchCauldronSpot: async () => { if (failPrice) throw new Error('offline'); return 0.001; },
+    fetchTokenMetadata: async () => ({ decimals: 2, symbol: 'PUSD' }),
+    PUSD_CATEGORY: '2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544', bchUsd: 300,
     translate: (text) => text, logger: { warn() {} }, report(error) { throw error; },
-  });
+  };
+  runInNewContext(`${source.slice(start, end)}\n${helpers}`, context);
+  element('receive-category').value = '';
+  await handler();
+  assert.equal(focused, 'receive-category');
+  assert.match(element('payment-input-status').textContent, /category/i);
+  element('receive-category').value = category;
+  element('receive-amount').value = '0';
+  await handler();
+  assert.equal(focused, 'receive-amount');
+  assert.match(element('payment-input-status').textContent, /base units/i);
+  element('receive-amount').value = '2';
   await handler();
   assert.equal(element('download-payment-qr').disabled, false);
   resolveLogo(logo);
@@ -1048,6 +1079,23 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
   assert.ok(element('payment-token-icon').child);
   assert.equal(element('download-payment-qr').disabled, false);
   assert.match(element('payment-price').textContent, /0\.001000 BCH \/ base unit · \d{4}-\d\d-\d\dT/);
+  assert.match(element('payment-price').textContent, /\$30\.00 USD \/ 1 PUSD/);
+
+  context.bchUsd = null;
+  await handler();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(element('payment-price').textContent, /USD price per token unavailable/);
+  context.bchUsd = 300;
+
+  context.fetchTokenMetadata = async () => { throw new Error('offline'); };
+  await handler();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(element('payment-price').textContent, /USD price per token unavailable/);
+  element('receive-category').value = context.PUSD_CATEGORY;
+  await handler();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(element('payment-price').textContent, /\$30\.00 USD \/ 1 PUSD/);
+  element('receive-category').value = category;
 
   await handler();
   element('payment-result').classList.add('hidden');
@@ -1115,14 +1163,14 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   assert.equal(guidePosition, 'balance-section');
   assert.equal(element('wizard-dialog').parent, 'balance-section');
   element('wizard-next').listeners.click();
-  assert.deepEqual([...highlighted], ['transfer-section']);
-  assert.equal(guidePosition, 'transfer-section');
-  element('wizard-next').listeners.click();
   assert.deepEqual([...highlighted], ['earn-section']);
   assert.equal(guidePosition, 'earn-section');
   element('wizard-next').listeners.click();
+  assert.deepEqual([...highlighted], ['transfer-section']);
+  assert.equal(guidePosition, 'transfer-section');
+  element('wizard-next').listeners.click();
   assert.equal(element('wizard-dialog').hidden, true);
   assert.equal(highlighted.size, 0);
-  assert.equal(guidePosition, 'earn-section');
+  assert.equal(guidePosition, 'transfer-section');
   assert.equal(walking, false);
 });

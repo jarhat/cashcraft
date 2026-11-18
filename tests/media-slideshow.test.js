@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { setupMediaSlideshow } from '../src/media-slideshow.js';
 
 function fixture(reducedMotion = false, observeVisibility = false) {
@@ -15,6 +16,7 @@ function fixture(reducedMotion = false, observeVisibility = false) {
     return { nodes, querySelector(selector) { return nodes[selector]; } };
   });
   const gallery = { matches: () => false, contains: () => false };
+  const disclosure = { open: true };
   const motion = { matches: reducedMotion };
   const document = { hidden: false, activeElement: null };
   const original = { window: globalThis.window, document: globalThis.document, setInterval: globalThis.setInterval, IntersectionObserver: globalThis.IntersectionObserver };
@@ -30,9 +32,27 @@ function fixture(reducedMotion = false, observeVisibility = false) {
   }
   globalThis.document = document;
   globalThis.setInterval = (callback, delay) => { tick = callback; assert.equal(delay, 6000); };
-  setupMediaSlideshow((id) => id === 'media-gallery' ? gallery : { querySelectorAll: () => cards });
-  return { cards, gallery, motion, document, tick, setVisible(value) { intersection([{ isIntersecting: value }]); }, restore() { Object.assign(globalThis, original); } };
+  setupMediaSlideshow((id) => id === 'media-gallery' ? gallery : id === 'media-gallery-disclosure' ? disclosure : { querySelectorAll: () => cards });
+  return { cards, gallery, disclosure, motion, document, tick, setVisible(value) { intersection([{ isIntersecting: value }]); }, restore() { Object.assign(globalThis, original); } };
 }
+
+test('the slideshow stays paused while the gallery is collapsed', () => {
+  const { cards, disclosure, tick, restore } = fixture();
+  try {
+    disclosure.open = false;
+    tick();
+    assert.equal(cards[0].nodes.strong.textContent, undefined);
+    disclosure.open = true;
+    tick();
+    assert.equal(cards[0].nodes.strong.textContent, 'Get BCH Now: Level Clear');
+  } finally { restore(); }
+});
+
+test('gallery starts collapsed and keeps the swap information visible outside it', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(html, /<details id="media-gallery-disclosure">/);
+  assert.match(html, /<\/details>\s*<p class="swap-note">Have BTC\?/);
+});
 
 test('slideshow shows multiple uncropped sources and cycles through all artwork', () => {
   const { cards, tick, restore } = fixture();

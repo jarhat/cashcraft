@@ -21,6 +21,7 @@ const slides = [
 
 export function setupMediaSlideshow($) {
   const gallery = $('media-gallery');
+  const disclosure = $('media-gallery-disclosure');
   const cards = [...$('media-strip').querySelectorAll('.media-slide')].map((card) => ({
     image: card.querySelector('img'),
     unavailable: card.querySelector('.media-unavailable'),
@@ -59,7 +60,7 @@ export function setupMediaSlideshow($) {
     if (image.complete && !image.naturalWidth) failed();
   });
   setInterval(() => {
-    if (gallery.hidden || !visible || motion.matches || document.hidden || gallery.matches(':hover') || gallery.contains(document.activeElement)) return;
+    if (gallery.hidden || !disclosure.open || !visible || motion.matches || document.hidden || gallery.matches(':hover') || gallery.contains(document.activeElement)) return;
     index = (index + 1) % slides.length;
     cards.forEach((card, offset) => show(card, slides[(index + offset) % slides.length]));
   }, 6000);

@@ -462,6 +462,11 @@ Textures are based on:
 
 The wallet's Mina theme uses enlarged grass and plank tiles derived from
 `textures/texture.png`; the source texture credits and licenses above apply.
+The game's grass, dirt, sand, stone, brick, oak, planks and cobblestone tiles
+also include tiles from Craft's MIT-licensed
+[`textures/texture.png`](https://github.com/fogleman/Craft/blob/d6888a6e1e54340358ce25b1220f410541360b6b/textures/texture.png)
+by Michael Fogleman, remapped to this atlas. The remaining NetCraft tiles are
+preserved.
 
 Custom textures can be loaded from the server, or by dragging-and-dropping a .zip file or .png texture atlas
 onto the game. NetCraft uses its own texture format, although there is some interoperability provided.

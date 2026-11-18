@@ -161,6 +161,7 @@ test('touch controls recover from unavailable pointer capture and release outsid
       style: {}, value: '', listeners: {},
       addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute() {},
+      classList: { add(name) { this.name = name; } },
       setPointerCapture() { throw Object.assign(new Error('inactive pointer'), { name: 'InvalidStateError' }); },
       getBoundingClientRect() { return { left: 0, top: 0, width: 100 }; },
     });
@@ -175,6 +176,8 @@ test('touch controls recover from unavailable pointer capture and release outsid
   context.Module._touch_set_mine = true;
   context.Module._touch_set_move = true;
   context.Module.ccall = (name, _result, _types, args) => calls.push([name, Array.from(args)]);
+  windowListeners.pointerdown.forEach((fn) => fn({ pointerType: 'touch' }));
+  assert.equal($('controls').classList.name, 'touch-enabled');
   $('mobile-mine').listeners.pointerdown({ pointerId: 7 });
   windowListeners.pointerup.forEach((fn) => fn({ pointerId: 7 }));
   $('mobile-mine').listeners.pointerdown({ pointerId: 8 });
@@ -182,6 +185,8 @@ test('touch controls recover from unavailable pointer capture and release outsid
   $('mobile-stick').listeners.pointerdown({ pointerId: 9, clientX: 100, clientY: 50 });
   windowListeners.pointermove.forEach((fn) => fn({ pointerId: 9, clientX: 50, clientY: 0 }));
   assert.deepEqual(calls.at(-1), ['touch_set_move', [0, -1]]);
+  windowListeners.pointermove.forEach((fn) => fn({ pointerId: 9, clientX: 50, clientY: 100 }));
+  assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 1]]);
   windowListeners.pointercancel.forEach((fn) => fn({ pointerId: 9 }));
   assert.deepEqual(calls.filter(([name]) => name === 'touch_set_mine').map(([, args]) => args[0]), [1, 0, 1, 0, 0]);
   assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);

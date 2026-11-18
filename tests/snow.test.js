@@ -25,6 +25,7 @@ test('snow falls, pauses when hidden, and respects motion preference changes and
     removeEventListener: (type) => documentListeners.delete(type),
   };
   const callbacks = new Map();
+  const timers = new Map();
   let nextFrame = 0;
   const globals = {
     window,
@@ -34,6 +35,8 @@ test('snow falls, pauses when hidden, and respects motion preference changes and
       return nextFrame;
     },
     cancelAnimationFrame: (id) => callbacks.delete(id),
+    setTimeout: (callback) => { timers.set(1, callback); return 1; },
+    clearTimeout: (id) => timers.delete(id),
   };
   const original = Object.fromEntries(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals)) {
@@ -69,11 +72,10 @@ test('snow falls, pauses when hidden, and respects motion preference changes and
   tick(now + 100);
   assert.ok(points.every(({ y }, index) => y > first[index]));
   windowListeners.get('scroll')();
-  const beforeScrollFrame = points.map(({ y }) => y);
-  tick(now + 150);
-  assert.deepEqual(points.map(({ y }) => y), beforeScrollFrame);
-  tick(now + 200);
-  assert.ok(points.every(({ y }, index) => y > beforeScrollFrame[index]));
+  assert.equal(callbacks.size, 0);
+  assert.equal(timers.size, 1);
+  timers.get(1)();
+  assert.equal(callbacks.size, 1);
   document.hidden = true;
   documentListeners.get('visibilitychange')();
   assert.equal(callbacks.size, 0);

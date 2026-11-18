@@ -115,6 +115,30 @@ class RewardTests(unittest.TestCase):
             build.assert_called_once_with(address, "a" * 64)
             rpc.assert_called_once_with("sendrawtransaction", ["abcd"])
 
+    def test_distinct_ores_for_same_address_broadcast_separate_transactions(self):
+        path = Path(self.tmp.name) / "netcraft.sqlite3"
+        address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
+        with sqlite3.connect(path) as db:
+            db.execute("""CREATE TABLE mining_rewards (
+                id INTEGER PRIMARY KEY, cash_address TEXT, category TEXT,
+                signed_tx TEXT, txid TEXT, sent_at TEXT
+            )""")
+            db.executemany("INSERT INTO mining_rewards (id, cash_address, category) VALUES (?, ?, ?)",
+                           [(1, address, "a" * 64), (2, address, "a" * 64)])
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path)), \
+             patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
+             patch.object(backend, "NETCRAFT_REWARD_WAKE_SECRET", "test-secret"), \
+             patch.object(backend, "build_reward_transaction",
+                          side_effect=[("abcd", "c" * 64), ("ef01", "d" * 64)]) as build, \
+             patch.object(backend, "bch_rpc", side_effect=["c" * 64, "d" * 64]) as rpc:
+            client = TestClient(backend.app)
+            headers = {"Authorization": "Bearer test-secret"}
+            self.assertEqual(client.post("/api/internal/netcraft-mining-reward/1", headers=headers).status_code, 204)
+            self.assertEqual(client.post("/api/internal/netcraft-mining-reward/2", headers=headers).status_code, 204)
+            self.assertEqual(build.call_count, 2)
+            self.assertEqual([call.args for call in rpc.call_args_list],
+                             [("sendrawtransaction", ["abcd"]), ("sendrawtransaction", ["ef01"])])
+
     def test_pending_signed_wallet_payout_prevents_conflicting_mining_transaction(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"

@@ -14,6 +14,14 @@ export function setupGames($, { translate, getRewardAddress = () => null, autoOp
     const playing = dialog.open && !dialog.hidden;
     document.body.classList.toggle('cashcraft-playing', playing);
     dock.hidden = !dialog.open || !dialog.hidden || !activeGame;
+    $('game-netcraft').hidden = Boolean(dialog.open && activeGame);
+    const actions = !dialog.open || !activeGame ? $('quick-nav')
+      : dialog.hidden ? $('minimized-wallet-actions') : $('game-wallet-actions');
+    const mining = $('game-netcraft');
+    for (const id of ['top-send', 'top-receive']) {
+      if (actions === $('quick-nav')) actions.insertBefore($(id), mining);
+      else actions.appendChild($(id));
+    }
   };
   document.querySelector('.topbar').after(dialog, dock);
   stage.addEventListener('contextmenu', (event) => event.preventDefault());
@@ -21,11 +29,9 @@ export function setupGames($, { translate, getRewardAddress = () => null, autoOp
   let activeGame = null;
   const updateRewardAddress = (address) => {
     const connected = Boolean(address);
-    $('game-wallet').setAttribute('aria-label', connected ? 'Open wallet balances' : 'Connect wallet');
-    $('game-wallet').setAttribute('title', connected ? 'Open wallet balances' : 'Connect wallet');
-    $('game-wallet').setAttribute('aria-controls', connected ? 'earn-section' : 'connection-dialog');
-    if (connected) $('game-wallet').removeAttribute('aria-haspopup');
-    else $('game-wallet').setAttribute('aria-haspopup', 'dialog');
+    $('game-notifications').setAttribute('aria-label', connected ? 'Wallet and notifications' : 'Connect wallet');
+    $('game-notifications').setAttribute('title', connected ? 'Wallet and notifications' : 'Connect wallet');
+    $('game-notifications').setAttribute('aria-controls', connected ? 'notifications-dialog' : 'connection-dialog');
     if (activeGame) {
       const title = games[activeGame].title;
       $('game-restore').setAttribute('aria-label', `Resume ${title}`);
@@ -50,7 +56,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, autoOp
   for (const id of overlayDialogs) {
     $(id).addEventListener('close', () => {
       requestAnimationFrame(() => {
-        if (canFocusGame() && [document.body, $('game-wallet'), $('game-notifications'), $('game-invite'), frame]
+        if (canFocusGame() && [document.body, $('game-notifications'), $('game-invite'), frame]
           .includes(document.activeElement)) frame.focus({ preventScroll: true });
       });
     });
@@ -138,14 +144,17 @@ export function setupGames($, { translate, getRewardAddress = () => null, autoOp
       $('game-dialog-status').textContent = translate('Fullscreen is unavailable.');
     }
   });
-  $('game-wallet').addEventListener('click', async () => {
-    if (!getRewardAddress()) {
-      $('connection-open').click();
-      return;
+  $('game-notifications').addEventListener('click', () => {
+    const connected = Boolean(getRewardAddress());
+    const overlay = $(connected ? 'notifications-dialog' : 'connection-dialog');
+    if (document.fullscreenElement === stage) {
+      const parent = overlay.parentNode;
+      const next = overlay.nextSibling;
+      stage.appendChild(overlay);
+      overlay.addEventListener('close', () => parent.insertBefore(overlay, next), { once: true });
     }
-    if (await minimize()) $('earn-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $(connected ? 'notifications-toggle' : 'connection-open').click();
   });
-  $('game-notifications').addEventListener('click', () => $('notifications-toggle').click());
   document.addEventListener('fullscreenchange', () => {
     const active = document.fullscreenElement === stage;
     stage.classList.toggle('is-fullscreen', active);
