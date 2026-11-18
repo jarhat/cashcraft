@@ -12,6 +12,7 @@ test('game buttons open mounted shells and unload them on close', async (t) => {
       listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute(name, value) { this[name] = value; },
       classList: { add() {}, remove() {} },
+      focus() { this.focused = true; },
       showModal() { this.open = true; }, close() { this.open = false; this.listeners.close(); },
       removeAttribute(name) { delete this[name]; },
     });
@@ -40,6 +41,7 @@ test('game buttons open mounted shells and unload them on close', async (t) => {
   $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); documentListeners.fullscreenchange(); };
   await $('game-fullscreen').listeners.click();
   assert.equal(document.fullscreenElement, $('game-stage'));
+  assert.equal($('game-frame').focused, true);
   assert.equal($('game-fullscreen')['aria-label'], 'Exit fullscreen');
   assert.equal($('game-fullscreen')['aria-pressed'], 'true');
   await $('game-fullscreen').listeners.click();
@@ -107,7 +109,19 @@ test('NetCraft receives the connected token address when launched', async (t) =>
     return elements.get(id);
   };
   globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
-  setupGames($, { claimBeer() {}, translate: (text) => text, getRewardAddress: () => 'bitcoincash:ztest' });
+  let address = 'bitcoincash:ztest';
+  const messages = [];
+  $('game-frame').contentWindow = { postMessage: (message, origin) => messages.push({ message, origin }) };
+  const update = setupGames($, { claimBeer() {}, translate: (text) => text, getRewardAddress: () => address });
   await $('game-netcraft').listeners.click();
   assert.equal($('game-frame').src, '/games/netcraft/craftw.html#-+4080+bitcoincash%3Aztest');
+  address = null;
+  update(address);
+  $('game-frame').listeners.load();
+  assert.deepEqual(messages, [
+    { message: { type: 'netcraft-reward-address', address: '' }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: '' }, origin: '*' },
+  ]);
+  update('bitcoincash:zother');
+  assert.equal(messages[2].message.address, 'bitcoincash:zother');
 });

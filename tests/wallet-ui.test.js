@@ -820,11 +820,14 @@ test('connected panels reveal only after a wallet connection and hide on disconn
     $, document: { querySelectorAll: () => panels, body: { classList: { toggle() {} } } }, sending: false,
     pairingInProgress: false, transferInteracted: false, tutorialStep: 2,
     pairingReminder: { cancel() {} },
+    addressFor: () => 'token-address',
+    updateGameRewardAddress: (address) => { context.rewardAddress = address; },
     translate: (text) => text,
     showTutorialStep() { context.tutorialUpdated = true; },
   };
   runInNewContext(source.slice(start, end), context);
   context.setConnection(true);
+  assert.equal(context.rewardAddress, 'token-address');
   assert.ok(panels.every((panel) => !panel.hidden));
   assert.equal($('network-wallet-status').textContent, 'Wallet connected');
   assert.equal($('wizard-guide').hidden, false);
@@ -838,7 +841,8 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   $('game-dialog').open = true;
   $('game-dialog').close = () => { $('game-dialog').open = false; };
   context.setConnection(false);
-  assert.equal($('game-dialog').open, false);
+  assert.equal($('game-dialog').open, true);
+  assert.equal(context.rewardAddress, null);
   assert.ok(panels.every((panel) => panel.hidden));
   assert.equal($('network-wallet-status').textContent, 'Not connected');
   assert.equal($('wizard-guide').hidden, false);

@@ -11,6 +11,12 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
   stage.addEventListener('contextmenu', (event) => event.preventDefault());
   let generation = 0;
   let activeGame = null;
+  const updateRewardAddress = (address) => {
+    if (activeGame === 'netcraft') {
+      frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '' }, '*');
+    }
+  };
+  frame.addEventListener('load', () => updateRewardAddress(getRewardAddress()));
   for (const [id, game] of Object.entries(games)) {
     const open = async () => {
       if (dialog.open && activeGame === id) {
@@ -69,7 +75,10 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
   $('game-fullscreen').addEventListener('click', async () => {
     try {
       if (document.fullscreenElement === stage) await document.exitFullscreen();
-      else await stage.requestFullscreen();
+      else {
+        await stage.requestFullscreen();
+        frame.focus();
+      }
     } catch (error) {
       $('game-dialog-status').textContent = translate('Fullscreen is unavailable.');
     }
@@ -87,4 +96,5 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
     for (const key of Object.keys(games)) $(`switch-${key}`).setAttribute('aria-pressed', 'false');
   });
   $('game-beer').addEventListener('click', claimBeer);
+  return updateRewardAddress;
 }

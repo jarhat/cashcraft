@@ -1338,6 +1338,23 @@
           Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
         }
       };
+      (function() {
+        var pending;
+        var ready = false;
+        Module.applyPendingRewardAddress = function() {
+          ready = true;
+          if (pending !== undefined) {
+            Module.ccall('netcraft_set_reward_address', null, ['string'], [pending]);
+            pending = undefined;
+          }
+        };
+        window.addEventListener('message', function(event) {
+          if (event.source !== window.parent || !event.data ||
+              event.data.type !== 'netcraft-reward-address' || typeof event.data.address !== 'string') return;
+          pending = event.data.address;
+          if (ready) Module.applyPendingRewardAddress();
+        });
+      })();
       Module.setStatus('Downloading...');
       window.onerror = function(event) {
         // TODO: do not warn on ok events like simulating an infinite loop or exitStatus

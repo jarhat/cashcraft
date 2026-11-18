@@ -323,6 +323,7 @@ for (const name of ['theme', 'language']) {
   });
 }
 
+let updateGameRewardAddress = () => {};
 function setConnection(connected) {
   pairingReminder.cancel();
   if (!connected) $('connection-loading').hidden = true;
@@ -331,11 +332,8 @@ function setConnection(connected) {
   $('forget').hidden = !connected;
   $('disconnect').hidden = !connected;
   $('logout').hidden = !connected;
-  if (!connected) {
-    const gameDialog = $('game-dialog');
-    if (gameDialog.open) gameDialog.close();
-    $('game-status').textContent = '';
-  }
+  updateGameRewardAddress(connected ? addressFor(0, 0) : null);
+  if (!connected) $('game-status').textContent = '';
   document.body.classList.toggle('wallet-connected', connected);
   $('network-wallet-status').textContent = translate(connected ? 'Wallet connected' : 'Not connected');
   if (!$('wizard-dialog').hidden) {
@@ -1658,6 +1656,7 @@ async function endWalletSession() {
   manager = null;
   relay = null;
   walletReady = false;
+  setConnection(false);
 
   if (previousManager) {
     if (wasReady) {
@@ -1686,7 +1685,6 @@ async function endWalletSession() {
   $('open-wallet').hidden = false;
   $('pairing-help').hidden = false;
   clearWalletDisplay();
-  setConnection(false);
 }
 
 $('forget').addEventListener('click', async () => {
@@ -1849,7 +1847,7 @@ function claimBeerReward() {
   }
 }
 
-setupGames($, {
+updateGameRewardAddress = setupGames($, {
   claimBeer: claimBeerReward,
   translate,
   getRewardAddress: () => walletReady ? addressFor(0, 0) : null,

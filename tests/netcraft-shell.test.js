@@ -24,9 +24,19 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
     getElementById: $,
     querySelector(selector) { return selector === '.mobile-controls' ? $('controls') : null; },
   };
-  const window = { addEventListener() {} };
+  const parent = {};
+  const window = { parent, listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; } };
   const context = { document, window, console, Date, Math };
   runInNewContext(script, context);
+  const updates = [];
+  context.Module.ccall = (name, result, types, args) => updates.push([name, args[0]]);
+  window.listeners.message({ source: {}, data: { type: 'netcraft-reward-address', address: 'spoofed' } });
+  window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: 'first' } });
+  window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: '' } });
+  assert.equal(updates.length, 0);
+  context.Module.applyPendingRewardAddress();
+  window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: 'new' } });
+  assert.deepEqual(updates, [['netcraft_set_reward_address', ''], ['netcraft_set_reward_address', 'new']]);
   assert.ok(context.Module.websocket);
   assert.equal(typeof $('mobile-mine').listeners.pointerdown, 'function');
   assert.equal(typeof $('mobile-stick').listeners.pointermove, 'function');

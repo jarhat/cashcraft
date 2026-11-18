@@ -2432,6 +2432,21 @@ static char username[128] = {0};
 static char access_token[128] = {0};
 #ifdef __EMSCRIPTEN__
 static char reward_address[128] = {0};
+
+EMSCRIPTEN_KEEPALIVE void netcraft_set_reward_address(const char *address) {
+    size_t length = strlen(address);
+    if (length >= sizeof(reward_address) || strspn(address, "abcdefghijklmnopqrstuvwxyz0123456789:") != length) {
+        fprintf(stderr, "Invalid reward address update\n");
+        return;
+    }
+    if (strcmp(reward_address, address) == 0) return;
+    snprintf(reward_address, sizeof(reward_address), "%s", address);
+    if (online_ready) {
+        char message[160];
+        snprintf(message, sizeof(message), "W,%s\n", reward_address);
+        client_send(message);
+    }
+}
 #endif
 static bool have_access_token = false;
 
@@ -2942,7 +2957,11 @@ void on_key(GLFWwindow *window, int key, int scancode, int action, int mods) {
             if (!g->messages[g->message_view_index]) g->message_view_index = save;
         }
     }
-    if (key == CRAFT_KEY_FULLSCREEN) { // allow GLFW_REPEAT for F11
+    if (key == CRAFT_KEY_FULLSCREEN && action == GLFW_PRESS && !g->typing
+#ifdef __EMSCRIPTEN__
+        && !EM_ASM_INT(return window.parent !== window;)
+#endif
+    ) {
         fullscreen_toggle();
     }
 
@@ -3774,6 +3793,9 @@ int main(int argc, char **argv) {
         g->mode = MODE_OFFLINE;
         snprintf(g->db_path, MAX_PATH_LENGTH, "%s", DB_PATH);
     }
+#ifdef __EMSCRIPTEN__
+    EM_ASM(Module.applyPendingRewardAddress(););
+#endif
 
     g->create_radius = CREATE_CHUNK_RADIUS;
     g->render_radius = RENDER_CHUNK_RADIUS;

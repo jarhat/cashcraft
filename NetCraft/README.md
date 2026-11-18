@@ -188,6 +188,8 @@ also use `/online` and a full WebSocket URL. The server sends an idle heartbeat
 to help keep proxy connections open. The browser retries disconnected
 connections with backoff and refreshes loaded chunks after reconnecting.
 Block edits are paused while disconnected; they are not queued.
+Disconnecting a wallet does not close the game; its reward address is cleared
+and can be connected again while playing.
 
 The server simulates up to eight passive, sheep-like animals near active
 players. Their movement is shared with all connected clients and follows the
@@ -196,7 +198,9 @@ they are not persisted across server restarts and have no survival interactions.
 
 Compose enables mining rewards by default. A connected token-aware address
 receives one base unit for a naturally generated, previously unedited block;
-placed blocks do not earn another reward. `NETCRAFT_BLOCK_CATEGORY_<id>`
+placed blocks do not earn another reward. Offline play and disconnected edits
+cannot create rewards; a connected player must supply a valid token-aware
+wallet address. `NETCRAFT_BLOCK_CATEGORY_<id>`
 overrides `BCH_REWARD_CATEGORY` for each block type; fund the BCHN wallet with
 those categories and BCH for transaction fees. Set
 `NETCRAFT_MINING_REWARDS_ENABLED=false` to stop new rewards and payouts. Pending

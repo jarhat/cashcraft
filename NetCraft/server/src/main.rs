@@ -719,10 +719,17 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
         "A" => {}
         "W" if args.len() == 1 => {
             let address = args[0].to_ascii_lowercase();
-            if valid_reward_address(&address, &server.address_prefix) && args[0] == address {
+            if address.is_empty() {
                 let mut state = server.state.lock().unwrap();
                 if let Some(player) = state.players.get_mut(&id) {
-                    if player.reward_address.is_none() {
+                    if player.reward_address.take().is_some() {
+                        send(player, b"T,Mining reward address disconnected.\n".to_vec());
+                    }
+                }
+            } else if valid_reward_address(&address, &server.address_prefix) && args[0] == address {
+                let mut state = server.state.lock().unwrap();
+                if let Some(player) = state.players.get_mut(&id) {
+                    if player.reward_address.as_ref() != Some(&address) {
                         player.reward_address = Some(address);
                         send(player, b"T,Mining reward address connected.\n".to_vec());
                     }
@@ -1006,6 +1013,60 @@ mod tests {
             "bitcoincash:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqfnhks603",
             "bitcoincash"
         ));
+    }
+
+    #[test]
+    fn rewards_require_a_connected_player_with_a_wallet() {
+        let (server, _, _) = setup();
+        block_edit(&server, 1, 0, 1, 0, 0).unwrap();
+        {
+            let mut state = server.state.lock().unwrap();
+            let rewards: i64 = state
+                .db
+                .query_row("SELECT count(*) FROM mining_rewards", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(rewards, 0);
+            state.players.remove(&1);
+        }
+        block_edit(&server, 1, 1, 1, 0, 0).unwrap();
+        let state = server.state.lock().unwrap();
+        let rewards: i64 = state
+            .db
+            .query_row("SELECT count(*) FROM mining_rewards", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rewards, 0);
+        let edits: i64 = state
+            .db
+            .query_row(
+                "SELECT count(*) FROM block WHERE x=1 AND y=1 AND z=0",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(edits, 0);
+    }
+
+    #[test]
+    fn wallet_can_be_disconnected_and_reconnected_without_leaving_game() {
+        let (server, _, _) = setup();
+        let address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz";
+        handle_command(&server, 1, &format!("W,{address}")).unwrap();
+        handle_command(&server, 1, "W,").unwrap();
+        block_edit(&server, 1, 0, 1, 0, 0).unwrap();
+        handle_command(&server, 1, &format!("W,{address}")).unwrap();
+        block_edit(&server, 1, 1, 1, 0, 0).unwrap();
+        let state = server.state.lock().unwrap();
+        let (count, recipient): (i64, String) = state
+            .db
+            .query_row(
+                "SELECT count(*), cash_address FROM mining_rewards",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(recipient, address);
+        assert!(state.players.contains_key(&1));
     }
 
     #[test]
