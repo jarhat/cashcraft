@@ -2884,7 +2884,7 @@ body { background-attachment: fixed, fixed; }
 }
 @keyframes connection-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .connection-spinner { animation: none; } }
-.gamba-notice strong img { display: block; width: min(225px, 100%); height: auto; image-rendering: pixelated; }
+.gamba-notice strong { font-size: 1.15rem; letter-spacing: .04em; }
 .chain-decoration { height: 82px; margin-top: 20px; }
 .chain-art { inset: 0; height: 82px; opacity: .5; filter: none; }
 .chain-links { stroke-width: 1.1; }
@@ -3047,6 +3047,12 @@ body::before { content: none; display: none; }
 .game-wallet-indicator { display: none; position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border: 2px solid #102333; border-radius: 50%; background: #35d779; }
 .wallet-connected .game-wallet-indicator { display: block; }
 .game-controls button { position: relative; }
+#browser-wallet-section { margin: 14px 0; }
+#browser-wallet-section summary { cursor: pointer; font-weight: 600; }
+.browser-wallet-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+#browser-wallet-form label { display: grid; gap: 4px; margin: 10px 0; }
+#browser-wallet-form label[hidden] { display: none; }
+#browser-wallet-form textarea, #browser-wallet-form input { width: 100%; }
 .game-dialog[open] { animation: game-panel-enter .24s ease-out both; }
 .game-shift-in { animation: game-panel-enter .24s ease-out both; }
 @keyframes game-panel-enter { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }

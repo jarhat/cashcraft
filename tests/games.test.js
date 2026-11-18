@@ -11,7 +11,7 @@ test('game buttons open mounted shells and unload them on close', async (t) => {
     if (!elements.has(id)) elements.set(id, {
       listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute(name, value) { this[name] = value; },
-      classList: { add() {}, remove() {} },
+      classList: { add() {}, remove() {}, contains() { return false; } },
       focus() { this.focused = true; },
       showModal() { this.open = true; }, close() { this.open = false; this.listeners.close(); },
       removeAttribute(name) { delete this[name]; },
@@ -103,7 +103,7 @@ test('NetCraft receives the connected token address when launched', async (t) =>
   const $ = (id) => {
     if (!elements.has(id)) elements.set(id, {
       listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; },
-      setAttribute() {}, classList: { add() {}, remove() {} },
+      setAttribute() {}, classList: { add() {}, remove() {}, contains() { return false; } },
       showModal() { this.open = true; },
     });
     return elements.get(id);
@@ -124,4 +124,65 @@ test('NetCraft receives the connected token address when launched', async (t) =>
   ]);
   update('bitcoincash:zother');
   assert.equal(messages[2].message.address, 'bitcoincash:zother');
+});
+
+test('fullscreen game regains keyboard focus without stealing focus from other dialogs', async (t) => {
+  const previous = { fetch: globalThis.fetch, document: globalThis.document, raf: globalThis.requestAnimationFrame };
+  t.after(() => {
+    globalThis.fetch = previous.fetch;
+    globalThis.document = previous.document;
+    globalThis.requestAnimationFrame = previous.raf;
+  });
+  const elements = new Map();
+  const callbacks = [];
+  const $ = (id) => {
+    if (!elements.has(id)) {
+      const classes = new Set();
+      elements.set(id, {
+        listeners: {}, open: false,
+        addEventListener(type, fn) { this.listeners[type] = fn; },
+        setAttribute() {},
+        classList: { add: (value) => classes.add(value), remove: (value) => classes.delete(value), contains: (value) => classes.has(value) },
+        showModal() { this.open = true; document.activeElement = $('game-close'); },
+        focus() { document.activeElement = this; },
+      });
+    }
+    return elements.get(id);
+  };
+  globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
+  globalThis.document = { body: {}, fullscreenElement: null, activeElement: null, addEventListener() {} };
+  globalThis.requestAnimationFrame = (fn) => callbacks.push(fn);
+  setupGames($, { claimBeer() {}, translate: (text) => text });
+  $('game-dialog').classList.add('game-auto-open');
+  await $('game-netcraft').listeners.click();
+  assert.equal(document.activeElement, $('game-close'));
+  $('game-frame').listeners.load();
+  assert.equal(document.activeElement, $('game-frame'));
+
+  document.activeElement = $('game-wallet');
+  $('connection-dialog').open = true;
+  $('game-frame').listeners.load();
+  assert.equal(document.activeElement, $('game-wallet'));
+  $('connection-dialog').open = false;
+  $('connection-dialog').listeners.close();
+  callbacks.shift()();
+  assert.equal(document.activeElement, $('game-frame'));
+
+  document.activeElement = $('game-notifications');
+  $('notifications-dialog').listeners.close();
+  $('connection-dialog').open = true;
+  callbacks.shift()();
+  assert.equal(document.activeElement, $('game-notifications'));
+  $('connection-dialog').open = false;
+  document.activeElement = $('game-close');
+  $('notifications-dialog').listeners.close();
+  callbacks.shift()();
+  assert.equal(document.activeElement, $('game-close'));
+
+  $('game-dialog').classList.remove('game-auto-open');
+  document.fullscreenElement = $('game-stage');
+  document.activeElement = $('game-notifications');
+  $('notifications-dialog').listeners.close();
+  callbacks.shift()();
+  assert.equal(document.activeElement, $('game-frame'));
 });

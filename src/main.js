@@ -12,6 +12,7 @@ import { setupMarketTicker } from './market-ticker.js';
 import { setupChainTicker } from './chain-ticker.js';
 import { setupWikiGlossary } from './wiki-glossary.js';
 import { setupGames } from './games.js';
+import { setupBrowserWallet } from './browser-wallet-ui.js';
 import { setupMediaSlideshow } from './media-slideshow.js';
 import { createLogger } from './logger.js';
 import { submitCashAddress, API_BASE_URL, createShortLink, openShortLink } from './api.js';
@@ -23,7 +24,7 @@ import {
   wait,
 } from './utils.js';
 
-const network = (import.meta.env.VITE_BCH_NETWORK || 'mainnet').toLowerCase();
+const network = (import.meta.env.VITE_BCH_NETWORK || import.meta.env.BCH_NETWORK || 'mainnet').toLowerCase();
 const logger = createLogger(
   import.meta.env.VITE_CONSOLE_LOG_LEVEL || (import.meta.env.DEV ? 'debug' : 'error'),
 );
@@ -37,7 +38,7 @@ for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]
 
 if (!['mainnet', 'chipnet'].includes(network)) {
   throw new Error(
-    `Unsupported VITE_BCH_NETWORK "${network}". Use "mainnet" or "chipnet".`,
+    `Unsupported BCH network "${network}". Use "mainnet" or "chipnet".`,
   );
 }
 
@@ -134,7 +135,9 @@ $('network').textContent = network.toUpperCase();
 let manager = null;
 let relay = null;
 let walletReady = false;
+let refreshBrowserWalletUI = () => {};
 let pairingInProgress = false;
+let walletTransitioning = false;
 let sending = false;
 let transferInteracted = false;
 let refreshPromise = null;
@@ -205,13 +208,7 @@ function addReceiptNotice() {
   const art = $('gamba-art').cloneNode(true);
   art.removeAttribute('id');
   const label = document.createElement('strong');
-  const labelText = document.createElement('span');
-  labelText.className = 'visually-hidden';
-  labelText.textContent = '1 GAMBA TOKEN';
-  const wordmark = document.createElement('img');
-  wordmark.src = '/gamba-wordmark.svg';
-  wordmark.alt = '';
-  label.append(labelText, wordmark);
+  label.textContent = '1 MINA TOKEN';
   const details = document.createElement('div');
   details.append(label);
   notice.append(art, details);
@@ -230,10 +227,11 @@ function notifyTokenReceipts(scannedUtxos) {
   const state = readReceiptState();
   const wallet = receiptStorageKey();
   const legacyMessage = 'Welcome! Your GAMBA token has arrived: enjoy your special diamond perk.';
-  const message = 'Received 1 GAMBA';
+  const previousMessage = 'Received 1 GAMBA';
+  const message = 'Received 1 MINA';
   const legacy = !state.receiptTracking && (state.gambaNotified ||
-    state.messages.includes(legacyMessage) || state.messages.includes(message));
-  state.messages = state.messages.filter((entry) => entry === message || entry === legacyMessage)
+    state.messages.includes(legacyMessage) || state.messages.includes(previousMessage) || state.messages.includes(message));
+  state.messages = state.messages.filter((entry) => [message, previousMessage, legacyMessage].includes(entry))
     .map(() => message);
   const sent = new Set(state.sent);
   const seen = new Set(state.seen);
@@ -335,7 +333,7 @@ function setConnection(connected) {
   if (!connected) $('connection-loading').hidden = true;
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
   $('advanced-settings').hidden = !connected;
-  $('forget').hidden = !connected;
+  $('forget').hidden = !connected || !!manager?.isBrowserWallet;
   $('disconnect').hidden = !connected;
   $('logout').hidden = !connected;
   updateGameRewardAddress(connected ? addressFor(0, 0) : null);
@@ -359,6 +357,7 @@ function setConnection(connected) {
   $('receive-tab').classList.toggle('active', (connected || transferInteracted) && !isSend);
   $('top-send').classList.toggle('active', (connected || transferInteracted) && isSend);
   $('top-receive').classList.toggle('active', (connected || transferInteracted) && !isSend);
+  refreshBrowserWalletUI();
 }
 
 function clearWalletDisplay() {
@@ -473,7 +472,7 @@ async function showPairingUri(uri) {
 }
 
 async function startConnection({ fresh = false, restoring = false } = {}) {
-  if (pairingInProgress || (walletReady && !fresh)) return;
+  if (walletTransitioning || pairingInProgress || (walletReady && !fresh)) return;
 
   pairingInProgress = true;
   $('connect').disabled = true;
@@ -738,6 +737,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
   } finally {
     pairingInProgress = false;
     $('connect').disabled = walletReady;
+    refreshBrowserWalletUI();
   }
 }
 
@@ -804,20 +804,21 @@ async function fetchAddressUtxosWithRetry(record) {
 }
 
 async function scanWallet() {
-  if (!scanAddressRecords.length) {
+  const records = scanAddressRecords;
+  if (!records.length) {
     throw new Error('No wallet addresses are available to scan.');
   }
 
-  const results = new Array(scanAddressRecords.length);
+  const results = new Array(records.length);
   const prefetchedLogos = new Map();
   let nextIndex = 0;
 
   async function worker() {
     while (true) {
       const index = nextIndex++;
-      if (index >= scanAddressRecords.length) return;
+      if (index >= records.length) return;
 
-      const record = scanAddressRecords[index];
+      const record = records[index];
       results[index] = await fetchAddressUtxosWithRetry(record);
       if (mainnet) {
         for (const utxo of results[index]) {
@@ -833,14 +834,14 @@ async function scanWallet() {
     }
   }
 
-  const workerCount = Math.min(SCAN_CONCURRENCY, scanAddressRecords.length);
+  const workerCount = Math.min(SCAN_CONCURRENCY, records.length);
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
   const foundUtxos = [];
   const seen = new Set();
 
-  for (let i = 0; i < scanAddressRecords.length; i++) {
-    const record = scanAddressRecords[i];
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
 
     for (const utxo of results[i]) {
       const key = utxoKey(utxo);
@@ -852,7 +853,7 @@ async function scanWallet() {
     }
   }
 
-  return { addresses: scanAddressRecords, utxos: foundUtxos, prefetchedLogos };
+  return { addresses: records, utxos: foundUtxos, prefetchedLogos };
 }
 
 function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
@@ -1243,7 +1244,7 @@ function renderPortfolioChart(items) {
 async function refreshBalances({ quiet = false } = {}) {
   if (!walletReady) {
     throw new Error(
-      'No wallet handshake. Pair a compatible WizardConnect wallet first.',
+      'No wallet connected. Connect a browser wallet or a compatible WizardConnect wallet first.',
     );
   }
 
@@ -1272,6 +1273,9 @@ async function refreshBalances({ quiet = false } = {}) {
       if (walletReady && manager === scanManager) notifyTokenReceipts(utxos);
     } catch (error) {
       receiptError = error;
+    }
+    if (!walletReady || manager !== scanManager) {
+      throw new Error('Wallet disconnected during the balance scan.');
     }
     if (!quiet && balanceSatoshis === 0n && !emptyBalanceNotified) {
       const notice = () => {
@@ -1356,11 +1360,13 @@ async function sendFungibleTokens() {
   sending = true;
   setConnection(walletReady);
   $('log').textContent = '';
+  const localUnlockers = [];
 
   try {
     if (!walletReady) {
       throw new Error('Connect and approve the wallet handshake first.');
     }
+    const signingManager = manager;
 
     const requestedCategory = $('category').value.trim().toLowerCase();
 
@@ -1378,7 +1384,7 @@ async function sendFungibleTokens() {
     const amount = BigInt(amountText);
 
     if (
-      mainnet &&
+      mainnet && !manager?.isBrowserWallet &&
       !window.confirm(
         `${translate('MAINNET transaction')}\n\n` +
           `${translate(`Send ${amount.toString()} token units`)}\n` +
@@ -1398,6 +1404,7 @@ async function sendFungibleTokens() {
     if (!Array.isArray(scan?.utxos) || !Array.isArray(scan?.addresses)) {
       throw new Error('Balance scan did not return UTXOs and address records.');
     }
+    if (!walletReady || manager !== signingManager) throw new Error('Wallet changed during transaction preparation.');
 
     const availableTokenInputs = scan.utxos.filter((utxo) => {
       if (
@@ -1526,9 +1533,17 @@ async function sendFungibleTokens() {
     });
 
     for (const utxo of inputs) {
+      if (manager?.isBrowserWallet &&
+          addressFor(utxo.pathName === 'receive' ? 0 : 1, Number(utxo.addressIndex), 'p2pkh') !== utxo.spendAddress) {
+        throw new Error('Transaction input does not match the browser wallet derivation path.');
+      }
+      const unlocker = manager?.isBrowserWallet
+        ? manager.unlocker(utxo.pathName === 'receive' ? 0 : 1, Number(utxo.addressIndex))
+        : placeholderP2PKHUnlocker(utxo.spendAddress);
+      if (manager?.isBrowserWallet) localUnlockers.push(unlocker);
       builder.addInput(
         utxo,
-        placeholderP2PKHUnlocker(utxo.spendAddress),
+        unlocker,
       );
     }
 
@@ -1550,64 +1565,82 @@ async function sendFungibleTokens() {
         feeRate: 1.1,
       });
 
-    const transaction = builder.generateWcTransactionObject({
-      broadcast: false,
-      userPrompt: translate(`Send ${amount.toString()} fungible token units`),
-    });
+    let signed;
+    if (manager?.isBrowserWallet) {
+      const signedTransaction = builder.build();
+      const { feeSats } = builder.calculateTransactionFee();
+      if (!window.confirm(
+        `${translate('Review browser wallet transaction')}\n\n` +
+        `${translate(`Send ${amount.toString()} token units`)}\n` +
+        `${translate('Category')}: ${tokenCategory}\n` +
+        `${translate('To')}: ${recipient}\n` +
+        `${translate('Network fee')}: ${feeSats.toString()} satoshis\n\n` +
+        translate('Approve and broadcast this transaction?'),
+      )) {
+        $('status').textContent = 'Transaction cancelled';
+        return;
+      }
+      signed = { signedTransaction };
+    } else {
+      const transaction = builder.generateWcTransactionObject({
+        broadcast: false,
+        userPrompt: translate(`Send ${amount.toString()} fungible token units`),
+      });
 
-    if (!Array.isArray(transaction?.sourceOutputs)) {
-      throw new Error('Generated transaction is missing sourceOutputs.');
+      if (!Array.isArray(transaction?.sourceOutputs)) {
+        throw new Error('Generated transaction is missing sourceOutputs.');
+      }
+
+      const transactionInputCount = transaction?.transaction?.inputs?.length;
+
+      if (
+        !Number.isInteger(transactionInputCount) ||
+        transactionInputCount !== transaction.sourceOutputs.length
+      ) {
+        throw new Error(
+          `Transaction/sourceOutputs mismatch: inputs=${transactionInputCount}, ` +
+            `sourceOutputs=${transaction.sourceOutputs.length}.`,
+        );
+      }
+
+      if (inputPaths.length !== transactionInputCount) {
+        throw new Error(
+          `Input path count mismatch: paths=${inputPaths.length}, inputs=${transactionInputCount}.`,
+        );
+      }
+
+      // Convert the CashScript transaction to WizardConnect's relay format.
+      // A hex transaction avoids JSON/BigInt problems in the transaction itself;
+      // sourceOutputToRelay converts Uint8Array and BigInt fields in each UTXO.
+      const relayTransaction = {
+        transaction: transactionToHex(
+          transaction.transaction.inputs,
+          transaction.transaction.outputs,
+          transaction.transaction.version,
+          transaction.transaction.locktime,
+        ),
+        sourceOutputs: transaction.sourceOutputs.map(sourceOutputToRelay),
+        broadcast: false,
+        userPrompt: translate(`Send ${amount.toString()} fungible token units`),
+      };
+
+      if (relayTransaction.sourceOutputs.length !== inputPaths.length) {
+        throw new Error(
+          `Signing metadata mismatch: sourceOutputs=${relayTransaction.sourceOutputs.length}, ` +
+            `inputPaths=${inputPaths.length}.`,
+        );
+      }
+
+      const signingRequest = {
+        transaction: relayTransaction,
+        inputPaths,
+      };
+
+      $('status').textContent =
+        'Transaction built · waiting for wallet review and approval…';
+
+      signed = await manager.signTransaction(signingRequest);
     }
-
-    const transactionInputCount = transaction?.transaction?.inputs?.length;
-
-    if (
-      !Number.isInteger(transactionInputCount) ||
-      transactionInputCount !== transaction.sourceOutputs.length
-    ) {
-      throw new Error(
-        `Transaction/sourceOutputs mismatch: inputs=${transactionInputCount}, ` +
-          `sourceOutputs=${transaction.sourceOutputs.length}.`,
-      );
-    }
-
-    if (inputPaths.length !== transactionInputCount) {
-      throw new Error(
-        `Input path count mismatch: paths=${inputPaths.length}, inputs=${transactionInputCount}.`,
-      );
-    }
-
-    // Convert the CashScript transaction to WizardConnect's relay format.
-    // A hex transaction avoids JSON/BigInt problems in the transaction itself;
-    // sourceOutputToRelay converts Uint8Array and BigInt fields in each UTXO.
-    const relayTransaction = {
-      transaction: transactionToHex(
-        transaction.transaction.inputs,
-        transaction.transaction.outputs,
-        transaction.transaction.version,
-        transaction.transaction.locktime,
-      ),
-      sourceOutputs: transaction.sourceOutputs.map(sourceOutputToRelay),
-      broadcast: false,
-      userPrompt: translate(`Send ${amount.toString()} fungible token units`),
-    };
-
-    if (relayTransaction.sourceOutputs.length !== inputPaths.length) {
-      throw new Error(
-        `Signing metadata mismatch: sourceOutputs=${relayTransaction.sourceOutputs.length}, ` +
-          `inputPaths=${inputPaths.length}.`,
-      );
-    }
-
-    const signingRequest = {
-      transaction: relayTransaction,
-      inputPaths,
-    };
-
-    $('status').textContent =
-      'Transaction built · waiting for wallet review and approval…';
-
-    const signed = await manager.signTransaction(signingRequest);
 
     if (
       typeof signed?.signedTransaction !== 'string' ||
@@ -1617,6 +1650,7 @@ async function sendFungibleTokens() {
         'Wallet rejected the transaction or did not return a signed transaction.',
       );
     }
+    if (!walletReady || manager !== signingManager) throw new Error('Wallet changed before the transaction could be broadcast.');
 
     $('status').textContent = 'Wallet approved · broadcasting transaction…';
 
@@ -1643,6 +1677,7 @@ async function sendFungibleTokens() {
     report(error, { log: false });
     $('status').textContent = 'Transaction was not completed';
   } finally {
+    for (const unlocker of localUnlockers) unlocker.template.privateKey.fill(0);
     sending = false;
     setConnection(walletReady);
   }
@@ -1656,42 +1691,96 @@ $('open-wallet').addEventListener('click', () => {
   if (walletPairingUri) window.location.href = walletPairingUri;
 });
 
-async function endWalletSession() {
-  const previousManager = manager;
-  const previousRelay = relay;
-  const wasReady = walletReady;
-  manager = null;
-  relay = null;
-  walletReady = false;
-  setConnection(false);
-
-  if (previousManager) {
-    if (wasReady) {
-      try {
-        await Promise.race([
-          previousManager.sendDisconnect(),
-          wait(2000).then(() => { throw new Error('Wallet disconnect timed out.'); }),
-        ]);
-      } catch (error) {
-        logger.warn('Could not notify wallet of disconnection:', error);
-      }
-    }
-    previousManager.clearStoredSession();
-    await previousManager.destroy();
-  }
-
+async function endWalletSession({ preserveWizardSession = false } = {}) {
+  if (walletTransitioning) throw new Error('A wallet session change is already in progress.');
+  walletTransitioning = true;
   try {
-    previousRelay?.cleanup();
-  } catch {
-    // Cleanup is best-effort.
+    const previousManager = manager;
+    const previousRelay = relay;
+    const wasReady = walletReady;
+    manager = null;
+    relay = null;
+    walletReady = false;
+    setConnection(false);
+
+    if (previousManager) {
+      if (wasReady && !previousManager.isBrowserWallet) {
+        try {
+          await Promise.race([
+            previousManager.sendDisconnect(),
+            wait(2000).then(() => { throw new Error('Wallet disconnect timed out.'); }),
+          ]);
+        } catch (error) {
+          logger.warn('Could not notify wallet of disconnection:', error);
+        }
+      }
+      if (!preserveWizardSession) previousManager.clearStoredSession();
+      await previousManager.destroy();
+    }
+
+    try {
+      previousRelay?.cleanup();
+    } catch {
+      // Cleanup is best-effort.
+    }
+
+    $('pairing').classList.add('hidden');
+    walletPairingUri = null;
+    $('open-wallet').disabled = true;
+    $('open-wallet').hidden = false;
+    $('pairing-help').hidden = false;
+    clearWalletDisplay();
+  } finally {
+    walletTransitioning = false;
+    refreshBrowserWalletUI();
+  }
+}
+
+async function connectBrowserWallet(phrase, isCurrent = () => true) {
+  if (walletReady || pairingInProgress || walletTransitioning) throw new Error('Disconnect the current wallet or finish pairing first.');
+  const [{ BrowserWallet }] = await Promise.all([import('./browser-wallet.js'), loadWalletDependencies()]);
+  if (!isCurrent()) return;
+  if (walletReady || pairingInProgress || walletTransitioning) throw new Error('Another wallet connected. Disconnect it first.');
+  if (manager || relay) await endWalletSession({ preserveWizardSession: true });
+  if (!isCurrent()) return;
+  if (walletReady || pairingInProgress || walletTransitioning || manager) throw new Error('Another wallet connected. Disconnect it first.');
+
+  const wallet = new BrowserWallet(phrase);
+  let address;
+  try {
+    manager = wallet;
+    walletReady = true;
+    address = addressFor(0, 0);
+    updateReceiveAddress();
+    setConnection(true);
+    $('connect').hidden = true;
+    $('open-wallet').hidden = true;
+    $('pairing-help').hidden = true;
+    $('pairing').classList.add('hidden');
+    $('address').textContent = address;
+    $('log').textContent = '';
+    $('status').textContent = 'Browser wallet connected · checking balances…';
+    if ($('connection-dialog').open) $('connection-dialog').close();
+  } catch (error) {
+    manager = null;
+    walletReady = false;
+    await wallet.destroy();
+    setConnection(false);
+    throw error;
   }
 
-  $('pairing').classList.add('hidden');
-  walletPairingUri = null;
-  $('open-wallet').disabled = true;
-  $('open-wallet').hidden = false;
-  $('pairing-help').hidden = false;
-  clearWalletDisplay();
+  void (async () => {
+    const [scan, submission] = await Promise.allSettled([refreshBalances(), submitCashAddress(address)]);
+    if (!walletReady || manager !== wallet) return;
+    resumeBeerReward(address);
+    const failures = [];
+    if (scan.status === 'rejected') failures.push(`Balance scan failed: ${scan.reason?.message || scan.reason}`);
+    if (submission.status === 'rejected') failures.push(`Address submission failed: ${submission.reason?.message || submission.reason}`);
+    if (failures.length) {
+      report(new Error(failures.join('\n')), { log: false });
+      $('status').textContent = 'Browser wallet connected · some services are unavailable';
+    }
+  })();
 }
 
 $('forget').addEventListener('click', async () => {
@@ -1820,7 +1909,7 @@ async function pollBeerReward(address) {
       showGambaCelebration();
     }
     localStorage.setItem(beerKey(address), 'complete');
-    $('game-status').textContent = translate('Your bonus GAMBA was sent.');
+    $('game-status').textContent = translate('Your bonus MINA was sent.');
   } catch (error) {
     if (walletReady && addressFor(0, 0) === address) {
       $('game-status').textContent = error.message;
@@ -1844,7 +1933,7 @@ function claimBeerReward() {
     }
     const address = addressFor(0, 0);
     if (localStorage.getItem(beerKey(address)) === 'complete') {
-      $('game-status').textContent = translate('Your bonus GAMBA was already sent.');
+      $('game-status').textContent = translate('Your bonus MINA was already sent.');
       return;
     }
     localStorage.setItem(beerKey(address), 'pending');
@@ -1859,6 +1948,11 @@ updateGameRewardAddress = setupGames($, {
   translate,
   getRewardAddress: () => walletReady ? addressFor(0, 0) : null,
   autoOpen: new URLSearchParams(window.location.search).has('c'),
+});
+refreshBrowserWalletUI = setupBrowserWallet($, {
+  network,
+  canConnect: () => !walletReady && !pairingInProgress && !walletTransitioning,
+  onConnect: connectBrowserWallet,
 });
 
 $('show-nfts').addEventListener('change', () => {
@@ -1934,6 +2028,13 @@ $('notifications-close').addEventListener('click', () => notificationsDialog.clo
 notificationsDialog.addEventListener('close', () => {
   markNotificationsRead();
   ($('game-dialog').open ? $('game-notifications') : $('notifications-toggle')).focus({ preventScroll: true });
+});
+
+window.addEventListener('message', (event) => {
+  if ($('game-dialog').open && event.source === $('game-frame').contentWindow &&
+      event.data?.type === 'netcraft-user-gesture' && notificationAudio?.state !== 'running') {
+    unlockNotificationAudio();
+  }
 });
 
 let notificationAudio;
@@ -2412,7 +2513,7 @@ const tutorialSteps = [
   {
     id: 'connection-section',
     title: 'Connect your wallet',
-    message: 'Pair with WizardConnect using the QR code or open the pairing link in your wallet. Approve the connection there.',
+    message: 'Create or restore an encrypted browser wallet, or pair an existing wallet with WizardConnect. Back up your recovery phrase privately.',
   },
   {
     id: 'balance-section',

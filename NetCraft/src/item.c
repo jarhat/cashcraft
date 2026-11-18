@@ -148,6 +148,7 @@ int block_id_by_name(const char *name) {
 }
 
 void init_blocks() {
+    if (block_count) return;
     //              name              w => (front,     back,     left,        right,    top,       bottom) tiles
     //      hardness, flags
     register_block("Empty",               RC( 0, 0), RC( 0, 0), RC( 0, 0), RC( 0, 0), RC( 0, 0), RC( 0, 0),

@@ -207,7 +207,13 @@ Compose enables mining rewards by default. A connected token-aware address
 receives one base unit for a naturally generated, previously unedited block;
 placed blocks do not earn another reward. Offline play and disconnected edits
 cannot create rewards; a connected player must supply a valid token-aware
-wallet address. `NETCRAFT_BLOCK_CATEGORY_<id>`
+wallet address. The interface calls the default reward MINA; the configured
+CashToken category is unchanged by that display name. Rewards are queued and
+the notification appears after the payout is broadcast and the wallet scan
+detects it (normally within 30 seconds, subject to network delays). The red
+bell indicator is shared between the wallet and game; opening notifications
+marks them read. Browsers may require a user gesture before sound can play.
+`NETCRAFT_BLOCK_CATEGORY_<id>`
 overrides `BCH_REWARD_CATEGORY` for each block type; fund the BCHN wallet with
 those categories and BCH for transaction fees. Set
 `NETCRAFT_MINING_REWARDS_ENABLED=false` to stop new rewards and payouts. Pending
@@ -219,6 +225,23 @@ there is no payout cap. A public server can spend all configured tokens and
 BCH available for fees. Standalone server and backend processes default to
 rewards disabled unless `NETCRAFT_MINING_REWARDS_ENABLED=true`.
 
+### Browser wallet
+
+The wallet dialog offers WizardConnect or a locally encrypted browser wallet.
+Back up the English BIP39 recovery phrase offline before saving it. The
+password encrypts this browser's storage; it is not a BIP39 passphrase, and
+passphrases are not supported. Recovery uses BCH BIP44 paths
+`m/44'/145'/0'/0/<index>` for receive and `m/44'/145'/0'/1/<index>` for
+change on both mainnet and chipnet. Restore the phrase in a compatible wallet
+using these paths if browser storage is lost. Copying a phrase exposes it to
+the clipboard; clear the clipboard after use.
+
+The browser wallet signs fungible CashToken sends locally and needs BCH for
+transaction outputs and fees; NFT-bearing inputs are not used. Verify the
+destination, category, amount and fee before approving. This implementation
+has not had an independent security audit. An attacker controlling the site or
+browser can steal an unlocked wallet, so use secure hosting and small amounts.
+
 ### Controls
 
 On touch devices, use the joystick to move, drag the game view to look, and use
@@ -227,7 +250,10 @@ enables block and footstep sounds after a user gesture; the game dialog also
 has a fullscreen button. The `?c` URL parameter opens the game in a
 viewport-filling dialog; browser fullscreen still requires a user gesture.
 Touch devices start with a four-chunk viewing radius to limit rendering cost;
-use `/view <radius>` to adjust it.
+use `/view <radius>` to adjust it. The right-hand block selector shows the
+current block enlarged followed by the next available blocks; it does not
+represent limited inventory counts. Closing the wallet or notifications
+returns keyboard focus to the fullscreen game when appropriate.
 
 Mouse:
 

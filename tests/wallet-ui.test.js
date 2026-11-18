@@ -172,6 +172,7 @@ test('notification can be dismissed outside and reopened with its request intact
   const end = source.indexOf("\nif (document.readyState", start);
   runInNewContext(source.slice(start, end), {
     $: element, setTransferTab() {}, document: { addEventListener() {} },
+    window: { addEventListener() {} },
     MutationObserver: class { observe() {} },
   });
   const dialog = element('notifications-dialog');
@@ -248,7 +249,8 @@ test('connect during relay startup displays a fresh pairing after it is ready', 
   const sendEnd = source.indexOf('\nconst notificationsDialog', sendStart);
   const context = {
     $: (id) => nodes[id], relay: null, manager: null,
-    walletReady: false, pairingInProgress: false, showPairingWhenReady: false,
+    walletReady: false, pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
+    refreshBrowserWalletUI() {},
     clearWalletDisplay() {}, setConnection() {},
     loadWalletDependencies: () => dependencies,
     loadSession: () => ({ walletPublicKey: 'saved' }),
@@ -348,6 +350,27 @@ test('prefetches each token logo during the scan without waiting for other addre
   assert.deepEqual(logoRequests, [category]);
 });
 
+test('a pending scan retains its original wallet addresses when sessions change', async () => {
+  let finish;
+  const original = [{ index: 0 }, { index: 1 }];
+  const start = source.indexOf('async function scanWallet()');
+  const end = source.indexOf('\nfunction renderBalances', start);
+  const context = {
+    scanAddressRecords: original, SCAN_CONCURRENCY: 1, mainnet: false,
+    fetchAddressUtxosWithRetry: (record) => record.index === 0
+      ? new Promise((resolve) => { finish = resolve; })
+      : Promise.resolve([{ address: record.index }]),
+    utxoKey: () => null, normalizeUtxo: (utxo) => utxo,
+  };
+  runInNewContext(source.slice(start, end), context);
+  const scan = context.scanWallet();
+  context.scanAddressRecords = [{ index: 99 }];
+  finish([{ address: 0 }]);
+  const result = await scan;
+  assert.equal(result.addresses, original);
+  assert.deepEqual(Array.from(result.utxos, (utxo) => utxo.address), [0, 1]);
+});
+
 test('late scans restart the manager handshake and attach the listener immediately', async () => {
   let time = 1000;
   let keyExchange;
@@ -361,7 +384,8 @@ test('late scans restart the manager handshake and attach the listener immediate
   const end = source.indexOf('\nasync function fetchBchUsd', start);
   const context = {
     $: element, relay: null, manager: null, walletReady: false,
-    pairingInProgress: false, showPairingWhenReady: false,
+    pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
+    refreshBrowserWalletUI() {},
     Date: { now: () => time }, clearWalletDisplay() {}, setConnection() {},
     logger: { info() {}, warn() {}, error() {} },
     loadWalletDependencies: async () => {}, loadSession: () => null,
@@ -408,7 +432,8 @@ test('stale wallet callbacks cannot disconnect a newer session', async () => {
   const end = source.indexOf('\nasync function fetchBchUsd', start);
   const context = {
     $: element, relay: null, manager: null, walletReady: false,
-    pairingInProgress: false, showPairingWhenReady: false,
+    pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
+    refreshBrowserWalletUI() {},
     clearWalletDisplay() {}, setConnection() {}, updateReceiveAddress() {}, resumeBeerReward() {},
     addressFor: () => 'recipient', submitCashAddress: async () => { submissions++; },
     refreshBalances: async () => {}, loadWalletDependencies: async () => {},
@@ -450,7 +475,8 @@ test('missing wallet public key reports failure instead of appearing connected',
   const end = source.indexOf('\nasync function fetchBchUsd', start);
   const context = {
     $: element, relay: null, manager: null, walletReady: false,
-    pairingInProgress: false, showPairingWhenReady: false,
+    pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
+    refreshBrowserWalletUI() {},
     clearWalletDisplay() {}, setConnection() {},
     addressFor() { throw new Error('Wallet public key is not available'); },
     loadWalletDependencies: async () => {}, loadSession: () => null,
@@ -485,7 +511,7 @@ test('forgetting a pairing notifies the wallet before tearing down the relay', a
   const end = source.indexOf("\n$('refresh').addEventListener", start);
   const context = {
     $: (id) => nodes[id], window: { confirm: () => true }, translate: (text) => text,
-    walletReady: true,
+    walletReady: true, walletTransitioning: false, refreshBrowserWalletUI() {},
     manager: {
       async sendDisconnect() { calls.push('notify'); },
       clearStoredSession() { calls.push('clear'); },
@@ -522,7 +548,8 @@ test('open in wallet remains available until an address is derived, including re
   const end = source.indexOf('\nasync function fetchBchUsd', start);
   const context = {
     $: element, relay: null, manager: null, walletPairingUri: null,
-    walletReady: false, pairingInProgress: false, showPairingWhenReady: false,
+    walletReady: false, pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
+    refreshBrowserWalletUI() {},
     QRCode: { toCanvas: async () => {} }, clearWalletDisplay() {}, setConnection() {},
     pairingReminder: { start() {} },
     updateReceiveAddress() {}, resumeBeerReward() {},
@@ -676,6 +703,57 @@ test('token send signs and broadcasts without submitting a payment proof', async
   assert.equal(reported.options.log, false);
 });
 
+test('browser wallet reviews token sends and does not broadcast when cancelled', async () => {
+  const category = 'a'.repeat(64);
+  const input = {
+    txid: 'b'.repeat(64), vout: 0, token: { category, amount: 5n },
+    satoshis: 20_000n, pathName: 'receive', addressIndex: 0, spendAddress: 'source',
+  };
+  const nodes = {
+    category: { value: category }, recipient: { value: 'recipient' }, amount: { value: '3' },
+    status: {}, log: { textContent: '', classList: { remove() {} } },
+  };
+  const broadcasts = [];
+  let approved = false;
+  let prompt;
+  let key;
+  class Builder {
+    addInput() { return this; }
+    addOutput() { return this; }
+    addTokenChangeOutputIfNeeded() { return this; }
+    addBchChangeOutputIfNeeded() { return this; }
+    build() { return 'signed-locally'; }
+    calculateTransactionFee() { return { feeSats: 300n }; }
+  }
+  const start = source.indexOf('async function sendFungibleTokens()');
+  const end = source.indexOf("\n$('connect').addEventListener", start);
+  const context = {
+    $: (id) => nodes[id], sending: false, walletReady: true, mainnet: true,
+    setConnection() {}, validateRecipient: (value) => value, translate: (text) => text,
+    refreshBalances: async () => ({ utxos: [input], addresses: [{}] }),
+    TOKEN_OUTPUT_SATOSHIS: 1000n, FEE_RESERVE_SATOSHIS: 10000n,
+    MAXIMUM_FEE_SATOSHIS: 10000n, TransactionBuilder: Builder,
+    addressFor: (path, index, type) => path === 0 && type === 'p2pkh' ? 'source' : 'change',
+    manager: { isBrowserWallet: true, unlocker() {
+      key = new Uint8Array([5, 6]);
+      return { template: { privateKey: key } };
+    } },
+    window: { confirm(message) { prompt = message; return approved; } },
+    provider: { async sendRawTransaction(hex) { broadcasts.push(hex); return 'txid'; } },
+    rememberSentTransaction() {}, refreshAfterApproval: async () => {},
+    report(error) { throw error; },
+  };
+  runInNewContext(source.slice(start, end), context);
+  await context.sendFungibleTokens();
+  assert.deepEqual(broadcasts, []);
+  assert.match(prompt, /300 satoshis/);
+  assert.deepEqual([...key], [0, 0]);
+  approved = true;
+  await context.sendFungibleTokens();
+  assert.deepEqual(broadcasts, ['signed-locally']);
+  assert.deepEqual([...key], [0, 0]);
+});
+
 test('portfolio abbreviates category IDs but copies the full ID', async () => {
   class Element {
     constructor() {
@@ -819,7 +897,8 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   const end = source.indexOf('\nfunction clearWalletDisplay', start);
   const context = {
     $, document: { querySelectorAll: () => panels, body: { classList: { toggle() {} } } }, sending: false,
-    pairingInProgress: false, transferInteracted: false, tutorialStep: 2,
+    pairingInProgress: false, transferInteracted: false, tutorialStep: 2, manager: null,
+    refreshBrowserWalletUI() {},
     pairingReminder: { cancel() {} },
     addressFor: () => 'token-address',
     updateGameRewardAddress: (address) => { context.rewardAddress = address; },

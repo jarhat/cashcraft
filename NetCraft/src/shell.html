@@ -1363,6 +1363,13 @@
       (function() {
         var pending;
         var ready = false;
+        function notifyUserGesture(event) {
+          if (event.isTrusted && !event.repeat && window.parent !== window) {
+            window.parent.postMessage({ type: 'netcraft-user-gesture' }, '*');
+          }
+        }
+        document.addEventListener('pointerdown', notifyUserGesture);
+        document.addEventListener('keydown', notifyUserGesture);
         Module.applyPendingRewardAddress = function() {
           ready = true;
           if (pending !== undefined) {

@@ -2316,7 +2316,7 @@ void render_cover(Attrib *attrib, Player *player) {
 
     GLuint buffer = gen_cube_buffer_faces(target_x, target_y, target_z, 0.501, w, w, w, w, w, w);
     glEnable(GL_BLEND);
-    glBlendFuncSeparate(GL_DST_COLOR, GL_SRC_COLOR, GL_DST_ALPHA, GL_SRC_ALPHA);
+    glBlendFuncSeparate(GL_DST_COLOR, GL_ZERO, GL_ZERO, GL_ONE);
     draw_cube(attrib, buffer);
     glDisable(GL_BLEND);
     del_buffer(buffer);
@@ -2339,40 +2339,42 @@ static void render_crosshairs(Attrib *attrib) {
 #endif
 }
 
+static GLuint item_buffers[256];
+
 void render_item(Attrib *attrib) {
-    float matrix[16];
+    if (hotbar_item_count <= 0) return;
     glUseProgram(attrib->program);
-    set_matrix_item(matrix, g->width, g->height, g->scale + 1);
     glUniform3f(attrib->camera, 0, 0, 5);
     glUniform1i(attrib->sampler, 0);
+    glUniform1i(attrib->extra1, 2);
+    glUniform1f(attrib->extra2, 1);
+    glUniform1f(attrib->extra3, 100000);
+    glUniform1i(attrib->extra4, 0);
     glUniform1f(attrib->timer, time_of_day());
-    for(int i = 0; i < NUM_INVENTORY_VISIBLE; ++i) {
-        //if(g->item_index + i >= item_count) {
-        if(g->item_index + i >= 7) {
-            break;
-        }
 
+    float spacing = 42.0f * g->scale;
+    int visible = 1 + (int)((g->height - 270.0f * g->scale) / spacing);
+    if (visible < 1) visible = 1;
+    if (visible > NUM_INVENTORY_VISIBLE) visible = NUM_INVENTORY_VISIBLE;
+    if (visible > hotbar_item_count) visible = hotbar_item_count;
+    for (int i = 0; i < visible; i++) {
+        int w = hotbar_items[(g->item_index + i) % hotbar_item_count];
+        if (w <= 0 || w >= 256) continue;
+        if (!item_buffers[w]) {
+            item_buffers[w] = is_plant(w)
+                ? gen_plant_buffer(0, 0, 0, 0.5, w)
+                : gen_cube_buffer(0, 0, 0, 0.5, w);
+        }
+        float matrix[16];
+        set_matrix_item(matrix, g->width, g->height, g->scale);
+        if (i == 0) {
+            for (int j = 0; j < 12; j++) matrix[j] *= 1.2f;
+        }
+        matrix[12] = 1.0f - 80.0f * g->scale / g->width;
+        matrix[13] = 1.0f - 2.0f * (132.0f * g->scale + i * spacing) / g->height;
         glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
-
-//        int w = items[g->item_index + i];
-//        if (is_plant(w)) {
-//            GLuint buffer = gen_plant_buffer(0, 0, 0, 0.5, w);
-//            draw_plant(attrib, buffer);
-//            del_buffer(buffer);
-//        }
-//        else {
-//            GLuint buffer = gen_cube_buffer(0, 0, 0, 0.5, w);
-//            draw_cube(attrib, buffer);
-//            del_buffer(buffer);
-//        }
-
-        if(!i) {
-            set_matrix_item(matrix, g->width, g->height, g->scale);
-            matrix[12] += 0.08f;
-            matrix[13] += 0.1f;
-        }
-
-        matrix[13] += 0.25f;
+        if (is_plant(w)) draw_plant(attrib, item_buffers[w]);
+        else draw_cube(attrib, item_buffers[w]);
     }
 }
 
@@ -2390,32 +2392,6 @@ static void render_text(
     GLuint buffer = gen_text_buffer(x, y, n, text);
     draw_text(attrib, buffer, length);
     del_buffer(buffer);
-}
-
-void render_item_count(Attrib *attrib, float ts) {
-    const int buf_len = 4;
-
-    float pos = 15.0f;
-    for(int i = 0; i < NUM_INVENTORY_VISIBLE; ++i) {
-        //if(g->item_index + i >= item_count) {
-        if(g->item_index + i >= 7) {
-            break;
-        }
-
-        char buf[buf_len];
-        //snprintf(buf, buf_len, "%d\n", Inventory_getCount(&g->inventory, items[g->item_index + i]));
-        //snprintf(buf, buf_len, "%d\n", g->inventory.count[items[g->item_index]]);
-
-        //render_text(attrib, ALIGN_CENTER, g->width - 20.0f, pos, ts, buf, g->width, g->height);
-        //printf("%d\n", g->width);
-
-        float ratio_to_hardcoded = (g->height / 768.0f);
-        if(i) {
-            pos += 96.0f * ratio_to_hardcoded;
-        } else {
-            pos += 140.0f * ratio_to_hardcoded;
-        }
-    }
 }
 
 void add_message(const char *text) {
@@ -4036,6 +4012,12 @@ void main_shutdown() {
     client_stop();
     client_disable();
     del_buffer(sky_buffer);
+    for (int i = 0; i < 256; i++) {
+        if (item_buffers[i]) {
+            del_buffer(item_buffers[i]);
+            item_buffers[i] = 0;
+        }
+    }
     animals_shutdown();
     delete_all_chunks();
     delete_all_players();
@@ -4212,7 +4194,6 @@ void render_scene() {
         }
         if (SHOW_ITEM && g->show_ui) {
             render_item(&block_attrib);
-            render_item_count(&text_attrib, ts);
         }
     } else {
         face_count = 0;

@@ -39,7 +39,7 @@ function receiptHarness(stored = new Map(), wallet = 'wallet') {
   return { api, category, elements, stored, get celebrations() { return celebrations; } };
 }
 
-test('announces each distinct GAMBA output once, not other tokens or self-sent change', async () => {
+test('announces each distinct MINA output once, not other tokens or self-sent change', async () => {
   const h = receiptHarness();
   await h.api.loadRewardCategory();
   h.api.rememberSentTransaction('self');
@@ -55,7 +55,7 @@ test('announces each distinct GAMBA output once, not other tokens or self-sent c
   h.api.notifyTokenReceipts([other, reward]);
   h.api.notifyTokenReceipts([reward, { ...reward, txid: 'another' }]);
   assert.equal(h.celebrations, 2);
-  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 GAMBA TOKEN', '1 GAMBA TOKEN']);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 MINA TOKEN', '1 MINA TOKEN']);
   const notice = h.elements.get('token-receipt-notifications').items[0];
   assert.equal(notice.className, 'notification-message gamba-notice');
   assert.equal(notice.children.length, 2);
@@ -67,7 +67,7 @@ test('announces each distinct GAMBA output once, not other tokens or self-sent c
   await reload.api.loadRewardCategory();
   reload.api.notifyTokenReceipts([reward]);
   assert.equal(reload.celebrations, 0);
-  assert.deepEqual(reload.elements.get('token-receipt-notifications').notices, ['1 GAMBA TOKEN', '1 GAMBA TOKEN']);
+  assert.deepEqual(reload.elements.get('token-receipt-notifications').notices, ['1 MINA TOKEN', '1 MINA TOKEN']);
 
   const anotherWallet = receiptHarness(h.stored, 'another-wallet');
   await anotherWallet.api.loadRewardCategory();
@@ -87,8 +87,21 @@ test('migrates existing notices without replaying GAMBA or showing other tokens'
   await h.api.loadRewardCategory();
   h.api.notifyTokenReceipts([{ txid: 'reward', vout: 0, token: { category: h.category, amount: 1n } }]);
   assert.equal(h.celebrations, 0);
-  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 GAMBA TOKEN']);
-  assert.deepEqual(JSON.parse(stored.values().next().value).messages, ['Received 1 GAMBA']);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 MINA TOKEN']);
+  assert.deepEqual(JSON.parse(stored.values().next().value).messages, ['Received 1 MINA']);
+});
+
+test('renames tracked GAMBA receipts without replaying them', async () => {
+  const stored = new Map([['ctf-token-receipts:mainnet:wallet', JSON.stringify({
+    seen: ['reward:0'], sent: [], unread: false, receiptTracking: true,
+    gambaNotified: true, messages: ['Received 1 GAMBA'],
+  })]]);
+  const h = receiptHarness(stored);
+  await h.api.loadRewardCategory();
+  h.api.notifyTokenReceipts([{ txid: 'reward', vout: 0, token: { category: h.category, amount: 1n } }]);
+  assert.equal(h.celebrations, 0);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 MINA TOKEN']);
+  assert.deepEqual(JSON.parse(stored.values().next().value).messages, ['Received 1 MINA']);
 });
 
 test('does not show an unrecorded celebration if browser storage fails', async () => {
@@ -199,6 +212,29 @@ test('a prior user gesture unlocks sound before a later GAMBA receipt', async ()
   assert.equal(calls.filter((call) => call === 'created').length, 1);
   assert.equal(calls.filter((call) => call === 'tone').length, 3);
   assert.equal(elements.get('gamba-sound-status').textContent, '');
+});
+
+test('only the open game frame can request notification audio unlock', () => {
+  const start = source.indexOf("window.addEventListener('message', (event) => {");
+  const end = source.indexOf('\nlet notificationAudio;', start);
+  let handler;
+  let unlocks = 0;
+  const frame = {};
+  const game = { open: true };
+  const context = {
+    window: { addEventListener: (_type, callback) => { handler = callback; } },
+    $: (id) => id === 'game-dialog' ? game : { contentWindow: frame },
+    notificationAudio: null,
+    unlockNotificationAudio: () => { unlocks++; },
+  };
+  runInNewContext(source.slice(start, end), context);
+  handler({ source: {}, data: { type: 'netcraft-user-gesture' } });
+  handler({ source: frame, data: { type: 'other' } });
+  game.open = false;
+  handler({ source: frame, data: { type: 'netcraft-user-gesture' } });
+  game.open = true;
+  handler({ source: frame, data: { type: 'netcraft-user-gesture' } });
+  assert.equal(unlocks, 1);
 });
 
 test('a later gesture retries audio unlock after an earlier failure', async () => {
