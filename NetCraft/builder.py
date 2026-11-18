@@ -10,8 +10,8 @@ With no arguments, a new Compose world is created at data/netcraft.db. An
 existing database is never replaced; use --add-park only after stopping the
 server and backing up the world.
 Stop the server before running either command. --init-park creates a new
-database; --add-park requires an existing Rust-server world and aborts
-without changes if its tower or sky park overlaps any existing world edits.
+database; --add-park requires an existing Rust-server world and preserves
+existing block, light and sign edits, skipping park blocks at those positions.
 Back up existing worlds before building.
 It requires a C compiler and the checked-in terrain sources so it can clear
 only blocks that actually exist in the server's generated terrain.
@@ -534,28 +534,27 @@ def initialize_park(path):
     print("Created %s with %d park edits. Start the server with this database." % (path, len(edits)))
 
 def add_park(path):
-    """Atomically add the park to a stopped Rust world if its footprint is clear."""
+    """Atomically add park blocks without changing any existing edits."""
     terrain = terrain_in_park()
     edits = make_park(terrain)
     with closing(sqlite3.connect(Path(path).resolve().as_uri() + "?mode=rw", uri=True, timeout=10)) as db:
         db.execute("BEGIN IMMEDIATE")
         try:
+            occupied = set()
             for table in ("block", "light", "sign"):
-                conflict = db.execute(
-                    "SELECT x,y,z FROM " + table + " WHERE "
-                    "(x BETWEEN ? AND ? AND z BETWEEN ? AND ? AND y BETWEEN ? AND ?) OR "
-                    "(x BETWEEN -8 AND 8 AND z BETWEEN ? AND ? AND y BETWEEN 31 AND ?) LIMIT 1",
-                    (-WORLD_HALF_WIDTH, WORLD_HALF_WIDTH, WORLD_Z_MIN, WORLD_Z_MAX,
-                     SKY_Y - 18, SKY_Y + 36, TOWER_Z - 8, TOWER_Z + 8, SKY_Y),
-                ).fetchone()
-                if conflict:
-                    raise ValueError("Existing %s edit at %s overlaps the park; no changes made" % (table, conflict))
-            db.executemany("INSERT INTO block VALUES (?,?,?,?,?,?)", park_rows(edits))
+                occupied.update(db.execute(
+                    "SELECT DISTINCT x,y,z FROM " + table +
+                    " WHERE x BETWEEN ? AND ? AND z BETWEEN ? AND ? AND y BETWEEN 1 AND 255",
+                    (-WORLD_HALF_WIDTH, WORLD_HALF_WIDTH, WORLD_Z_MIN, WORLD_Z_MAX),
+                ))
+            accepted = {position: block for position, block in edits.items() if position not in occupied}
+            db.executemany("INSERT INTO block VALUES (?,?,?,?,?,?)", park_rows(accepted))
             db.commit()
         except Exception:
             db.rollback()
             raise
-    print("Added %d park edits to %s. Restart the server." % (len(edits), path))
+    print("Added %d park edits to %s; preserved %d overlapping positions. Restart the server." %
+          (len(accepted), path, len(edits) - len(accepted)))
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__,

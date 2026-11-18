@@ -63,22 +63,24 @@ class ExistingWorldParkTests(unittest.TestCase):
         self.assertIn((-1, -1, 0, 180, 0, -6), rows)
         self.assertIn((0, 0, 1, 180, 1, 0), rows)
 
-    def test_each_overlapping_edit_aborts_without_changes(self):
+    def test_overlapping_edits_are_preserved(self):
         for table, values in [
             ("block", (0, 0, 1, 180, 1, 0)),
-            ("light", (0, 0, 0, 40, -12, 1)),
-            ("sign", (0, 0, 1, 181, 1, 0, "existing")),
-            ("light", (1, 0, 53, 170, 0, 1)),
+            ("light", (0, 0, 1, 180, 1, 1)),
+            ("sign", (0, 0, 1, 180, 1, 0, "existing")),
         ]:
             with self.subTest(table=table):
-                with sqlite3.connect(self.path) as db:
-                    placeholders = ",".join("?" for _ in values)
-                    db.execute(f"INSERT INTO {table} VALUES ({placeholders})", values)
-                with self.assertRaisesRegex(ValueError, "overlaps the park"):
-                    builder.add_park(self.path)
-                with sqlite3.connect(self.path) as db:
-                    self.assertEqual(db.execute("SELECT COUNT(*) FROM block").fetchone()[0], 2 if table == "block" else 1)
-                    db.execute(f"DELETE FROM {table} WHERE x=?", (values[2],))
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "copy.db"
+                    with sqlite3.connect(self.path) as source, sqlite3.connect(path) as target:
+                        source.backup(target)
+                        placeholders = ",".join("?" for _ in values)
+                        target.execute(f"INSERT INTO {table} VALUES ({placeholders})", values)
+                    builder.add_park(path)
+                    with sqlite3.connect(path) as db:
+                        self.assertEqual(db.execute(f"SELECT * FROM {table} WHERE x=1").fetchone(), values)
+                        self.assertEqual(db.execute("SELECT COUNT(*) FROM block WHERE x=1").fetchone()[0], 1 if table == "block" else 0)
+                        self.assertEqual(db.execute("SELECT w FROM block WHERE p=0 AND q=0 AND x=0 AND y=180 AND z=0").fetchone()[0], 6)
 
     def test_failed_insert_rolls_back_all_rows(self):
         with sqlite3.connect(self.path) as db:

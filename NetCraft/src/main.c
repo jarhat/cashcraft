@@ -256,6 +256,10 @@ typedef struct {
 
 static Model model;
 static Model *g = &model;
+static struct {
+    bool active;
+    int x, y, z, item;
+} pending_placement;
 
 int chunked(float x) {
     return floorf(roundf(x) / CHUNK_SIZE);
@@ -2921,9 +2925,19 @@ void on_build() {
             if (!hw) return;
         }
 
-        if (!player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
+        if (hy > 0 && hy < 256 && !player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
             int hw = hotbar_items[g->item_index];
 
+            if (g->mode == MODE_ONLINE && pending_placement.active) return;
+            if (!Inventory_use(&g->inventory, hw)) {
+                add_message("Mine this block type before building with it.");
+                return;
+            }
+            if (g->mode == MODE_ONLINE) {
+                pending_placement.active = true;
+                pending_placement.x = hx; pending_placement.y = hy;
+                pending_placement.z = hz; pending_placement.item = hw;
+            }
             set_block(hx, hy, hz, hw);
 #ifdef __EMSCRIPTEN__
             EM_ASM(if (Module.playBlockSound) Module.playBlockSound(1););
@@ -3576,6 +3590,14 @@ void parse_buffer(char *buffer, int len) {
         if (sscanf(line, "I,%d", &mined_item) == 1) {
             Inventory_collect(&g->inventory, mined_item);
         }
+        int jx, jy, jz, item, accepted;
+        if (sscanf(line, "J,%d,%d,%d,%d,%d", &jx, &jy, &jz, &item, &accepted) == 5 &&
+            pending_placement.active && pending_placement.x == jx &&
+            pending_placement.y == jy && pending_placement.z == jz &&
+            pending_placement.item == item && (accepted == 0 || accepted == 1)) {
+            if (!accepted) Inventory_collect(&g->inventory, item);
+            pending_placement.active = false;
+        }
         if (sscanf(line, "B,%d,%d,%d,%d,%d,%d",
             &bp, &bq, &bx, &by, &bz, &bw) == 6)
         {
@@ -3726,6 +3748,7 @@ void reset_model() {
     g->flying = false;
     g->item_index = 0;
     Inventory_reset(&g->inventory);
+    pending_placement.active = false;
     g->ortho_zoom = 32;
     memset(g->typing_buffer, 0, sizeof(char) * MAX_TEXT_LENGTH);
     g->typing = false;
@@ -3987,6 +4010,8 @@ void client_connection_failed(void) {
     if (!connecting && !online_ready) return;
     connecting = false;
     online_ready = false;
+    Inventory_reset(&g->inventory);
+    pending_placement.active = false;
     animals_clear();
     client_stop();
     client_disable();

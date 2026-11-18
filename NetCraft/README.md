@@ -220,8 +220,9 @@ create a world at a different path, use
 
 To add the park to a world that already exists, stop the server, back up its
 database, and run `python3 NetCraft/builder.py --add-park data/netcraft.db`.
-It aborts if existing edits overlap the park footprint. Restart the server to
-load the changes; do not run the builder while the server is running.
+Existing block, light and sign edits are preserved; park blocks at those
+positions are skipped, so existing edits may leave gaps or obstruct paths.
+Restart the server to load the changes; do not run the builder while it runs.
 
 Compose enables mining rewards by default. A connected token-aware address
 receives one base unit for a naturally generated, previously unedited block;
@@ -296,8 +297,10 @@ updates the artwork. The BCHN wallet must be available to create the donation
 address on first use. Touch devices start with a three-chunk viewing radius and
 desktop browsers with four to limit rendering cost;
 use `/view <radius>` to adjust it. The right-hand block selector shows the
-current block enlarged followed by the next available blocks, with counts
-mined in the current game session. Building remains unlimited. `/noclip` is
+current block enlarged followed by the next available blocks, with available
+mined counts. Building consumes one matching block; zero-count blocks cannot
+be placed. Inventory resets when the connection is lost or the page reloads.
+`/noclip` is
 disabled by the online client; the server does not yet enforce movement
 collision against modified clients. Closing the wallet or notifications
 returns keyboard focus to the fullscreen game when appropriate.

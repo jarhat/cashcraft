@@ -74,6 +74,7 @@ struct Player {
     name: String,
     position: [f64; 5],
     reward_address: Option<String>,
+    inventory: [u32; 256],
 }
 
 struct State {
@@ -478,6 +479,16 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
         || z.unsigned_abs() > MAX_COORD as u32
         || !(1..=255).contains(&y)
     {
+        if let Some(player) = server.state.lock().unwrap().players.get(&id) {
+            let (p, q) = (chunked(x), chunked(z));
+            send(
+                player,
+                format!("B,{p},{q},{x},{y},{z},0\nR,{p},{q}\nT,Invalid block edit.\n"),
+            );
+            if w > 0 {
+                send(player, format!("J,{x},{y},{z},{w},0\n"));
+            }
+        }
         return Ok(());
     }
     let (p, q) = (chunked(x), chunked(z));
@@ -511,12 +522,16 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
         || (w == 0 && previous == 0)
         || (w != 0 && previous != 0)
         || distance > 10.0
+        || (w > 0 && w < 256 && player.inventory[w as usize] == 0)
     {
         send(
             &player,
             format!("B,{p},{q},{x},{y},{z},{previous}\nR,{p},{q}\nT,Invalid block edit.\n")
                 .into_bytes(),
         );
+        if w > 0 {
+            send(&player, format!("J,{x},{y},{z},{w},0\n"));
+        }
         return Ok(());
     }
     let transaction = state.db.transaction()?;
@@ -565,7 +580,14 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
     }
     transaction.commit()?;
     if w == 0 {
+        let inventory = &mut state.players.get_mut(&id).unwrap().inventory;
+        if (1..256).contains(&previous) {
+            inventory[previous as usize] = inventory[previous as usize].saturating_add(1);
+        }
         send(&player, format!("I,{previous}\n"));
+    } else {
+        state.players.get_mut(&id).unwrap().inventory[w as usize] -= 1;
+        send(&player, format!("J,{x},{y},{z},{w},1\n"));
     }
     broadcast(&state, Some(id), &changes.concat());
     if reward_queued {
@@ -834,6 +856,7 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
             name: format!("guest{id}"),
             position: [0.0; 5],
             reward_address: None,
+            inventory: [0; 256],
         };
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -1043,6 +1066,7 @@ mod tests {
                     name: format!("guest{id}"),
                     position: [0.0, 1.0, 0.0, 0.0, 0.0],
                     reward_address: None,
+                    inventory: [0; 256],
                 },
             );
             receivers.push(receiver);
@@ -1169,14 +1193,12 @@ mod tests {
     #[test]
     fn extended_block_types_can_be_placed() {
         let (server, _first, second) = setup();
-        server
-            .state
-            .lock()
-            .unwrap()
-            .players
-            .get_mut(&1)
-            .unwrap()
-            .position[1] = 100.0;
+        {
+            let mut state = server.state.lock().unwrap();
+            let player = state.players.get_mut(&1).unwrap();
+            player.position[1] = 100.0;
+            player.inventory[67] = 1;
+        }
         block_edit(&server, 1, 0, 100, 0, 67).unwrap();
         let output = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert!(output.contains("B,0,0,0,100,0,67\n"));
@@ -1190,7 +1212,19 @@ mod tests {
         assert_eq!(position, "P,1,0,100,0,0,0\n");
         handle_command(&server, 1, "P,0,100,0,0,0").unwrap();
         assert!(second.try_recv().is_err());
+        server
+            .state
+            .lock()
+            .unwrap()
+            .players
+            .get_mut(&1)
+            .unwrap()
+            .inventory[6] = 1;
         block_edit(&server, 1, 0, 100, 0, 6).unwrap();
+        assert_eq!(
+            String::from_utf8(first.try_recv().unwrap()).unwrap(),
+            "J,0,100,0,6,1\n"
+        );
         let placed = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert!(placed.contains("B,0,0,0,100,0,6\nR,0,0\n"));
         block_edit(&server, 1, 0, 100, 0, 0).unwrap();
@@ -1201,6 +1235,51 @@ mod tests {
             "I,6\n"
         );
         assert!(first.try_recv().is_err());
+    }
+
+    #[test]
+    fn building_requires_matching_inventory_and_does_not_spend_on_rejection() {
+        let (server, first, _) = setup();
+        block_edit(&server, 1, 0, 1, 0, 0).unwrap();
+        assert_eq!(
+            String::from_utf8(first.try_recv().unwrap()).unwrap(),
+            "I,6\n"
+        );
+        block_edit(&server, 1, 0, 1, 0, 7).unwrap();
+        let rejected = String::from_utf8(first.try_recv().unwrap()).unwrap();
+        assert!(rejected.contains("Invalid block edit"));
+        assert_eq!(
+            String::from_utf8(first.try_recv().unwrap()).unwrap(),
+            "J,0,1,0,7,0\n"
+        );
+        assert_eq!(server.state.lock().unwrap().players[&1].inventory[6], 1);
+        block_edit(&server, 1, 0, 1, 0, 6).unwrap();
+        assert_eq!(
+            String::from_utf8(first.try_recv().unwrap()).unwrap(),
+            "J,0,1,0,6,1\n"
+        );
+        assert_eq!(server.state.lock().unwrap().players[&1].inventory[6], 0);
+    }
+
+    #[test]
+    fn out_of_bounds_placement_is_rejected_without_spending() {
+        let (server, first, _) = setup();
+        server
+            .state
+            .lock()
+            .unwrap()
+            .players
+            .get_mut(&1)
+            .unwrap()
+            .inventory[6] = 1;
+        block_edit(&server, 1, 0, 256, 0, 6).unwrap();
+        let correction = String::from_utf8(first.try_recv().unwrap()).unwrap();
+        assert!(correction.contains("B,0,0,0,256,0,0\n"));
+        assert_eq!(
+            String::from_utf8(first.try_recv().unwrap()).unwrap(),
+            "J,0,256,0,6,0\n"
+        );
+        assert_eq!(server.state.lock().unwrap().players[&1].inventory[6], 1);
     }
 
     #[test]
