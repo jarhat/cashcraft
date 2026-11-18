@@ -1,4 +1,4 @@
-"""Build a customizable CashToken winter park in a NEW Rust-server world.
+"""Build a customizable CashToken sky park in a NEW Rust-server world.
 
 Run before starting the server:
 
@@ -10,16 +10,20 @@ this script does not change a running server or overwrite an existing world.
 It requires a C compiler and the checked-in terrain sources so it can clear
 only blocks that actually exist in the server's generated terrain.
 
-Customize PARK_* below and the drawing functions in make_park(). Coordinates
-are block coordinates, with (0, 0) at the player spawn. The calendar's 24
-numbered panels are decorative, not interactive doors. Block IDs are the
-same as NetCraft/src/item.h; the original shape helpers are also available.
+Customize PARK_*, SKY_Y, TOWER_Z and the drawing functions in make_park().
+Coordinates are block coordinates, with (0, 0) at the player spawn. A spiral
+staircase leads from the natural terrain to the platform; jump up each step
+or double-tap the keyboard jump key to fly. The calendar and seven colored
+gems are decorative, not interactive. Block IDs match NetCraft/src/item.h;
+the original shape helpers are also available. The natural world remains
+outside the tower.
 Always test changes in a new world and back up any world you want to keep.
 """
 
 import argparse
 from contextlib import closing
 import ctypes
+import math
 import os
 from pathlib import Path
 import socket
@@ -57,15 +61,22 @@ WHITE_FLOWER = 22
 BLUE_FLOWER = 23
 COLOR_WHITE = 32
 COLOR_GOLD = 36
+COLOR_CYAN = 41
+COLOR_PURPLE = 42
+COLOR_BLUE = 43
 COLOR_GREEN = 45
 COLOR_RED = 46
 
-# Park footprint and layout; leave the spawn at (0, 0) unobstructed.
+# Platform and tower coordinates. Keep the platform below the 255-block limit.
 PARK_HALF_WIDTH = 28
 PARK_Z_MIN = -25
 PARK_Z_MAX = 28
-CALENDAR_Z = -21
+SKY_Y = 180
+TOWER_Z = -12
+CALENDAR_Z = 22
 TREE_POSITIONS = [(-21, -11), (21, -11), (-21, 14), (21, 14)]
+GEM_POSITIONS = [(-12, -14), (12, -14), (-12, -4), (12, -4),
+                 (-15, 7), (15, 7), (0, 4)]
 
 DIGITS = (
     ("111", "101", "101", "101", "111"),
@@ -271,14 +282,16 @@ def terrain_in_park():
 
 def make_park(terrain):
     """Return absolute block edits; the last drawing at a position wins."""
-    # Keep the plaza at the natural spawn height so a new player lands on it.
     ground = [y for (x, y, z), w in terrain.items()
               if x == z == 0 and w in (GRASS, SAND, STONE, CEMENT, DIRT, SNOW, COBBLE)]
     if not ground:
         raise ValueError("Could not find natural ground at the park spawn")
-    floor = max(ground)
-    if not 31 <= floor <= 200:
-        raise ValueError("Spawn ground is outside the supported park height")
+    base = max(ground)
+    floor = SKY_Y
+    if not 31 <= base < floor - 4 or floor + 36 > 255:
+        raise ValueError("Tower and park do not fit between spawn and world height limit")
+    if any(y >= floor and w != CLOUD for (x, y, z), w in terrain.items()):
+        raise ValueError("Sky platform intersects natural terrain; raise SKY_Y")
     edits = {}
 
     def put(x, y, z, block):
@@ -291,18 +304,68 @@ def make_park(terrain):
         for position in cuboid(x1, x2, y1, y2, z1, z2):
             put(*position, block)
 
-    # Clear natural terrain, trees and clouds above the plaza.
+    # Only the tower interior replaces terrain; the world outside stays intact.
     for (x, y, z), block in terrain.items():
-        if floor < y <= 255:
+        if abs(x) < 8 and abs(z - TOWER_Z) < 8 and base < y < floor:
             put(x, y, z, EMPTY)
-    for x in range(-PARK_HALF_WIDTH, PARK_HALF_WIDTH + 1):
-        for z in range(PARK_Z_MIN, PARK_Z_MAX + 1):
-            # Support the plaza where natural terrain falls below the floor.
-            for y in range(31, floor):
+    for x in range(-7, 8):
+        for z in range(TOWER_Z - 7, TOWER_Z + 8):
+            for y in range(31, base + 1):
                 if (x, y, z) not in terrain:
                     put(x, y, z, DIRT)
+
+    # Hollow tower with an entrance facing the ground-level spawn.
+    for y in range(base + 1, floor - 1):
+        for x in range(-8, 9):
+            for dz in range(-8, 9):
+                if max(abs(x), abs(dz)) != 8:
+                    continue
+                if dz == 8 and abs(x) <= 2 and y <= base + 4:
+                    continue
+                material = COLOR_RED if x in (-8, 8) and dz in (-8, 8) else CEMENT
+                if (y - base) % 12 == 0:
+                    material = COLOR_GOLD
+                put(x, y, TOWER_Z + dz, material)
+
+    # Two-block-wide spiral: each height rises after two horizontal blocks,
+    # and successive laps are 24 blocks apart, leaving ample headroom.
+    ring = [(0, -6)]
+    ring += [(x, -6) for x in range(1, 7)]
+    ring += [(6, z) for z in range(-5, 7)]
+    ring += [(x, 6) for x in range(5, -7, -1)]
+    ring += [(-6, z) for z in range(5, -7, -1)]
+    ring += [(x, -6) for x in range(-5, 0)]
+    ring = [(-x, -z) for x, z in ring]
+    for step in range(2 * (floor - base - 1)):
+        x, dz = ring[step % len(ring)]
+        y = base + 1 + step // 2
+        put(x, y, TOWER_Z + dz, PLANK)
+        if abs(x) == 6:
+            put(x - (1 if x > 0 else -1), y, TOWER_Z + dz, PLANK)
+        else:
+            put(x, y, TOWER_Z + dz - (1 if dz > 0 else -1), PLANK)
+
+    # The opening over the tower connects the top stair to the sky platform.
+    for x in range(-PARK_HALF_WIDTH, PARK_HALF_WIDTH + 1):
+        for z in range(PARK_Z_MIN, PARK_Z_MAX + 1):
+            if abs(x) <= 6 and abs(z - TOWER_Z) <= 6:
+                continue
             path = abs(x) <= 3 or abs(z) <= 2
             put(x, floor, z, CEMENT if path else SNOW)
+            if x in (-PARK_HALF_WIDTH, PARK_HALF_WIDTH) or z in (PARK_Z_MIN, PARK_Z_MAX):
+                put(x, floor + 1, z, COLOR_WHITE)
+
+    last_x, last_z = ring[(2 * (floor - base - 1) - 1) % len(ring)]
+    for x in range(-7, 8):
+        for dz in range(-7, 8):
+            if max(abs(x), abs(dz)) != 7:
+                continue
+            landing = ((abs(last_x) == 6 and x == (7 if last_x > 0 else -7)
+                        and abs(dz - last_z) <= 1) or
+                       (abs(last_z) == 6 and dz == (7 if last_z > 0 else -7)
+                        and abs(x - last_x) <= 1))
+            if not landing:
+                put(x, floor + 1, TOWER_Z + dz, COLOR_WHITE)
 
     # Four layered evergreen trees with trunks, ornaments and golden stars.
     for tx, tz in TREE_POSITIONS:
@@ -325,7 +388,7 @@ def make_park(terrain):
         for column in range(6):
             left = -21 + column * 7
             bottom = floor + 27 - row * 8
-            box(left, left + 6, bottom, bottom + 7, CALENDAR_Z + 1, CALENDAR_Z + 1,
+            box(left, left + 6, bottom, bottom + 7, CALENDAR_Z - 1, CALENDAR_Z - 1,
                 COLOR_RED if (row + column) % 2 == 0 else COLOR_GREEN)
             number = "%02d" % (row * 6 + column + 1)
             for index, character in enumerate(number):
@@ -333,11 +396,11 @@ def make_park(terrain):
                     for dx, pixel in enumerate(pixels):
                         if pixel == "1":
                             put(left + index * 4 + dx, bottom + 6 - dy,
-                                CALENDAR_Z + 2, COLOR_WHITE)
+                                CALENDAR_Z - 2, COLOR_WHITE)
     box(-24, 24, floor + 36, floor + 36, CALENDAR_Z, CALENDAR_Z, COLOR_GOLD)
 
     # A gold-rimmed CashToken-inspired coin with a block-letter B.
-    cx, cz = 0, 20
+    cx, cz = 0, 12
     for dx in range(-6, 7):
         for dy in range(-6, 7):
             distance = dx * dx + dy * dy
@@ -349,7 +412,37 @@ def make_park(terrain):
         for dx, pixel in enumerate(pixels):
             if pixel == "1":
                 put(cx - 2 + dx, floor + 12 - dy, cz - 1, COLOR_WHITE)
-    box(-1, 1, floor + 1, floor + 2, cz, cz, COBBLE)
+    box(cx - 1, cx + 1, floor + 1, floor + 2, cz, cz, COBBLE)
+
+    # Seven differently colored faceted gems on short plinths.
+    gem_colors = (COLOR_CYAN, COLOR_PURPLE, COLOR_BLUE, COLOR_GOLD,
+                  COLOR_RED, COLOR_GREEN, COLOR_WHITE)
+    for (gx, gz), color in zip(GEM_POSITIONS, gem_colors):
+        put(gx, floor + 1, gz, COBBLE)
+        for dx in range(-2, 3):
+            for dy in range(-2, 3):
+                for dz in range(-2, 3):
+                    if abs(dx) + abs(dy) + abs(dz) <= 2:
+                        put(gx + dx, floor + 4 + dy, gz + dz, color)
+
+    # An original winged sky dragon, made of rounded segments and broad wings.
+    # Change the body curve, colors and wing sweep here to customize it.
+    for x in range(-15, 18):
+        y = floor + 23 + round(2 * math.sin(x / 5))
+        radius = 3 if x < 10 else 2
+        for point in sphere(x, y, 0, radius, fill=True):
+            put(*point, COLOR_PURPLE)
+    box(-19, -15, floor + 21, floor + 26, -3, 3, COLOR_PURPLE)
+    box(-21, -19, floor + 20, floor + 22, -2, 2, COLOR_CYAN)
+    for z in (-3, 3):
+        put(-18, floor + 25, z, COLOR_GOLD)
+        box(-16, -15, floor + 27, floor + 29, z, z, COLOR_WHITE)
+    for side in (-1, 1):
+        for x in range(-7, 8):
+            for distance in range(2, 12 - abs(x) // 2):
+                put(x, floor + 25 + distance // 4, side * distance, COLOR_BLUE)
+    for x in range(18, 24):
+        put(x, floor + 22 - (x - 18) // 2, 0, COLOR_CYAN)
     return edits
 
 def initialize_park(path):
