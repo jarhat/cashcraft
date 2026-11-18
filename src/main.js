@@ -256,7 +256,7 @@ function notifyTokenReceipts(scannedUtxos) {
     state.messages.push(...received.map(() => message));
     state.messages = state.messages.slice(-100);
     state.unread = true;
-  } else if (!state.messages.length && !state.beerNotified) {
+  } else if (!state.messages.length) {
     state.unread = false;
   }
   localStorage.setItem(wallet, JSON.stringify(state));
@@ -265,7 +265,6 @@ function notifyTokenReceipts(scannedUtxos) {
     $('token-receipt-notifications').replaceChildren();
     $('gamba-sound-controls').hidden = true;
     state.messages.forEach(() => addReceiptNotice());
-    if (state.beerNotified) addReceiptNotice();
     if (state.unread) $('notification-indicator').hidden = false;
     receiptWallet = wallet;
   } else if (received.length && !legacy) {
@@ -342,12 +341,13 @@ function setConnection(connected) {
   $('forget').hidden = !connected || !!manager?.isBrowserWallet;
   $('disconnect').hidden = !connected;
   $('logout').hidden = !connected;
+  $('wizard-toggle').hidden = connected;
   updateGameRewardAddress(connected ? addressFor(0, 0) : null);
   if (!connected) $('game-status').textContent = '';
   document.body.classList.toggle('wallet-connected', connected);
   $('network-wallet-status').textContent = translate(connected ? 'Wallet connected' : 'Not connected');
   if (!$('wizard-dialog').hidden) {
-    if (connected) $('wizard-next').disabled = false;
+    if (connected) closeTutorial();
     else {
       tutorialStep = 0;
       showTutorialStep();
@@ -561,7 +561,6 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         });
         const [scanResult, submissionResult] = await Promise.allSettled([refreshBalances(), submission]);
         if (!walletReady || manager !== connectionManager) return;
-        resumeBeerReward(address);
         if (scanResult.status === 'rejected' && submissionResult.status === 'rejected') {
           report(new Error(
             `Address submission failed: ${submissionResult.reason?.message || submissionResult.reason}\n` +
@@ -1784,7 +1783,6 @@ async function connectBrowserWallet(phrase, isCurrent = () => true, session = nu
   void (async () => {
     const [scan, submission] = await Promise.allSettled([refreshBalances(), submitCashAddress(address)]);
     if (!walletReady || manager !== wallet) return;
-    resumeBeerReward(address);
     const failures = [];
     if (scan.status === 'rejected') failures.push(`Balance scan failed: ${scan.reason?.message || scan.reason}`);
     if (submission.status === 'rejected') failures.push(`Address submission failed: ${submission.reason?.message || submission.reason}`);
@@ -1863,100 +1861,7 @@ $('wiki-close').addEventListener('click', () => $('wiki-dialog').close());
 $('wiki-language').addEventListener('change', (event) => setLanguage(event.target.value));
 setupWikiGlossary($('wiki-dialog'));
 
-let beerPolling = null;
-function beerKey(address) {
-  return `ctf-beer-reward:${network}:${address.toLowerCase()}`;
-}
-
-function resumeBeerReward(address) {
-  try {
-    if (localStorage.getItem(beerKey(address)) === 'pending') void pollBeerReward(address);
-  } catch (error) {
-    $('game-status').textContent = error.message;
-  }
-}
-
-async function pollBeerReward(address) {
-  if (beerPolling === address || !walletReady || addressFor(0, 0) !== address) return;
-  beerPolling = address;
-  let retry = false;
-  try {
-    if (localStorage.getItem(beerKey(address)) !== 'pending') return;
-    const response = await fetch(`${API_BASE_URL}/api/beer-reward`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cash_address: address }),
-      signal: AbortSignal.timeout(10000),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      if (response.status === 409) localStorage.removeItem(beerKey(address));
-      throw new Error(translate(typeof data.detail === 'string' ? data.detail : `Reward request failed (${response.status}).`));
-    }
-    if (!walletReady || addressFor(0, 0) !== address) return;
-    if (data.status === 'pending') {
-      $('game-status').textContent = translate('Bonus queued. Waiting for the reward transaction…');
-      retry = true;
-      return;
-    }
-    if (data.status !== 'sent' || typeof data.txid !== 'string' || !/^[0-9a-f]{64}$/i.test(data.txid)) {
-      throw new Error('Invalid reward response.');
-    }
-    const scan = await refreshBalances({ quiet: true });
-    if (!walletReady || addressFor(0, 0) !== address) return;
-    if (!scan.utxos.some((utxo) => utxo.txid?.toLowerCase() === data.txid.toLowerCase() &&
-        utxo.token && !utxo.token.nft && String(utxo.token.category).toLowerCase() === rewardCategory &&
-        BigInt(utxo.token.amount || 0) === 1n)) {
-      $('game-status').textContent = translate('Bonus sent. Waiting for the wallet balance to update…');
-      retry = true;
-      return;
-    }
-    const state = readReceiptState();
-    if (!state.beerNotified) {
-      state.beerNotified = true;
-      state.unread = true;
-      localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
-      addReceiptNotice();
-      $('notification-indicator').hidden = false;
-      showGambaCelebration();
-    }
-    localStorage.setItem(beerKey(address), 'complete');
-    $('game-status').textContent = translate('Your bonus MINA was sent.');
-  } catch (error) {
-    if (walletReady && addressFor(0, 0) === address) {
-      $('game-status').textContent = error.message;
-      try {
-        retry = localStorage.getItem(beerKey(address)) === 'pending';
-      } catch (storageError) {
-        $('game-status').textContent = storageError.message;
-      }
-    }
-  } finally {
-    beerPolling = null;
-    if (retry) setTimeout(() => { void pollBeerReward(address); }, 15000);
-  }
-}
-
-function claimBeerReward() {
-  try {
-    if (!walletReady) {
-      $('game-status').textContent = translate('Connect your wallet to claim the bonus.');
-      return;
-    }
-    const address = addressFor(0, 0);
-    if (localStorage.getItem(beerKey(address)) === 'complete') {
-      $('game-status').textContent = translate('Your bonus MINA was already sent.');
-      return;
-    }
-    localStorage.setItem(beerKey(address), 'pending');
-    void pollBeerReward(address);
-  } catch (error) {
-    $('game-status').textContent = error.message;
-  }
-}
-
 updateGameRewardAddress = setupGames($, {
-  claimBeer: claimBeerReward,
   translate,
   getRewardAddress: () => walletReady ? addressFor(0, 0) : null,
   autoOpen: craftRoute || new URLSearchParams(window.location.search).has('c'),
@@ -2018,7 +1923,7 @@ $('funding-connect').addEventListener('click', () => {
 
 
 const notificationsDialog = $('notifications-dialog');
-for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notifications-dialog', 'game-dialog']) {
+for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notifications-dialog']) {
   const dialog = $(id);
   dialog.addEventListener('click', (event) => {
     if (event.target !== dialog) return;
@@ -2043,7 +1948,7 @@ $('notifications-toggle').addEventListener('click', () => {
 $('notifications-close').addEventListener('click', () => notificationsDialog.close());
 notificationsDialog.addEventListener('close', () => {
   markNotificationsRead();
-  ($('game-dialog').open ? $('game-notifications') : $('notifications-toggle')).focus({ preventScroll: true });
+  $('notifications-toggle').focus({ preventScroll: true });
 });
 
 window.addEventListener('message', (event) => {
@@ -2579,7 +2484,7 @@ function closeTutorial() {
   $('wizard-toggle').setAttribute('aria-expanded', 'false');
   guide.classList.remove('walking');
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
-  if (focused) ($('connection-dialog').open ? $('connection-close') : $('wizard-toggle')).focus({ preventScroll: true });
+  if (focused) ($('connection-dialog').open ? $('connection-close') : walletReady ? $('logout') : $('wizard-toggle')).focus({ preventScroll: true });
 }
 
 function openTutorial() {

@@ -97,12 +97,11 @@
       <span class="network"><i aria-hidden="true"></i><span id="network">CHIPNET</span><span id="network-wallet-status" class="visually-hidden">Not connected</span></span>
       <div class="topbar-tools topbar-tools-right">
         <button id="game-pk2" class="theme-toggle game-button" hidden type="button" aria-label="Play Pekka Kana 2"><span aria-hidden="true">🐔</span></button>
-        <button id="game-beer" class="theme-toggle game-button" hidden type="button" aria-label="Claim beer bonus (one per address)"><span aria-hidden="true">🍺</span></button>
-        <button id="connection-open" class="theme-toggle" data-wallet-panel hidden type="button" aria-label="Wallet connection" aria-haspopup="dialog" aria-controls="connection-dialog">
+        <button id="connection-open" class="theme-toggle" hidden type="button" aria-label="Wallet connection" aria-haspopup="dialog" aria-controls="connection-dialog">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M4 6V5a2 2 0 0 1 2-2h12v3m3 5h-5a2 2 0 0 0 0 4h5"/><circle cx="16" cy="13" r=".6"/></svg>
         </button>
-        <button id="notifications-toggle" class="theme-toggle notification-toggle" data-wallet-panel hidden type="button" aria-label="Notifications" aria-controls="notifications-dialog" aria-describedby="notification-indicator" aria-haspopup="dialog">
-          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9ZM10 20h4"/></svg>
+        <button id="notifications-toggle" class="theme-toggle notification-toggle" data-wallet-panel hidden type="button" aria-label="Wallet notifications" aria-controls="notifications-dialog" aria-describedby="notification-indicator" aria-haspopup="dialog">
+          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M4 6V5a2 2 0 0 1 2-2h12v3m3 5h-5a2 2 0 0 0 0 4h5"/><circle cx="16" cy="13" r=".6"/></svg>
           <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread notification</span></span>
         </button>
       </div>
@@ -525,10 +524,12 @@
 
   </main>
 
-  <dialog id="game-dialog" class="notifications-dialog game-dialog" aria-labelledby="game-title">
+  <dialog id="game-dialog" class="notifications-dialog game-dialog" aria-label="CashCraft game">
     <div class="notifications-heading">
-      <h2 id="game-title">Game</h2>
-      <button id="game-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
+      <button id="game-invite" class="small-button" type="button" aria-label="Invite and support" title="Invite and support" aria-haspopup="dialog" aria-controls="invite-dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg> Share
+      </button>
+      <button id="game-close" class="small-button close-notifications" type="button" aria-label="Minimize game">−</button>
     </div>
     <nav class="game-switcher" aria-label="Choose a game" hidden>
       <button id="switch-netcraft" class="small-button" type="button" aria-pressed="false">⛏️ CashCraft</button>
@@ -537,26 +538,24 @@
     <p id="game-dialog-status" class="fine" role="status"></p>
     <div id="game-stage" class="game-stage">
       <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen; gamepad *" allowfullscreen></iframe>
-      <div class="game-controls" aria-label="Game controls">
+      <div class="game-controls game-controls-right" aria-label="Game controls">
+        <button id="game-invite-fullscreen" type="button" aria-label="Invite and support" title="Invite and support" aria-haspopup="dialog" aria-controls="invite-dialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>
+        </button>
         <button id="game-fullscreen" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/></svg>
         </button>
       </div>
-      <div class="game-controls game-controls-right" aria-label="Wallet controls">
+      <div class="game-controls" aria-label="Wallet controls">
         <button id="game-wallet" type="button" aria-label="Wallet connection" title="Wallet connection" aria-haspopup="dialog" aria-controls="connection-dialog">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M4 6V5a2 2 0 0 1 2-2h12v3m3 5h-5a2 2 0 0 0 0 4h5"/><circle cx="16" cy="13" r=".6"/></svg>
           <span class="game-wallet-indicator" aria-hidden="true"></span>
-        </button>
-        <button id="game-notifications" type="button" aria-label="Notifications" title="Notifications" aria-haspopup="dialog" aria-controls="notifications-dialog">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9ZM10 20h4"/></svg>
           <span id="game-notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread notification</span></span>
-        </button>
-        <button id="game-invite" type="button" aria-label="Invite and support" title="Invite and support" aria-haspopup="dialog" aria-controls="invite-dialog">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>
         </button>
       </div>
     </div>
   </dialog>
+  <button id="game-restore" class="small-button" type="button" hidden>Restore CashCraft</button>
 
   <dialog id="invite-dialog" class="notifications-dialog" aria-labelledby="invite-title">
     <div class="notifications-heading">

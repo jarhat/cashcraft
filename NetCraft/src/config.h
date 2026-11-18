@@ -32,7 +32,7 @@
 #define SHOW_ITEM true
 #define SHOW_CROSSHAIRS true
 #define SHOW_WIREFRAME true
-#define SHOW_INFO_TEXT true
+#define SHOW_INFO_TEXT false
 #define SHOW_CHAT_TEXT true
 #define SHOW_PLAYER_NAMES true
 

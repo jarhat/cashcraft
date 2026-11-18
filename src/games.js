@@ -4,11 +4,12 @@ const games = {
 };
 const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 
-export function setupGames($, { claimBeer, translate, getRewardAddress = () => null, autoOpen = false }) {
+export function setupGames($, { translate, getRewardAddress = () => null, autoOpen = false }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
-  document.querySelector('.topbar').after(dialog);
+  const restore = $('game-restore');
+  document.querySelector('.topbar').after(dialog, restore);
   stage.addEventListener('contextmenu', (event) => event.preventDefault());
   let generation = 0;
   let activeGame = null;
@@ -18,7 +19,7 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
     }
   };
   const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog'];
-  const canFocusGame = () => dialog.open && activeGame &&
+  const canFocusGame = () => dialog.open && !dialog.hidden && activeGame &&
     !overlayDialogs.some((id) => $(id).open);
   frame.addEventListener('load', () => {
     updateRewardAddress(getRewardAddress());
@@ -30,7 +31,7 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
   for (const id of overlayDialogs) {
     $(id).addEventListener('close', () => {
       requestAnimationFrame(() => {
-        if (canFocusGame() && [document.body, $('game-wallet'), $('game-notifications'), $('game-invite'), frame]
+        if (canFocusGame() && [document.body, $('game-wallet'), $('game-invite'), frame]
           .includes(document.activeElement)) frame.focus({ preventScroll: true });
       });
     });
@@ -40,6 +41,8 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
       if (dialog.open && activeGame === id) {
         generation++;
         $('game-dialog-status').textContent = '';
+        dialog.hidden = false;
+        restore.hidden = true;
         return;
       }
       const request = ++generation;
@@ -55,7 +58,6 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
         }
         if (request !== generation) return;
         status.textContent = '';
-        $('game-title').textContent = game.title;
         frame.title = game.title;
         frame.classList.remove('game-shift-in');
         void frame.offsetWidth;
@@ -68,6 +70,8 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
           frame.src = game.url;
         }
         activeGame = id;
+        dialog.hidden = false;
+        restore.hidden = true;
         frame.classList.add('game-shift-in');
         for (const key of Object.keys(games)) {
           $(`switch-${key}`).setAttribute('aria-pressed', String(key === id));
@@ -83,9 +87,35 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
       void open();
     }
   }
-  $('game-close').addEventListener('click', () => dialog.close());
-  $('game-wallet').addEventListener('click', () => $('connection-open').click());
-  $('game-notifications').addEventListener('click', () => $('notifications-toggle').click());
+  const minimize = async () => {
+    if (document.fullscreenElement === stage) {
+      try {
+        await document.exitFullscreen();
+      } catch (error) {
+        $('game-dialog-status').textContent = translate('Could not exit fullscreen.');
+        return false;
+      }
+    }
+    dialog.hidden = true;
+    restore.hidden = false;
+    restore.focus({ preventScroll: true });
+    return true;
+  };
+  $('game-close').addEventListener('click', minimize);
+  dialog.addEventListener('cancel', (event) => { event.preventDefault(); void minimize(); });
+  restore.addEventListener('click', () => {
+    dialog.hidden = false;
+    restore.hidden = true;
+    frame.focus({ preventScroll: true });
+  });
+  $('game-wallet').addEventListener('click', async () => {
+    if (!getRewardAddress()) {
+      $('connection-open').click();
+      return;
+    }
+    if (await minimize()) $('earn-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('game-invite-fullscreen').addEventListener('click', () => $('game-invite').click());
   document.addEventListener('fullscreenchange', () => {
     const active = document.fullscreenElement === stage;
     const label = translate(active ? 'Exit fullscreen' : 'Enter fullscreen');
@@ -116,6 +146,5 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
     $('game-dialog-status').textContent = '';
     for (const key of Object.keys(games)) $(`switch-${key}`).setAttribute('aria-pressed', 'false');
   });
-  $('game-beer').addEventListener('click', claimBeer);
   return updateRewardAddress;
 }

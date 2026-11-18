@@ -154,7 +154,7 @@ class RewardTests(unittest.TestCase):
     def test_mina_total_counts_only_sent_rewards_in_current_category(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
         with sqlite3.connect(backend.DB_PATH) as db:
-            for table in ("token_rewards", "beer_rewards"):
+            for table in ("token_rewards", "legacy_bonus_rewards"):
                 db.execute(f"INSERT INTO {table} (cash_address, category, sent_at) VALUES (?, ?, ?)", (table, "b" * 64, "now"))
                 db.execute(f"INSERT INTO {table} (cash_address, category) VALUES (?, ?)", (table + "-pending", "b" * 64))
                 db.execute(f"INSERT INTO {table} (cash_address, category, sent_at) VALUES (?, ?, ?)", (table + "-other", "a" * 64, "now"))
@@ -270,29 +270,34 @@ class RewardTests(unittest.TestCase):
                 [(address, "b" * 64)],
             )
 
-    def test_beer_bonus_requires_sent_reward_and_broadcasts_once(self):
+    def test_discontinued_bonus_cancels_pending_and_preserves_history(self):
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
         client = TestClient(backend.app)
         body = {"cash_address": address}
-        self.assertEqual(client.post("/api/beer-reward", json=body).status_code, 409)
         client.post("/api/cash-address", json=body)
         self.assertEqual(client.post("/api/beer-reward", json=body).status_code, 409)
         with sqlite3.connect(backend.DB_PATH) as db:
             db.execute("UPDATE token_rewards SET sent_at = CURRENT_TIMESTAMP WHERE cash_address = ?", (address,))
-        self.assertEqual(client.post("/api/beer-reward", json=body).json(), {"status": "pending", "txid": None})
-        self.assertEqual(client.post("/api/beer-reward", json=body).json(), {"status": "pending", "txid": None})
-        with patch.object(backend, "build_reward_transaction", return_value=("abcd", "c" * 64)) as build:
-            self.assertTrue(backend.process_one_reward())
-            with patch.object(backend, "bch_rpc", side_effect=[RuntimeError("timeout"), RuntimeError("unavailable")]):
-                with self.assertRaises(RuntimeError):
-                    backend.process_one_reward()
-            with patch.object(backend, "bch_rpc", return_value="c" * 64):
-                self.assertTrue(backend.process_one_reward())
+            db.execute("INSERT INTO legacy_bonus_rewards (cash_address, category, signed_tx, txid) VALUES (?, ?, ?, ?)",
+                       (address, "b" * 64, "abcd", "c" * 64))
+        backend.init_db()
+        with patch.object(backend, "bch_rpc") as rpc, patch.object(backend, "build_reward_transaction") as build:
             self.assertFalse(backend.process_one_reward())
-            build.assert_called_once_with(address, "b" * 64)
-        self.assertEqual(client.post("/api/beer-reward", json=body).json(), {"status": "sent", "txid": "c" * 64})
+            rpc.assert_not_called()
+            build.assert_not_called()
         with sqlite3.connect(backend.DB_PATH) as db:
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM beer_rewards").fetchone()[0], 1)
+            row = db.execute("SELECT signed_tx, txid, sent_at, cancelled_at FROM legacy_bonus_rewards").fetchone()
+            self.assertEqual(row[:3], ("abcd", "c" * 64, None))
+            self.assertIsNotNone(row[3])
+
+    def test_old_bonus_table_is_migrated_without_losing_sent_history(self):
+        with sqlite3.connect(backend.DB_PATH) as db:
+            db.execute("ALTER TABLE legacy_bonus_rewards RENAME TO beer_rewards")
+            db.execute("INSERT INTO beer_rewards (cash_address, category, sent_at) VALUES ('old', ?, '2020-01-01')", ("b" * 64,))
+        backend.init_db()
+        with sqlite3.connect(backend.DB_PATH) as db:
+            self.assertEqual(db.execute("SELECT cash_address, sent_at, cancelled_at FROM legacy_bonus_rewards").fetchone(),
+                             ("old", "2020-01-01", None))
 
     def test_existing_database_is_migrated_without_queueing_old_addresses(self):
         with sqlite3.connect(backend.DB_PATH) as db:

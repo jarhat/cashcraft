@@ -15,6 +15,23 @@ spec.loader.exec_module(builder)
 
 
 class PreviewWorldTests(unittest.TestCase):
+    def test_pillar_spheres_and_donation_qr(self):
+        import segno
+        address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
+        with patch.object(builder, "DONATION_ADDRESS", address):
+            edits = builder.make_park({(0, 40, 0): builder.GRASS})
+        self.assertEqual(edits[0, 100, builder.TOWER_Z], builder.CEMENT)
+        self.assertNotIn((1, 100, builder.TOWER_Z), edits)
+        for x, z in builder.SPHERE_POSITIONS:
+            self.assertEqual(edits[x, builder.SKY_Y + 5, z], builder.COLOR_GOLD)
+        rows = list(segno.make(address, error="m", micro=False).matrix_iter(border=4))
+        for row, pixels in enumerate(rows):
+            for col, dark in enumerate(pixels):
+                self.assertEqual(
+                    edits[col - len(rows) // 2, builder.SKY_Y + len(rows) - row, builder.DONATION_QR_Z],
+                    builder.COLOR_BLACK if dark else builder.COLOR_WHITE,
+                )
+
     def test_expanded_islands_have_bridges_and_fit_world_bounds(self):
         edits = builder.make_park({(0, 40, 0): builder.GRASS})
         floor = builder.SKY_Y

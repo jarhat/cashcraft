@@ -177,8 +177,10 @@ def init_db() -> None:
                 FOREIGN KEY (cash_address) REFERENCES cash_addresses(cash_address)
             )
         """)
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'beer_rewards'").fetchone():
+            db.execute("ALTER TABLE beer_rewards RENAME TO legacy_bonus_rewards")
         db.execute("""
-            CREATE TABLE IF NOT EXISTS beer_rewards (
+            CREATE TABLE IF NOT EXISTS legacy_bonus_rewards (
                 cash_address TEXT PRIMARY KEY,
                 category TEXT NOT NULL,
                 signed_tx TEXT,
@@ -187,6 +189,13 @@ def init_db() -> None:
                 FOREIGN KEY (cash_address) REFERENCES token_rewards(cash_address)
             )
         """)
+        columns = {row[1] for row in db.execute("PRAGMA table_info(legacy_bonus_rewards)")}
+        if "cancelled_at" not in columns:
+            db.execute("ALTER TABLE legacy_bonus_rewards ADD COLUMN cancelled_at TEXT")
+        db.execute(
+            "UPDATE legacy_bonus_rewards SET cancelled_at = CURRENT_TIMESTAMP "
+            "WHERE sent_at IS NULL AND cancelled_at IS NULL"
+        )
         db.execute("""
             CREATE TABLE IF NOT EXISTS short_links (
                 id TEXT PRIMARY KEY,
@@ -768,33 +777,8 @@ def receive_cash_address(
 
 
 @app.post("/api/beer-reward")
-def beer_reward(request: CashAddressRequest) -> dict:
-    try:
-        address, _, _ = validate_token_aware_cashaddr(request.cash_address)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    try:
-        with open_db(timeout=10) as db:
-            db.execute("BEGIN IMMEDIATE")
-            original = db.execute(
-                "SELECT category FROM token_rewards WHERE cash_address = ? AND sent_at IS NOT NULL",
-                (address,),
-            ).fetchone()
-            if original is None:
-                raise HTTPException(status_code=409, detail="The first reward must be sent before claiming the bonus.")
-            db.execute(
-                "INSERT INTO beer_rewards (cash_address, category) VALUES (?, ?) ON CONFLICT(cash_address) DO NOTHING",
-                (address, original[0]),
-            )
-            row = db.execute(
-                "SELECT txid, sent_at FROM beer_rewards WHERE cash_address = ?", (address,)
-            ).fetchone()
-    except RewardDatabaseError as exc:
-        logger.exception("Beer reward database unavailable.")
-        raise HTTPException(status_code=503, detail="Reward database unavailable.") from exc
-    except sqlite3.Error as exc:
-        raise HTTPException(status_code=500, detail="Could not request the bonus.") from exc
-    return {"status": "sent" if row[1] else "pending", "txid": row[0] if row[1] else None}
+def discontinued_bonus_reward(request: CashAddressRequest) -> dict:
+    raise HTTPException(status_code=409, detail="The bonus reward has been discontinued.")
 
 @app.post("/api/tx-proof")
 def receive_cash_address_with_proof(
@@ -981,12 +965,6 @@ def process_one_reward() -> bool:
                WHERE sent_at IS NULL ORDER BY signed_tx IS NULL, rowid LIMIT 1"""
         ).fetchone()
         if not row:
-            table = "beer_rewards"
-            row = db.execute(
-                """SELECT cash_address, category, signed_tx, txid FROM beer_rewards
-                   WHERE sent_at IS NULL ORDER BY signed_tx IS NULL, rowid LIMIT 1"""
-            ).fetchone()
-        if not row:
             return False
         address, category, signed_tx, txid = row
         if not signed_tx:
@@ -1154,7 +1132,7 @@ def mina_rewards_sent() -> dict:
                     f"SELECT COUNT(*) FROM {table} WHERE category = ? AND sent_at IS NOT NULL",
                     (BCH_REWARD_CATEGORY,),
                 ).fetchone()[0]
-                for table in ("token_rewards", "beer_rewards")
+                for table in ("token_rewards", "legacy_bonus_rewards")
             )
         if NETCRAFT_DB_PATH:
             with sqlite3.connect(

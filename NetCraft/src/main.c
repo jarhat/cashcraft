@@ -1184,7 +1184,7 @@ void light_fill(
 void compute_chunk(WorkerItem *item) {
     char *opaque = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
     char *light = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
-    char *highest = (char *)calloc(XZ_SIZE * XZ_SIZE, sizeof(char));
+    short *highest = (short *)calloc(XZ_SIZE * XZ_SIZE, sizeof(short));
 
     int ox = item->p * CHUNK_SIZE - CHUNK_SIZE - 1;
     int oy = -1;
@@ -1211,6 +1211,15 @@ void compute_chunk(WorkerItem *item) {
                 continue;
             }
             MAP_FOR_EACH(map, ex, ey, ez, ew) {
+                if (ew <= 0) {
+                    int owner_a = chunked(ex) - item->p + 1;
+                    int owner_b = chunked(ez) - item->q + 1;
+                    if (owner_a >= 0 && owner_a < 3 && owner_b >= 0 && owner_b < 3 &&
+                            (owner_a != a || owner_b != b) &&
+                            item->block_maps[owner_a][owner_b]) {
+                        continue;
+                    }
+                }
                 int x = ex - ox;
                 int y = ey - oy;
                 int z = ez - oz;
@@ -1265,7 +1274,7 @@ void compute_chunk(WorkerItem *item) {
         int f1 = !opaque[XYZ(x - 1, y, z)];
         int f2 = !opaque[XYZ(x + 1, y, z)];
         int f3 = !opaque[XYZ(x, y + 1, z)];
-        int f4 = !opaque[XYZ(x, y - 1, z)] && (ey > 0);
+        int f4 = !opaque[XYZ(x, y - 1, z)];
         int f5 = !opaque[XYZ(x, y, z - 1)];
         int f6 = !opaque[XYZ(x, y, z + 1)];
         int total = f1 + f2 + f3 + f4 + f5 + f6;
@@ -1293,7 +1302,7 @@ void compute_chunk(WorkerItem *item) {
         int f1 = !opaque[XYZ(x - 1, y, z)];
         int f2 = !opaque[XYZ(x + 1, y, z)];
         int f3 = !opaque[XYZ(x, y + 1, z)];
-        int f4 = !opaque[XYZ(x, y - 1, z)] && (ey > 0);
+        int f4 = !opaque[XYZ(x, y - 1, z)];
         int f5 = !opaque[XYZ(x, y, z - 1)];
         int f6 = !opaque[XYZ(x, y, z + 1)];
         int total = f1 + f2 + f3 + f4 + f5 + f6;

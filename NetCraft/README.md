@@ -213,7 +213,12 @@ python3 NetCraft/builder.py
 
 This requires Python 3 and a C compiler and creates `data/netcraft.db` for
 Compose. It adds a central sky park, dragon, green coin, four floating gardens,
-bridges and decorative cascades above the normal generated terrain. Start
+bridges, seven gold spheres and static water cascades above the normal generated terrain.
+The pillar is one block wide; double-tap jump to fly to the platform. To add
+the donation QR, set `DONATION_ADDRESS` in `builder.py` to the desired address
+and install Python's `segno` package before building. The QR is omitted when
+the address is blank. Check it with a phone in the actual game before use;
+lighting, camera angle and existing edits can affect scanning. Start
 Compose afterward. The command refuses to overwrite an existing world. To
 create a world at a different path, use
 `python3 NetCraft/builder.py --init-park path/to/new.db`.
@@ -233,7 +238,7 @@ wallet address. The interface calls the default reward MINA; the configured
 CashToken category is unchanged by that display name. Rewards are queued and
 the notification appears after the payout is broadcast and the wallet scan
 detects it (normally within 30 seconds, subject to network delays). The red
-bell indicator is shared between the wallet and game; opening notifications
+wallet notification indicator is shared between the wallet and game; opening notifications
 marks them read. Browsers may require a user gesture before sound can play.
 MINA ore pays the `BCH_REWARD_CATEGORY` category; fund the BCHN wallet with
 that category and BCH for transaction fees. Set
@@ -244,6 +249,10 @@ world database and BCHN wallet together. Run only one payout worker. Set
 services. The database queue remains authoritative if the wake request fails.
 The top ticker counts successfully broadcast one-unit payouts for the current
 MINA category recorded in both reward databases, not all on-chain transfers.
+The discontinued bonus is not paid or newly queued. On backend startup,
+unpaid legacy bonus rows are marked cancelled while sent history and signed
+transactions are retained. A previously broadcast transaction cannot be
+reversed by this cancellation.
 
 BCHN RPC is bound to an isolated Compose network accessible only to the backend
 and to localhost in the BCHN container. The backend's `check_balance()` reads
@@ -258,7 +267,7 @@ The backend reserves at most `NETCRAFT_DAILY_PAYOUT_LIMIT` mining broadcasts
 per UTC day (default 1,000), and `NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT` per
 address (default 100). Queued rewards above either limit wait for a later day;
 retries reuse their reservation on the same day. These caps do not cover
-welcome or bonus rewards and does not guarantee wallet security. A public
+welcome rewards and do not guarantee wallet security. A public
 server can still spend configured tokens and BCH available for fees. Standalone server and backend processes default to
 rewards disabled unless `NETCRAFT_MINING_REWARDS_ENABLED=true`.
 Deploy matching rebuilt Rust and WASM clients together when changing terrain

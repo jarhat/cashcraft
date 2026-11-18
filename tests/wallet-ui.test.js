@@ -434,7 +434,7 @@ test('stale wallet callbacks cannot disconnect a newer session', async () => {
     $: element, relay: null, manager: null, walletReady: false,
     pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
     refreshBrowserWalletUI() {},
-    clearWalletDisplay() {}, setConnection() {}, updateReceiveAddress() {}, resumeBeerReward() {},
+    clearWalletDisplay() {}, setConnection() {}, updateReceiveAddress() {},
     addressFor: () => 'recipient', submitCashAddress: async () => { submissions++; },
     refreshBalances: async () => {}, loadWalletDependencies: async () => {},
     loadSession: () => null, DappConnectionManager: Manager,
@@ -552,7 +552,7 @@ test('open in wallet remains available until an address is derived, including re
     refreshBrowserWalletUI() {},
     QRCode: { toCanvas: async () => {} }, clearWalletDisplay() {}, setConnection() {},
     pairingReminder: { start() {} },
-    updateReceiveAddress() {}, resumeBeerReward() {},
+    updateReceiveAddress() {},
     addressFor() {
       if (!keyAvailable) throw new Error('Public key missing');
       return 'token-address';
@@ -904,6 +904,7 @@ test('connected panels reveal only after a wallet connection and hide on disconn
     addressFor: () => 'token-address',
     updateGameRewardAddress: (address) => { context.rewardAddress = address; },
     translate: (text) => text,
+    closeTutorial() { $('wizard-dialog').hidden = true; },
     showTutorialStep() { context.tutorialUpdated = true; },
   };
   runInNewContext(source.slice(start, end), context);
@@ -916,17 +917,19 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   $('wizard-dialog').hidden = false;
   $('wizard-next').disabled = true;
   context.setConnection(true);
-  assert.equal($('wizard-dialog').hidden, false);
-  assert.equal($('wizard-next').disabled, false);
+  assert.equal($('wizard-dialog').hidden, true);
+  assert.equal($('wizard-toggle').hidden, true);
   assert.equal(context.tutorialUpdated, undefined);
   $('game-dialog').open = true;
   $('game-dialog').close = () => { $('game-dialog').open = false; };
+  $('wizard-dialog').hidden = false;
   context.setConnection(false);
   assert.equal($('game-dialog').open, true);
   assert.equal(context.rewardAddress, null);
   assert.ok(panels.every((panel) => panel.hidden));
   assert.equal($('network-wallet-status').textContent, 'Not connected');
   assert.equal($('wizard-guide').hidden, false);
+  assert.equal($('wizard-toggle').hidden, false);
   assert.equal($('advanced-settings').hidden, true);
   assert.equal(context.tutorialStep, 0);
   assert.equal(context.tutorialUpdated, true);

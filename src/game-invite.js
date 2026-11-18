@@ -30,7 +30,10 @@ export function setupGameInvite($, network, loadDependencies) {
     }
   });
   $('invite-close').addEventListener('click', () => dialog.close());
-  dialog.addEventListener('close', () => $('game-invite').focus({ preventScroll: true }));
+  dialog.addEventListener('close', () => {
+    (document.fullscreenElement === $('game-stage') ? $('game-invite-fullscreen') : $('game-invite'))
+      .focus({ preventScroll: true });
+  });
   $('invite-copy').addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(url);

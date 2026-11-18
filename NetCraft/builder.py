@@ -18,10 +18,10 @@ only blocks that actually exist in the server's generated terrain.
 
 Customize PARK_*, SKY_Y, TOWER_Z and the drawing functions in make_park().
 Coordinates are block coordinates, with (0, 0) at the player spawn. The
-central park connects to four floating garden islands by bridges. A spiral
-staircase leads from the natural terrain to the platform; jump up each step
-or double-tap the keyboard jump key to fly. The calendar and seven colored
-gems are decorative, not interactive. Block IDs match NetCraft/src/item.h;
+central park connects to four floating garden islands by bridges. A single
+pillar supports the upper platform; double-tap the keyboard jump key to fly.
+Set DONATION_ADDRESS below to add a block-built donation QR (requires segno).
+The seven gold spheres are decorative, not interactive. Block IDs match NetCraft/src/item.h;
 the original shape helpers are also available. The natural world remains
 outside the tower.
 Always test changes in a new world and back up any world you want to keep.
@@ -54,18 +54,14 @@ PLANK = 8
 SNOW = 9
 GLASS = 10
 COBBLE = 11
-LIGHT_STONE = 12
-DARK_STONE = 13
+WATER = 12
+LAVA = 13
 CHEST = 14
 LEAVES = 15
 CLOUD = 16
 TALL_GRASS = 17
 YELLOW_FLOWER = 18
 RED_FLOWER = 19
-PURPLE_FLOWER = 20
-SUN_FLOWER = 21
-WHITE_FLOWER = 22
-BLUE_FLOWER = 23
 COLOR_WHITE = 32
 COLOR_GOLD = 36
 COLOR_CYAN = 41
@@ -73,6 +69,7 @@ COLOR_PURPLE = 42
 COLOR_BLUE = 43
 COLOR_GREEN = 45
 COLOR_RED = 46
+COLOR_BLACK = 47
 
 # Platform and tower coordinates. Keep the platform below the 255-block limit.
 PARK_HALF_WIDTH = 28
@@ -83,23 +80,11 @@ WORLD_Z_MIN = -70
 WORLD_Z_MAX = 70
 SKY_Y = 180
 TOWER_Z = -12
-CALENDAR_Z = 22
+DONATION_ADDRESS = ""  # Set a Bitcoin Cash donation address before building the QR.
+DONATION_QR_Z = 24
 TREE_POSITIONS = [(-21, -11), (21, -11), (-21, 14), (21, 14)]
-GEM_POSITIONS = [(-12, -14), (12, -14), (-12, -4), (12, -4),
-                 (-15, 7), (15, 7), (0, 4)]
-
-DIGITS = (
-    ("111", "101", "101", "101", "111"),
-    ("010", "110", "010", "010", "111"),
-    ("111", "001", "111", "100", "111"),
-    ("111", "001", "111", "001", "111"),
-    ("101", "101", "111", "001", "001"),
-    ("111", "100", "111", "001", "111"),
-    ("111", "100", "111", "101", "111"),
-    ("111", "001", "010", "010", "010"),
-    ("111", "101", "111", "101", "111"),
-    ("111", "101", "111", "001", "111"),
-)
+SPHERE_POSITIONS = [(-58, -4), (-58, 4), (58, -4), (58, 4),
+                    (-5, -58), (5, -58), (-5, 58)]
 
 OFFSETS = [
     (-0.5, -0.5, -0.5),
@@ -314,68 +299,19 @@ def make_park(terrain):
         for position in cuboid(x1, x2, y1, y2, z1, z2):
             put(*position, block)
 
-    # Only the tower interior replaces terrain; the world outside stays intact.
-    for (x, y, z), block in terrain.items():
-        if abs(x) < 8 and abs(z - TOWER_Z) < 8 and base < y < floor:
-            put(x, y, z, EMPTY)
-    for x in range(-7, 8):
-        for z in range(TOWER_Z - 7, TOWER_Z + 8):
-            for y in range(31, base + 1):
-                if (x, y, z) not in terrain:
-                    put(x, y, z, DIRT)
+    # A one-block pillar supports the underside of a floating hemisphere.
+    for y in range(base + 1, floor - 14):
+        put(0, y, TOWER_Z, CEMENT)
+    for x, y, z in sphere(0, floor, TOWER_Z, 15, fill=True):
+        if y < floor:
+            put(x, y, z, COBBLE if y < floor - 3 else DIRT)
 
-    # Hollow tower with an entrance facing the ground-level spawn.
-    for y in range(base + 1, floor - 1):
-        for x in range(-8, 9):
-            for dz in range(-8, 9):
-                if max(abs(x), abs(dz)) != 8:
-                    continue
-                if dz == 8 and abs(x) <= 2 and y <= base + 4:
-                    continue
-                material = COLOR_RED if x in (-8, 8) and dz in (-8, 8) else CEMENT
-                if (y - base) % 12 == 0:
-                    material = COLOR_GOLD
-                put(x, y, TOWER_Z + dz, material)
-
-    # Two-block-wide spiral: each height rises after two horizontal blocks,
-    # and successive laps are 24 blocks apart, leaving ample headroom.
-    ring = [(0, -6)]
-    ring += [(x, -6) for x in range(1, 7)]
-    ring += [(6, z) for z in range(-5, 7)]
-    ring += [(x, 6) for x in range(5, -7, -1)]
-    ring += [(-6, z) for z in range(5, -7, -1)]
-    ring += [(x, -6) for x in range(-5, 0)]
-    ring = [(-x, -z) for x, z in ring]
-    for step in range(2 * (floor - base - 1)):
-        x, dz = ring[step % len(ring)]
-        y = base + 1 + step // 2
-        put(x, y, TOWER_Z + dz, PLANK)
-        if abs(x) == 6:
-            put(x - (1 if x > 0 else -1), y, TOWER_Z + dz, PLANK)
-        else:
-            put(x, y, TOWER_Z + dz - (1 if dz > 0 else -1), PLANK)
-
-    # The opening over the tower connects the top stair to the sky platform.
     for x in range(-PARK_HALF_WIDTH, PARK_HALF_WIDTH + 1):
         for z in range(PARK_Z_MIN, PARK_Z_MAX + 1):
-            if abs(x) <= 6 and abs(z - TOWER_Z) <= 6:
-                continue
             path = abs(x) <= 3 or abs(z) <= 2
-            put(x, floor, z, CEMENT if path else SNOW)
+            put(x, floor, z, CEMENT if path else GRASS)
             if x in (-PARK_HALF_WIDTH, PARK_HALF_WIDTH) or z in (PARK_Z_MIN, PARK_Z_MAX):
                 put(x, floor + 1, z, COLOR_WHITE)
-
-    last_x, last_z = ring[(2 * (floor - base - 1) - 1) % len(ring)]
-    for x in range(-7, 8):
-        for dz in range(-7, 8):
-            if max(abs(x), abs(dz)) != 7:
-                continue
-            landing = ((abs(last_x) == 6 and x == (7 if last_x > 0 else -7)
-                        and abs(dz - last_z) <= 1) or
-                       (abs(last_z) == 6 and dz == (7 if last_z > 0 else -7)
-                        and abs(x - last_x) <= 1))
-            if not landing:
-                put(x, floor + 1, TOWER_Z + dz, COLOR_WHITE)
 
     # Four layered evergreen trees with trunks, ornaments and golden stars.
     for tx, tz in TREE_POSITIONS:
@@ -391,23 +327,19 @@ def make_park(terrain):
                             COLOR_RED if ornament else LEAVES)
         put(tx, floor + 15, tz, COLOR_GOLD)
 
-    # A freestanding six-by-four advent calendar. Panels have visible
-    # two-digit numbers drawn in blocks; change DIGITS or colors to customize.
-    box(-23, 23, floor + 1, floor + 35, CALENDAR_Z, CALENDAR_Z, PLANK)
-    for row in range(4):
-        for column in range(6):
-            left = -21 + column * 7
-            bottom = floor + 27 - row * 8
-            box(left, left + 6, bottom, bottom + 7, CALENDAR_Z - 1, CALENDAR_Z - 1,
-                COLOR_RED if (row + column) % 2 == 0 else COLOR_GREEN)
-            number = "%02d" % (row * 6 + column + 1)
-            for index, character in enumerate(number):
-                for dy, pixels in enumerate(DIGITS[int(character)]):
-                    for dx, pixel in enumerate(pixels):
-                        if pixel == "1":
-                            put(left + index * 4 + dx, bottom + 6 - dy,
-                                CALENDAR_Z - 2, COLOR_WHITE)
-    box(-24, 24, floor + 36, floor + 36, CALENDAR_Z, CALENDAR_Z, COLOR_GOLD)
+    if DONATION_ADDRESS:
+        try:
+            import segno
+        except ImportError as exc:
+            raise RuntimeError("Install segno to build the configured donation QR") from exc
+        qr = segno.make(DONATION_ADDRESS, error="m", micro=False)
+        rows = list(qr.matrix_iter(border=4))
+        if len(rows) > 49 or floor + len(rows) > 255:
+            raise ValueError("Donation QR is too large for the park")
+        for row, pixels in enumerate(rows):
+            for column, pixel in enumerate(pixels):
+                put(column - len(rows) // 2, floor + len(rows) - row,
+                    DONATION_QR_Z, COLOR_BLACK if pixel else COLOR_WHITE)
 
     # A gold-rimmed CashToken-inspired coin with a block-letter B.
     cx, cz = 0, 12
@@ -424,35 +356,29 @@ def make_park(terrain):
                 put(cx - 2 + dx, floor + 12 - dy, cz - 1, COLOR_WHITE)
     box(cx - 1, cx + 1, floor + 1, floor + 2, cz, cz, COBBLE)
 
-    # Seven differently colored faceted gems on short plinths.
-    gem_colors = (COLOR_CYAN, COLOR_PURPLE, COLOR_BLUE, COLOR_GOLD,
-                  COLOR_RED, COLOR_GREEN, COLOR_WHITE)
-    for (gx, gz), color in zip(GEM_POSITIONS, gem_colors):
-        put(gx, floor + 1, gz, COBBLE)
-        for dx in range(-2, 3):
-            for dy in range(-2, 3):
-                for dz in range(-2, 3):
-                    if abs(dx) + abs(dy) + abs(dz) <= 2:
-                        put(gx + dx, floor + 4 + dy, gz + dz, color)
-
     # An original winged sky dragon, made of rounded segments and broad wings.
     # Change the body curve, colors and wing sweep here to customize it.
-    for x in range(-15, 18):
-        y = floor + 23 + round(2 * math.sin(x / 5))
-        radius = 3 if x < 10 else 2
+    for x in range(-22, 24):
+        y = floor + 25 + round(2 * math.sin(x / 7))
+        radius = 4 if x < 12 else 3
         for point in sphere(x, y, 0, radius, fill=True):
-            put(*point, COLOR_PURPLE)
-    box(-19, -15, floor + 21, floor + 26, -3, 3, COLOR_PURPLE)
-    box(-21, -19, floor + 20, floor + 22, -2, 2, COLOR_CYAN)
-    for z in (-3, 3):
-        put(-18, floor + 25, z, COLOR_GOLD)
-        box(-16, -15, floor + 27, floor + 29, z, z, COLOR_WHITE)
+            put(*point, COLOR_GREEN)
+        put(x, y - radius + 1, 0, COLOR_WHITE)
+        if x % 4 == 0:
+            put(x, y + radius, 0, COLOR_GOLD)
+    box(-27, -21, floor + 23, floor + 29, -4, 4, COLOR_GREEN)
+    box(-31, -27, floor + 22, floor + 25, -3, 3, COLOR_GREEN)
+    for z in (-4, 4):
+        put(-26, floor + 27, z, COLOR_WHITE)
+        put(-27, floor + 27, z, COLOR_BLACK)
+        box(-23, -22, floor + 30, floor + 33, z, z, COLOR_GOLD)
     for side in (-1, 1):
-        for x in range(-7, 8):
-            for distance in range(2, 12 - abs(x) // 2):
-                put(x, floor + 25 + distance // 4, side * distance, COLOR_BLUE)
-    for x in range(18, 24):
-        put(x, floor + 22 - (x - 18) // 2, 0, COLOR_CYAN)
+        for x in range(-12, 14):
+            for distance in range(3, 19 - abs(x) // 2):
+                put(x, floor + 28 + distance // 4, side * distance,
+                    COLOR_GOLD if distance == 3 else COLOR_GREEN)
+    for x in range(24, 35):
+        put(x, floor + 24 - (x - 24) // 2, 0, COLOR_GREEN)
 
     # Four floating gardens linked to the central park, inspired by the
     # preview's green islands, waterfalls and small explorer structures.
@@ -470,7 +396,7 @@ def make_park(terrain):
                             DIRT if depth < 3 else COBBLE)
                 if distance < 80 and (dx * 17 + dz * 13) % 29 == 0:
                     put(cx + dx, floor + 1, cz + dz,
-                        (YELLOW_FLOWER, RED_FLOWER, BLUE_FLOWER)[(dx + dz) % 3])
+                        (YELLOW_FLOWER, RED_FLOWER)[(dx + dz) % 2])
         start = PARK_HALF_WIDTH if axis == "x" else (PARK_Z_MAX if side > 0 else -PARK_Z_MIN)
         for distance in range(start, 44):
             for offset in range(-2, 3):
@@ -494,9 +420,12 @@ def make_park(terrain):
                 for dy in range(4, 8):
                     if abs(dx) + abs(dz) + abs(dy - 5) <= 4 and (dx or dz):
                         put(tx + dx, floor + dy, tz + dz, LEAVES)
-        # A narrow cyan cascade is decorative and does not simulate water.
+        # Water blocks form a static cascade; the game does not simulate flow.
         wx, wz = (cx + side * 9, cz) if axis == "x" else (cx, cz + side * 9)
-        box(wx, wx, floor - 18, floor - 1, wz, wz, COLOR_CYAN)
+        box(wx, wx, floor - 18, floor - 1, wz, wz, WATER)
+    for gx, gz in SPHERE_POSITIONS:
+        for point in sphere(gx, floor + 5, gz, 3, fill=True):
+            put(*point, COLOR_GOLD)
     return edits
 
 def park_rows(edits):

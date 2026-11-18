@@ -2898,7 +2898,7 @@ body { background-attachment: fixed, fixed; }
 }
 
 /* Connected-only chrome, merged mesh, landing and short links */
-[data-wallet-panel][hidden], .wizard-logout[hidden], #disconnect[hidden], #forget[hidden] { display: none !important; }
+[data-wallet-panel][hidden], .wizard-logout[hidden], .wizard-toggle[hidden], #connection-open[hidden], #disconnect[hidden], #forget[hidden] { display: none !important; }
 body::before {
   -webkit-mask-image: linear-gradient(to bottom, transparent min(250px, 34vh), #000 min(440px, 60vh));
   mask-image: linear-gradient(to bottom, transparent min(250px, 34vh), #000 min(440px, 60vh));
@@ -3027,8 +3027,11 @@ body::before { content: none; display: none; }
 }
 .game-toast:empty { display: none; }
 .game-dialog { position: relative; inset: auto; width: 100%; max-width: none; max-height: none; margin: 16px 0; }
+.game-dialog[hidden], #game-restore[hidden] { display: none; }
+#game-restore { margin: 16px 0; }
+#game-invite svg { width: 20px; height: 20px; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .game-switcher { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-.game-switcher[hidden], #game-pk2[hidden], #game-beer[hidden] { display: none; }
+.game-switcher[hidden], #game-pk2[hidden] { display: none; }
 .game-switcher [aria-pressed="true"] { border-color: var(--ice); color: var(--ice); }
 .game-stage { position: relative; overflow: hidden; border: 1px solid var(--glass-border); border-radius: 12px; background: #080e17; -webkit-touch-callout: none; }
 .game-controls { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; z-index: 1; }
@@ -3039,6 +3042,8 @@ body::before { content: none; display: none; }
 .game-dialog iframe { display: block; width: 100%; height: min(65vh, 640px); border: 0; background: #080e17; }
 .game-stage:fullscreen { width: 100%; height: 100%; border: 0; border-radius: 0; }
 .game-stage:fullscreen iframe { height: 100%; }
+#game-invite-fullscreen { display: none; }
+.game-stage:fullscreen #game-invite-fullscreen { display: grid; }
 .game-wallet-indicator { display: none; position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border: 2px solid #102333; border-radius: 50%; background: #35d779; }
 .wallet-connected .game-wallet-indicator { display: block; }
 .game-controls button { position: relative; }

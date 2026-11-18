@@ -13,13 +13,10 @@
         overflow: hidden;
       }
       body > a, #spinner, #status, #progress, #output { display: none !important; }
-      #loading-screen { display: grid !important; position: fixed; inset: 0; z-index: 40; place-content: center; justify-items: center; gap: 18px; background: #101e1b; color: #eef6dd; font: 600 16px system-ui, sans-serif; text-align: center; }
+      #loading-screen { display: grid !important; position: fixed; inset: 0; z-index: 40; place-content: center; justify-items: center; gap: 18px; background: linear-gradient(#07151077, #071510bb), url('/craft-preview.png') center / cover no-repeat #101e1b; color: #fff; font: 600 16px system-ui, sans-serif; text-align: center; text-shadow: 0 2px 6px #000; }
       #loading-screen[hidden] { display: none !important; }
-      .loading-mine { position: relative; width: 110px; height: 110px; }
-      .loading-block { position: absolute; left: 22px; bottom: 8px; width: 64px; height: 64px; border: 4px solid #3c4930; background: repeating-linear-gradient(45deg, #718650 0 8px, #64784a 8px 16px); box-shadow: inset 0 8px #9fb970, 6px 6px #0b130d; }
-      .loading-pick { position: absolute; top: 0; right: 3px; width: 60px; height: 60px; fill: none; stroke: #f0dda0; stroke-width: 3; stroke-linecap: square; transform-origin: 50px 52px; animation: mine-swing .8s ease-in-out infinite alternate; }
-      @keyframes mine-swing { from { transform: rotate(-35deg); } to { transform: rotate(12deg); } }
-      @media (prefers-reduced-motion: reduce) { .loading-pick { animation: none; } }
+      .loading-circle { width: 48px; height: 48px; border: 5px solid #ffffff66; border-top-color: #fff; border-radius: 50%; animation: rotation .8s linear infinite; }
+      @media (prefers-reduced-motion: reduce) { .loading-circle { animation: none; } }
 
       .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
       div.emscripten { text-align: center; }      
@@ -1243,10 +1240,7 @@
     <textarea id="output" rows="8"></textarea>
 
     <div id="loading-screen" role="status" aria-live="polite">
-      <div class="loading-mine" aria-hidden="true">
-        <div class="loading-block"></div>
-        <svg class="loading-pick" viewBox="0 0 24 24"><path d="M4 20 17 7m-5-4c3-1 7 0 9 4l-3 1-3-3-3-2ZM3 19l2 2"/></svg>
-      </div>
+      <div class="loading-circle" aria-hidden="true"></div>
       <span id="loading-message">Preparing your world...</span>
     </div>
     <div id="connection-status" role="status" hidden></div>
@@ -1256,7 +1250,7 @@
     </button>
     <div class="mobile-controls" aria-label="Touch controls">
       <div id="mobile-stick" class="mobile-stick" aria-label="Move"><div id="mobile-stick-knob" class="mobile-stick-knob"></div></div>
-      <button id="mobile-mine" type="button" aria-label="Mine" title="Hold to mine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 16 8m-4-4c4-2 8-1 10 3l-4 1-3-2-3-2ZM3 19l2 2"/></svg></button>
+      <button id="mobile-mine" type="button" aria-label="Mine" title="Hold to mine"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 2v6m0 8v6M2 12h6m8 0h6"/></svg></button>
       <button id="mobile-build" type="button" aria-label="Build" title="Build"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4v10l-8 4-8-4V7zM4 7l8 4 8-4m-8 4v10"/></svg></button>
       <button id="mobile-jump" type="button" aria-label="Jump" title="Jump"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6M5 21h14"/></svg></button>
       <button id="mobile-next" type="button" aria-label="Next block" title="Next block"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-5-5 5 5-5 5M4 5h4v4H4zM4 15h4v4H4z"/></svg></button>
@@ -1403,6 +1397,12 @@
           var musicTimer = null;
           var beat = 0;
           var bass = [55, 0, 55, 0, 65.41, 0, 73.42, 0, 49, 0, 55, 0, 82.41, 0, 73.42, 0];
+          var melody = [
+            220, 0, 0, 261.63, 0, 329.63, 0, 293.66, 0, 261.63, 0, 220, 0, 196, 0, 0,
+            220, 0, 261.63, 0, 329.63, 0, 392, 0, 349.23, 0, 329.63, 0, 293.66, 0, 261.63, 0,
+            196, 0, 0, 246.94, 0, 293.66, 0, 329.63, 0, 293.66, 0, 246.94, 0, 220, 0, 0,
+            220, 0, 261.63, 0, 293.66, 0, 329.63, 0, 392, 0, 349.23, 0, 329.63, 0, 261.63, 0,
+          ];
           function synth(type, frequency, volume, duration) {
             var start = context.currentTime;
             var oscillator = context.createOscillator();
@@ -1419,8 +1419,10 @@
           function playMusicNote() {
             musicTimer = null;
             if (!enabled || !context || context.state !== 'running') return;
-            var step = beat++ % 16;
+            var phrase = beat++ % melody.length;
+            var step = phrase % 16;
             if (bass[step]) synth('sawtooth', bass[step], 0.025, 0.16);
+            if (melody[phrase]) synth('triangle', melody[phrase], 0.018, 0.16);
             if (step === 0 || step === 7 || step === 10) synth('sine', 58, 0.08, 0.1);
             if (step === 4 || step === 12) synth('triangle', 190, 0.04, 0.07);
             if (step % 2 === 0) synth('square', 2200, 0.008, 0.025);
