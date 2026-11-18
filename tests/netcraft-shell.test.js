@@ -94,3 +94,59 @@ test('NetCraft parses encoded launch arguments without splitting encoded charact
     'wss://example.test/craftws?key=a+b', '4080', 'bitcoincash:ztest',
   ]);
 });
+
+test('game audio starts from a gesture and mutes effects and music', async () => {
+  const elements = new Map();
+  const listeners = {};
+  const nodes = [];
+  const timers = new Map();
+  let timerId = 0;
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      style: {}, value: '', listeners: {}, attributes: {},
+      addEventListener(name, callback) { this.listeners[name] = callback; },
+      setAttribute(name, value) { this.attributes[name] = value; }
+    });
+    return elements.get(id);
+  };
+  class AudioContext {
+    constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = {}; }
+    async resume() { this.state = 'running'; }
+    async decodeAudioData(data) { return data; }
+    createGain() {
+      return { gain: { value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} };
+    }
+    createOscillator() {
+      return { frequency: {}, connect() {}, start() { nodes.push('music'); }, stop() {} };
+    }
+    createBufferSource() { return { connect() {}, start() { nodes.push('effect'); } }; }
+  }
+  const document = {
+    getElementById: $, querySelector: () => $('controls'),
+    addEventListener(name, callback) { listeners[name] = callback; }
+  };
+  const window = { webkitAudioContext: AudioContext, addEventListener() {} };
+  const context = {
+    document, window, console, Date, Math,
+    setTimeout(callback) { timers.set(++timerId, callback); return timerId; },
+    clearTimeout(id) { timers.delete(id); }
+  };
+  runInNewContext(script, context);
+  context.Module.FS = { readFile: () => new Uint8Array([0, 1]) };
+  listeners.pointerdown({ isTrusted: true });
+  await new Promise(setImmediate);
+  assert.equal($('sound-toggle').attributes['aria-label'], 'Disable sound');
+  assert.equal(nodes.filter((node) => node === 'music').length, 1);
+  context.Module.playBlockSound(0);
+  assert.equal(nodes.filter((node) => node === 'effect').length, 1);
+  $('sound-toggle').listeners.click();
+  assert.equal(timers.size, 0);
+  context.Module.playBlockSound(1);
+  assert.equal(nodes.filter((node) => node === 'effect').length, 1);
+  $('sound-toggle').listeners.click();
+  await new Promise(setImmediate);
+  assert.equal(nodes.filter((node) => node === 'music').length, 2);
+  context.Module.playBlockSound(1);
+  assert.equal(nodes.filter((node) => node === 'effect').length, 2);
+  assert.equal(timers.size, 1);
+});

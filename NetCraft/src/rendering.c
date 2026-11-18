@@ -13,9 +13,22 @@ GLuint gen_plant_buffer(float x, float y, float z, float n, int w) {
 }
 
 GLuint gen_player_buffer(float x, float y, float z, float rx, float ry) {
-    GLfloat *data = malloc_faces(10, 6);
+    return update_player_buffer(0, x, y, z, rx, ry);
+}
+
+GLuint update_player_buffer(GLuint buffer, float x, float y, float z, float rx, float ry) {
+    GLfloat data[6 * 10 * 6];
     make_player(data, x, y, z, rx, ry);
-    return gen_faces(10, 6, data);
+    if (!buffer) {
+        glGenBuffers(1, &buffer);
+        glBindBuffer(GL_ARRAY_BUFFER, buffer);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(data), data, GL_DYNAMIC_DRAW);
+    } else {
+        glBindBuffer(GL_ARRAY_BUFFER, buffer);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(data), data);
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    return buffer;
 }
 
 GLuint gen_text_buffer(float x, float y, float n, char *text) {

@@ -3,7 +3,7 @@ use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::ffi::c_void;
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::net::{Shutdown, TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{self, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -109,6 +109,44 @@ struct Server {
     reward_categories: HashMap<i32, String>,
     default_reward_category: Option<String>,
     address_prefix: String,
+    reward_wake: Option<SyncSender<()>>,
+}
+
+fn start_reward_wake() -> Result<Option<SyncSender<()>>, String> {
+    let target = env::var("NETCRAFT_REWARD_API").unwrap_or_default();
+    let secret = env::var("NETCRAFT_REWARD_WAKE_SECRET").unwrap_or_default();
+    if target.is_empty() && secret.is_empty() {
+        return Ok(None);
+    }
+    if target.is_empty() || secret.is_empty() || secret.bytes().any(|b| !(33..=126).contains(&b)) {
+        return Err("Set NETCRAFT_REWARD_API and a printable NETCRAFT_REWARD_WAKE_SECRET".into());
+    }
+    let (sender, receiver) = mpsc::sync_channel::<()>(1);
+    thread::spawn(move || {
+        while receiver.recv().is_ok() {
+            let result = (|| -> io::Result<()> {
+                let address = target
+                    .to_socket_addrs()?
+                    .next()
+                    .ok_or_else(|| io::Error::other("reward API address did not resolve"))?;
+                let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2))?;
+                stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+                stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+                write!(stream, "POST /api/internal/netcraft-reward-wake HTTP/1.1\r\nHost: {target}\r\nAuthorization: Bearer {secret}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")?;
+                let mut response = String::new();
+                BufReader::new(stream).read_line(&mut response)?;
+                if !response.starts_with("HTTP/1.1 204 ") && !response.starts_with("HTTP/1.0 204 ")
+                {
+                    return Err(io::Error::other("reward API rejected wake request"));
+                }
+                Ok(())
+            })();
+            if let Err(error) = result {
+                eprintln!("Mining reward wake failed ({error}); queued rewards will be retried by the backend");
+            }
+        }
+    });
+    Ok(Some(sender))
 }
 
 fn chunked(x: i32) -> i32 {
@@ -500,6 +538,7 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
             changes.push(format!("B,{np},{nq},{x},{y},{z},{value}\nR,{np},{nq}\n"));
         }
     }
+    let mut reward_queued = false;
     if w == 0 {
         transaction.execute(
             "DELETE FROM sign WHERE x=?1 AND y=?2 AND z=?3",
@@ -513,10 +552,10 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
                     .get(&default)
                     .or(server.default_reward_category.as_ref()),
             ) {
-                transaction.execute(
+                reward_queued = transaction.execute(
                     "INSERT OR IGNORE INTO mining_rewards (x,y,z,cash_address,category) VALUES (?1,?2,?3,?4,?5)",
                     params![x, y, z, address, category],
-                )?;
+                )? > 0;
             }
         }
         transaction.execute(
@@ -525,7 +564,15 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
         )?;
     }
     transaction.commit()?;
+    if w == 0 {
+        send(&player, format!("I,{previous}\n"));
+    }
     broadcast(&state, Some(id), &changes.concat());
+    if reward_queued {
+        if let Some(wake) = &server.reward_wake {
+            let _ = wake.try_send(());
+        }
+    }
     Ok(())
 }
 
@@ -669,15 +716,17 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
             if let Some(values) = values {
                 let mut state = server.state.lock().unwrap();
                 if let Some(player) = state.players.get_mut(&id) {
-                    player.position.copy_from_slice(&values);
-                    broadcast(
-                        &state,
-                        Some(id),
-                        &format!(
-                            "P,{id},{},{},{},{},{}\n",
-                            values[0], values[1], values[2], values[3], values[4]
-                        ),
-                    );
+                    if player.position.as_slice() != values.as_slice() {
+                        player.position.copy_from_slice(&values);
+                        broadcast(
+                            &state,
+                            Some(id),
+                            &format!(
+                                "P,{id},{},{},{},{},{}\n",
+                                values[0], values[1], values[2], values[3], values[4]
+                            ),
+                        );
+                    }
                 }
             }
         }
@@ -931,6 +980,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         reward_categories,
         default_reward_category,
         address_prefix,
+        reward_wake: start_reward_wake()?,
     });
     {
         let server = server.clone();
@@ -977,6 +1027,7 @@ mod tests {
             reward_categories: HashMap::from([(6, "a".repeat(64))]),
             default_reward_category: Some("b".repeat(64)),
             address_prefix: "bitcoincash".into(),
+            reward_wake: None,
         };
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let mut receivers = Vec::new();
@@ -1071,7 +1122,9 @@ mod tests {
 
     #[test]
     fn natural_block_reward_is_atomic_and_once_only() {
-        let (server, _first, second) = setup();
+        let (mut server, _first, second) = setup();
+        let (wake, wakes) = mpsc::sync_channel(2);
+        server.reward_wake = Some(wake);
         let address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz";
         handle_command(&server, 1, &format!("W,{address}")).unwrap();
         assert_eq!(
@@ -1085,11 +1138,13 @@ mod tests {
             6
         );
         block_edit(&server, 1, 0, 1, 0, 0).unwrap();
+        assert!(wakes.try_recv().is_ok());
         let update = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert!(update.contains("B,0,0,0,1,0,0\n"));
         assert!(update.contains("B,-1,-1,0,1,0,0\n"));
         block_edit(&server, 1, 0, 1, 0, 6).unwrap();
         block_edit(&server, 1, 0, 1, 0, 0).unwrap();
+        assert!(wakes.try_recv().is_err());
         let state = server.state.lock().unwrap();
         let (count, category, recipient): (i64, String, String) = state
             .db
@@ -1133,12 +1188,18 @@ mod tests {
         handle_command(&server, 1, "P,0,100,0,0,0").unwrap();
         let position = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert_eq!(position, "P,1,0,100,0,0,0\n");
+        handle_command(&server, 1, "P,0,100,0,0,0").unwrap();
+        assert!(second.try_recv().is_err());
         block_edit(&server, 1, 0, 100, 0, 6).unwrap();
         let placed = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert!(placed.contains("B,0,0,0,100,0,6\nR,0,0\n"));
         block_edit(&server, 1, 0, 100, 0, 0).unwrap();
         let mined = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert!(mined.contains("B,0,0,0,100,0,0\nR,0,0\n"));
+        assert_eq!(
+            String::from_utf8(first.try_recv().unwrap()).unwrap(),
+            "I,6\n"
+        );
         assert!(first.try_recv().is_err());
     }
 

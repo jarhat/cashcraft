@@ -12,6 +12,7 @@ import { setupMarketTicker } from './market-ticker.js';
 import { setupChainTicker } from './chain-ticker.js';
 import { setupWikiGlossary } from './wiki-glossary.js';
 import { setupGames } from './games.js';
+import { setupGameInvite } from './game-invite.js';
 import { setupBrowserWallet } from './browser-wallet-ui.js';
 import { setupMediaSlideshow } from './media-slideshow.js';
 import { createLogger } from './logger.js';
@@ -32,8 +33,9 @@ setupScrollEffects();
 setupSnow(document.getElementById('snow-canvas'));
 setupMesh(document.querySelector('.mesh-terrain'));
 
+const craftRoute = window.location.pathname.replace(/\/+$/, '') === '/craft';
 for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
-  document.querySelector(selector).content = new URL('/social-preview.png', window.location.origin).href;
+  document.querySelector(selector).content = new URL(craftRoute ? '/craft-preview.png' : '/social-preview.png', window.location.origin).href;
 }
 
 if (!['mainnet', 'chipnet'].includes(network)) {
@@ -287,7 +289,7 @@ function setTheme(theme) {
   });
 }
 const migratedTheme = { dark: 'frost', blue: 'frost', green: 'aurora', bch: 'aurora', 'bch-sunrise': 'aurora' }[savedTheme] || savedTheme;
-setTheme(['frost', 'aurora', 'mina'].includes(migratedTheme) ? migratedTheme : 'aurora');
+setTheme(['frost', 'aurora'].includes(migratedTheme) ? migratedTheme : 'aurora');
 
 for (const name of ['theme', 'language']) {
   const toggle = $(`${name}-toggle`);
@@ -1704,6 +1706,9 @@ async function endWalletSession({ preserveWizardSession = false } = {}) {
     setConnection(false);
 
     if (previousManager) {
+      if (previousManager.isBrowserWallet) {
+        sessionStorage.removeItem(`cashcraft:browser-wallet-session:v1:${network}`);
+      }
       if (wasReady && !previousManager.isBrowserWallet) {
         try {
           await Promise.race([
@@ -1736,7 +1741,7 @@ async function endWalletSession({ preserveWizardSession = false } = {}) {
   }
 }
 
-async function connectBrowserWallet(phrase, isCurrent = () => true) {
+async function connectBrowserWallet(phrase, isCurrent = () => true, session = null) {
   if (walletReady || pairingInProgress || walletTransitioning) throw new Error('Disconnect the current wallet or finish pairing first.');
   const [{ BrowserWallet }] = await Promise.all([import('./browser-wallet.js'), loadWalletDependencies()]);
   if (!isCurrent()) return;
@@ -1745,9 +1750,11 @@ async function connectBrowserWallet(phrase, isCurrent = () => true) {
   if (!isCurrent()) return;
   if (walletReady || pairingInProgress || walletTransitioning || manager) throw new Error('Another wallet connected. Disconnect it first.');
 
-  const wallet = new BrowserWallet(phrase);
+  const vault = localStorage.getItem(`cashcraft:browser-wallet:v1:${network}`);
+  const wallet = session ? BrowserWallet.fromSession(session, vault) : new BrowserWallet(phrase);
   let address;
   try {
+    sessionStorage.setItem(`cashcraft:browser-wallet-session:v1:${network}`, wallet.exportSession(vault));
     manager = wallet;
     walletReady = true;
     address = addressFor(0, 0);
@@ -1762,6 +1769,7 @@ async function connectBrowserWallet(phrase, isCurrent = () => true) {
     $('status').textContent = 'Browser wallet connected · checking balances…';
     if ($('connection-dialog').open) $('connection-dialog').close();
   } catch (error) {
+    sessionStorage.removeItem(`cashcraft:browser-wallet-session:v1:${network}`);
     manager = null;
     walletReady = false;
     await wallet.destroy();
@@ -1947,7 +1955,11 @@ updateGameRewardAddress = setupGames($, {
   claimBeer: claimBeerReward,
   translate,
   getRewardAddress: () => walletReady ? addressFor(0, 0) : null,
-  autoOpen: new URLSearchParams(window.location.search).has('c'),
+  autoOpen: craftRoute || new URLSearchParams(window.location.search).has('c'),
+});
+setupGameInvite($, network, async () => {
+  await loadWalletDependencies();
+  return { QRCode, decodeCashAddress };
 });
 refreshBrowserWalletUI = setupBrowserWallet($, {
   network,
@@ -2602,13 +2614,20 @@ fetchBchUsd();
 
 const restoreSession = async () => {
   try {
+    const browserSession = sessionStorage.getItem(`cashcraft:browser-wallet-session:v1:${network}`);
+    if (browserSession) {
+      await connectBrowserWallet(null, () => !pairingInProgress && !walletReady, browserSession);
+      return;
+    }
     await loadWalletDependencies();
     const stored = loadSession();
     if (!pairingInProgress && !walletReady && stored?.walletPublicKey && stored?.paths?.length) {
       await startConnection({ restoring: true });
     }
   } catch (error) {
+    sessionStorage.removeItem(`cashcraft:browser-wallet-session:v1:${network}`);
     logger.warn('Could not restore previous WizardConnect session:', error);
+    $('status').textContent = 'Wallet session could not be restored. Open the wallet dialog to reconnect.';
   }
 };
 void restoreSession();

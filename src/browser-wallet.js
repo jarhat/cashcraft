@@ -100,6 +100,39 @@ export class BrowserWallet {
     this.isBrowserWallet = true;
   }
 
+  exportSession(vault) {
+    if (!this.account || !vault) throw new Error('Browser wallet session is unavailable.');
+    const account = this.account;
+    return JSON.stringify({
+      vault, privateKey: hex(account.privateKey), chainCode: hex(account.chainCode),
+      parentFingerprint: hex(account.parentFingerprint), parentIdentifier: hex(account.parentIdentifier),
+      childIndex: account.childIndex, depth: account.depth,
+    });
+  }
+
+  static fromSession(serialized, vault) {
+    const saved = JSON.parse(serialized);
+    if (!vault || saved.vault !== vault || saved.depth !== 3 || saved.childIndex !== 0x80000000) {
+      throw new Error('Browser wallet session no longer matches the encrypted wallet.');
+    }
+    const wallet = Object.create(BrowserWallet.prototype);
+    wallet.account = {
+      privateKey: bytes(saved.privateKey, 32),
+      chainCode: bytes(saved.chainCode, 32),
+      parentFingerprint: bytes(saved.parentFingerprint, 4),
+      parentIdentifier: bytes(saved.parentIdentifier, 20),
+      childIndex: saved.childIndex,
+      depth: saved.depth,
+    };
+    if (!secp256k1.validatePrivateKey(wallet.account.privateKey)) {
+      wallet.account.privateKey.fill(0);
+      wallet.account.chainCode.fill(0);
+      throw new Error('Invalid browser wallet session.');
+    }
+    wallet.isBrowserWallet = true;
+    return wallet;
+  }
+
   privateKey(pathIndex, index) {
     const n = Number(index);
     if (!this.account || ![0, 1].includes(pathIndex) || !Number.isSafeInteger(n) || n < 0 || n >= 2 ** 31) {

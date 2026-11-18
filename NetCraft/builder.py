@@ -2,10 +2,13 @@
 
 Run before starting the server:
 
-    mkdir -p data
+    python3 NetCraft/builder.py
     python3 NetCraft/builder.py --init-park data/netcraft.db
     python3 NetCraft/builder.py --add-park data/existing-world.db
 
+With no arguments, a new Compose world is created at data/netcraft.db. An
+existing database is never replaced; use --add-park only after stopping the
+server and backing up the world.
 Stop the server before running either command. --init-park creates a new
 database; --add-park requires an existing Rust-server world and aborts
 without changes if its tower or sky park overlaps any existing world edits.
@@ -14,7 +17,8 @@ It requires a C compiler and the checked-in terrain sources so it can clear
 only blocks that actually exist in the server's generated terrain.
 
 Customize PARK_*, SKY_Y, TOWER_Z and the drawing functions in make_park().
-Coordinates are block coordinates, with (0, 0) at the player spawn. A spiral
+Coordinates are block coordinates, with (0, 0) at the player spawn. The
+central park connects to four floating garden islands by bridges. A spiral
 staircase leads from the natural terrain to the platform; jump up each step
 or double-tap the keyboard jump key to fly. The calendar and seven colored
 gems are decorative, not interactive. Block IDs match NetCraft/src/item.h;
@@ -74,6 +78,9 @@ COLOR_RED = 46
 PARK_HALF_WIDTH = 28
 PARK_Z_MIN = -25
 PARK_Z_MAX = 28
+WORLD_HALF_WIDTH = 70
+WORLD_Z_MIN = -70
+WORLD_Z_MAX = 70
 SKY_Y = 180
 TOWER_Z = -12
 CALENDAR_Z = 22
@@ -272,12 +279,12 @@ def terrain_in_park():
             ctypes.c_int, ctypes.c_int, callback_type, ctypes.c_void_p,
         ]
         generator.create_world.restype = None
-        for p in range(-PARK_HALF_WIDTH // 32, PARK_HALF_WIDTH // 32 + 1):
-            for q in range(PARK_Z_MIN // 32, PARK_Z_MAX // 32 + 1):
+        for p in range(-WORLD_HALF_WIDTH // 32, WORLD_HALF_WIDTH // 32 + 1):
+            for q in range(WORLD_Z_MIN // 32, WORLD_Z_MAX // 32 + 1):
                 def collect(x, y, z, w, _):
                     if (x // 32 == p and z // 32 == q and
-                            -PARK_HALF_WIDTH <= x <= PARK_HALF_WIDTH and
-                            PARK_Z_MIN <= z <= PARK_Z_MAX and w > 0):
+                            -WORLD_HALF_WIDTH <= x <= WORLD_HALF_WIDTH and
+                            WORLD_Z_MIN <= z <= WORLD_Z_MAX and w > 0):
                         terrain[x, y, z] = w
                 callback = callback_type(collect)
                 generator.create_world(p, q, callback, None)
@@ -298,8 +305,8 @@ def make_park(terrain):
     edits = {}
 
     def put(x, y, z, block):
-        if not (-PARK_HALF_WIDTH <= x <= PARK_HALF_WIDTH and
-                PARK_Z_MIN <= z <= PARK_Z_MAX and 1 <= y <= 255):
+        if not (-WORLD_HALF_WIDTH <= x <= WORLD_HALF_WIDTH and
+                WORLD_Z_MIN <= z <= WORLD_Z_MAX and 1 <= y <= 255):
             raise ValueError("Park structure extends outside its footprint")
         edits[x, y, z] = block
 
@@ -446,6 +453,50 @@ def make_park(terrain):
                 put(x, floor + 25 + distance // 4, side * distance, COLOR_BLUE)
     for x in range(18, 24):
         put(x, floor + 22 - (x - 18) // 2, 0, COLOR_CYAN)
+
+    # Four floating gardens linked to the central park, inspired by the
+    # preview's green islands, waterfalls and small explorer structures.
+    for axis, side in (("x", -1), ("x", 1), ("z", -1), ("z", 1)):
+        cx, cz = (side * 53, 0) if axis == "x" else (0, side * 53)
+        for dx in range(-11, 12):
+            for dz in range(-11, 12):
+                distance = dx * dx + dz * dz
+                if distance > 121:
+                    continue
+                put(cx + dx, floor, cz + dz, GRASS)
+                for depth in range(1, 6):
+                    if distance <= (11 - depth) ** 2:
+                        put(cx + dx, floor - depth, cz + dz,
+                            DIRT if depth < 3 else COBBLE)
+                if distance < 80 and (dx * 17 + dz * 13) % 29 == 0:
+                    put(cx + dx, floor + 1, cz + dz,
+                        (YELLOW_FLOWER, RED_FLOWER, BLUE_FLOWER)[(dx + dz) % 3])
+        start = PARK_HALF_WIDTH if axis == "x" else (PARK_Z_MAX if side > 0 else -PARK_Z_MIN)
+        for distance in range(start, 44):
+            for offset in range(-2, 3):
+                x, z = (side * distance, offset) if axis == "x" else (offset, side * distance)
+                put(x, floor, z, PLANK)
+                put(x, floor + 1, z, EMPTY)
+                if abs(offset) == 2 and distance % 3 == 0:
+                    put(x, floor + 1, z, COLOR_WHITE)
+        # A small open pavilion and a tree keep the islands recognizable
+        # without turning the entire sky into dense geometry.
+        for dx in (-3, 3):
+            for dz in (-3, 3):
+                box(cx + dx, cx + dx, floor + 1, floor + 5, cz + dz, cz + dz, WOOD)
+        box(cx - 4, cx + 4, floor + 6, floor + 6, cz - 4, cz + 4, PLANK)
+        box(cx - 3, cx + 3, floor + 7, floor + 7, cz - 3, cz + 3, COLOR_RED)
+        put(cx, floor + 8, cz, COLOR_GOLD)
+        tx, tz = cx + 6, cz + 5
+        box(tx, tx, floor + 1, floor + 6, tz, tz, WOOD)
+        for dx in range(-2, 3):
+            for dz in range(-2, 3):
+                for dy in range(4, 8):
+                    if abs(dx) + abs(dz) + abs(dy - 5) <= 4 and (dx or dz):
+                        put(tx + dx, floor + dy, tz + dz, LEAVES)
+        # A narrow cyan cascade is decorative and does not simulate water.
+        wx, wz = (cx + side * 9, cz) if axis == "x" else (cx, cz + side * 9)
+        box(wx, wx, floor - 18, floor - 1, wz, wz, COLOR_CYAN)
     return edits
 
 def park_rows(edits):
@@ -463,6 +514,8 @@ def park_rows(edits):
 
 def initialize_park(path):
     """Create, but never replace, a database for the Rust server."""
+    if Path(path).exists():
+        raise FileExistsError("World already exists; back it up and use --add-park with the server stopped")
     terrain = terrain_in_park()
     edits = make_park(terrain)
     # Reserve the path atomically: a running or existing world is never modified.
@@ -492,8 +545,8 @@ def add_park(path):
                     "SELECT x,y,z FROM " + table + " WHERE "
                     "(x BETWEEN ? AND ? AND z BETWEEN ? AND ? AND y BETWEEN ? AND ?) OR "
                     "(x BETWEEN -8 AND 8 AND z BETWEEN ? AND ? AND y BETWEEN 31 AND ?) LIMIT 1",
-                    (-PARK_HALF_WIDTH, PARK_HALF_WIDTH, PARK_Z_MIN, PARK_Z_MAX,
-                     SKY_Y, SKY_Y + 36, TOWER_Z - 8, TOWER_Z + 8, SKY_Y),
+                    (-WORLD_HALF_WIDTH, WORLD_HALF_WIDTH, WORLD_Z_MIN, WORLD_Z_MAX,
+                     SKY_Y - 18, SKY_Y + 36, TOWER_Z - 8, TOWER_Z + 8, SKY_Y),
                 ).fetchone()
                 if conflict:
                     raise ValueError("Existing %s edit at %s overlaps the park; no changes made" % (table, conflict))
@@ -505,17 +558,22 @@ def add_park(path):
     print("Added %d park edits to %s. Restart the server." % (len(edits), path))
 
 def main():
-    if any(arg in ('--init-park', '--add-park', '--help', '-h') for arg in sys.argv[1:]):
-        parser = argparse.ArgumentParser(description=__doc__,
-                                         formatter_class=argparse.RawDescriptionHelpFormatter)
-        group = parser.add_mutually_exclusive_group(required=True)
-        group.add_argument('--init-park', metavar='NEW_DATABASE')
-        group.add_argument('--add-park', metavar='EXISTING_DATABASE')
-        args = parser.parse_args()
-        if args.init_park:
-            initialize_park(args.init_park)
-        else:
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--init-park', metavar='NEW_DATABASE')
+    group.add_argument('--add-park', metavar='EXISTING_DATABASE')
+    group.add_argument('--legacy-client', action='store_true',
+                       help='run the original network builder instead')
+    args = parser.parse_args()
+    if not args.legacy_client:
+        if args.add_park:
             add_park(args.add_park)
+        else:
+            path = Path(args.init_park) if args.init_park else Path(__file__).resolve().parent.parent / "data" / "netcraft.db"
+            if not args.init_park:
+                path.parent.mkdir(parents=True, exist_ok=True)
+            initialize_park(path)
         return
     client = get_client()
     set_block = client.set_block

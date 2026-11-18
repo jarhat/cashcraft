@@ -8,6 +8,8 @@ services:
       NETCRAFT_MINING_REWARDS_ENABLED: ${NETCRAFT_MINING_REWARDS_ENABLED:-true}
       BCH_NETWORK: ${BCH_NETWORK:-mainnet}
       BCH_REWARD_CATEGORY: ${BCH_REWARD_CATEGORY:?Set BCH_REWARD_CATEGORY in .env}
+      NETCRAFT_REWARD_API: auth:3000
+      NETCRAFT_REWARD_WAKE_SECRET: ${NETCRAFT_REWARD_WAKE_SECRET:?Set NETCRAFT_REWARD_WAKE_SECRET in .env}
       NETCRAFT_BLOCK_CATEGORIES: ${NETCRAFT_BLOCK_CATEGORIES:-}
       NETCRAFT_BLOCK_CATEGORY_1: ${NETCRAFT_BLOCK_CATEGORY_1:-}
       NETCRAFT_BLOCK_CATEGORY_2: ${NETCRAFT_BLOCK_CATEGORY_2:-}
@@ -99,20 +101,20 @@ services:
       - -wallet=${BCH_WALLET:-token-sender}
       - -disablewallet=0
       - -prune=${BCH_PRUNE_MIB:-10000}
-      - -rpcbind=0.0.0.0
-      - -rpcallowip=172.30.0.0/24
+      - -rpcbind=127.0.0.1
+      - -rpcbind=172.31.0.10
+      - -rpcallowip=172.31.0.11/32
       - -rpcport=8332
       - -rpcuser=${BCH_RPC_USER:?Set BCH_RPC_USER in .env}
       - -rpcpassword=${BCH_RPC_PASSWORD:?Set BCH_RPC_PASSWORD in .env}
       - -testnet=0
-    ports:
-      - "127.0.0.1:8332:8332"
     volumes:
       - bchn-data:/home/bitcoin/.bitcoin
     restart: unless-stopped
     networks:
       app-network:
-        ipv4_address: 172.30.0.10
+      bchn-rpc-network:
+        ipv4_address: 172.31.0.10
     healthcheck:
       test: ["CMD-SHELL", "bitcoin-cli -rpcuser=$${BCH_RPC_USER} -rpcpassword=$${BCH_RPC_PASSWORD} getblockchaininfo >/dev/null 2>&1"]
       interval: 30s
@@ -141,8 +143,9 @@ services:
       CASHADDR_DB_PATH: /data/cash-addresses.sqlite3
       NETCRAFT_DB_PATH: /data/netcraft.db
       NETCRAFT_MINING_REWARDS_ENABLED: ${NETCRAFT_MINING_REWARDS_ENABLED:-true}
+      NETCRAFT_REWARD_WAKE_SECRET: ${NETCRAFT_REWARD_WAKE_SECRET:?Set NETCRAFT_REWARD_WAKE_SECRET in .env}
 
-      BCH_RPC_URL: http://bchn:8332/
+      BCH_RPC_URL: http://172.31.0.10:8332/
       BCH_RPC_USER: ${BCH_RPC_USER:?Set BCH_RPC_USER in .env}
       BCH_RPC_PASSWORD: ${BCH_RPC_PASSWORD:?Set BCH_RPC_PASSWORD in .env}
       BCH_WALLET: ${BCH_WALLET:-token-sender}
@@ -163,7 +166,9 @@ services:
       bchn:
         condition: service_healthy
     networks:
-      - app-network
+      app-network:
+      bchn-rpc-network:
+        ipv4_address: 172.31.0.11
 
   cashtoken-wallet:
     build:
@@ -348,6 +353,11 @@ networks:
     ipam:
       config:
         - subnet: 172.30.0.0/24
+  bchn-rpc-network:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
   docker-control:
     internal: true
   docker-api-backend:

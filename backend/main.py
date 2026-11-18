@@ -83,6 +83,7 @@ if any(not CATEGORY_RE.fullmatch(c) for c in BCH_ALLOWED_TOKEN_CATEGORIES):
 DB_PATH = Path(os.getenv("CASHADDR_DB_PATH", "/data/cash-addresses.sqlite3"))
 NETCRAFT_DB_PATH = os.getenv("NETCRAFT_DB_PATH", "").strip()
 NETCRAFT_MINING_REWARDS_ENABLED = os.getenv("NETCRAFT_MINING_REWARDS_ENABLED", "false")
+NETCRAFT_REWARD_WAKE_SECRET = os.getenv("NETCRAFT_REWARD_WAKE_SECRET", "")
 if NETCRAFT_MINING_REWARDS_ENABLED not in ("true", "false"):
     raise RuntimeError("NETCRAFT_MINING_REWARDS_ENABLED must be true or false.")
 
@@ -100,6 +101,7 @@ _HASH_LENGTHS = (20, 24, 28, 32, 40, 48, 56, 64)
 app = FastAPI(title="CashToken-aware CashAddr receiver")
 logger = logging.getLogger(__name__)
 reward_stop = threading.Event()
+reward_wake = threading.Event()
 reward_thread = None
 db_identity = None
 
@@ -189,6 +191,12 @@ def init_db() -> None:
                 expires_at INTEGER NOT NULL
             )
         """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS donation_addresses (
+                network TEXT PRIMARY KEY,
+                address TEXT NOT NULL
+            )
+        """)
         db.execute("CREATE INDEX IF NOT EXISTS short_links_expires ON short_links (expires_at)")
     stat = DB_PATH.stat()
     db_identity = (stat.st_dev, stat.st_ino)
@@ -237,6 +245,7 @@ def startup() -> None:
     global reward_thread
     init_db()
     reward_stop.clear()
+    reward_wake.clear()
     reward_thread = threading.Thread(target=reward_worker, daemon=True)
     reward_thread.start()
 
@@ -244,6 +253,7 @@ def startup() -> None:
 @app.on_event("shutdown")
 def shutdown() -> None:
     reward_stop.set()
+    reward_wake.set()
     if reward_thread:
         reward_thread.join(timeout=35)
 
@@ -351,7 +361,7 @@ def _convert_5bit_to_8bit(values: list[int]) -> bytes:
     return bytes(result)
 
 
-def validate_token_aware_cashaddr(value: str) -> tuple[str, str, int]:
+def validate_cashaddr(value: str, *, token_aware: bool = True) -> tuple[str, str, int]:
     address = value.strip()
 
     if not address or (address.lower() != address and address.upper() != address):
@@ -408,13 +418,17 @@ def validate_token_aware_cashaddr(value: str) -> tuple[str, str, int]:
         raise ValueError("CashAddr payload length does not match its version.")
 
     # CashToken-aware address types: 2 = P2PKH, 3 = P2SH.
-    if address_type not in {2, 3}:
+    if address_type not in ({2, 3} if token_aware else {0, 1, 2, 3}):
         raise ValueError(
             "Address is valid CashAddr but is not CashToken-aware. "
             "Use a token-aware P2PKH or P2SH address."
         )
 
     return address, prefix, address_type
+
+
+def validate_token_aware_cashaddr(value: str) -> tuple[str, str, int]:
+    return validate_cashaddr(value, token_aware=True)
 
 
 @app.get("/health")
@@ -428,6 +442,24 @@ def health() -> dict[str, str]:
 @app.get("/api/token-reward")
 def token_reward() -> dict[str, str]:
     return {"category": BCH_REWARD_CATEGORY}
+
+
+@app.get("/api/donation-address")
+def donation_address() -> dict[str, str]:
+    try:
+        with open_db(timeout=60) as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT address FROM donation_addresses WHERE network = ?", (NETWORK,)).fetchone()
+            if row:
+                address = row[0]
+            else:
+                address = bch_rpc("getnewaddress", ["cashcraft donations"], wallet=True)
+                address, _, _ = validate_cashaddr(address, token_aware=False)
+                db.execute("INSERT INTO donation_addresses (network, address) VALUES (?, ?)", (NETWORK, address))
+            return {"address": address, "network": NETWORK}
+    except (RuntimeError, ValueError, sqlite3.Error) as exc:
+        logger.error("Donation address unavailable (%s)", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Donation address unavailable.") from exc
 
 
 _chain_status_lock = threading.Lock()
@@ -796,6 +828,11 @@ def _satoshis(amount) -> int:
     return int(value)
 
 
+def check_balance() -> int:
+    """Return the payout wallet's BCH balance in satoshis for backend use."""
+    return _satoshis(bch_rpc("getbalance", [], wallet=True))
+
+
 def _bch_amount(satoshis: int) -> str:
     return f"{satoshis // 100_000_000}.{satoshis % 100_000_000:08d}"
 
@@ -974,23 +1011,55 @@ def process_one_mining_reward() -> bool:
 
 def reward_worker() -> None:
     while not reward_stop.is_set():
+        reward_wake.clear()
         try:
             purge_expired_short_links()
         except (RewardDatabaseError, sqlite3.Error) as exc:
             logger.error("Could not purge short links: %s", type(exc).__name__)
-        try:
-            if process_one_reward():
-                continue
-            if process_one_mining_reward():
-                continue
-        except RewardDatabaseError as exc:
-            logger.error("Could not process token reward: %s", exc)
-        except (RuntimeError, sqlite3.Error, ValueError, KeyError, TypeError) as exc:
-            logger.error(
-                "Could not process token reward (%s); it will be retried.",
-                type(exc).__name__,
+        processed = False
+        for name, process in (("wallet rewards", process_one_reward), ("mining rewards", process_one_mining_reward)):
+            try:
+                processed = process() or processed
+            except (RewardDatabaseError, RuntimeError, sqlite3.Error, ValueError, KeyError, TypeError) as exc:
+                logger.error("Could not process %s (%s); it will be retried.", name, type(exc).__name__)
+        if not processed:
+            reward_wake.wait(30)
+
+
+@app.post("/api/internal/netcraft-reward-wake", status_code=204)
+def wake_mining_rewards(request: Request) -> Response:
+    provided = request.headers.get("authorization", "")
+    if not NETCRAFT_REWARD_WAKE_SECRET or not secrets.compare_digest(
+        provided.encode("utf-8"), f"Bearer {NETCRAFT_REWARD_WAKE_SECRET}".encode("utf-8")
+    ):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    reward_wake.set()
+    return Response(status_code=204)
+
+
+@app.get("/api/mina-rewards-sent")
+def mina_rewards_sent() -> dict:
+    try:
+        with open_db(timeout=5) as db:
+            total = sum(
+                db.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE category = ? AND sent_at IS NOT NULL",
+                    (BCH_REWARD_CATEGORY,),
+                ).fetchone()[0]
+                for table in ("token_rewards", "beer_rewards")
             )
-        reward_stop.wait(30)
+        if NETCRAFT_DB_PATH:
+            with sqlite3.connect(
+                Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro", uri=True, timeout=5
+            ) as db:
+                total += db.execute(
+                    "SELECT COUNT(*) FROM mining_rewards WHERE category = ? AND sent_at IS NOT NULL",
+                    (BCH_REWARD_CATEGORY,),
+                ).fetchone()[0]
+    except (RewardDatabaseError, sqlite3.Error) as exc:
+        logger.error("Could not read MINA payout total: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Payout total unavailable") from exc
+    return {"sent": str(total)}
 
 
 def verify_confirmed_payment(txid: str) -> dict:

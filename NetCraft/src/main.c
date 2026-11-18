@@ -562,8 +562,7 @@ void update_player(Player *player,
         if (player->buffer && s->x == x && s->y == y && s->z == z &&
             s->rx == rx && s->ry == ry) return;
         s->x = x; s->y = y; s->z = z; s->rx = rx; s->ry = ry;
-        del_buffer(player->buffer);
-        player->buffer = gen_player_buffer(s->x, s->y, s->z, s->rx, s->ry);
+        player->buffer = update_player_buffer(player->buffer, s->x, s->y, s->z, s->rx, s->ry);
     }
 }
 
@@ -1841,7 +1840,7 @@ void ensure_chunks_worker(Player *player, Worker *worker) {
              * boost so they can be refreshed promptly.
              */
             const int dirty_with_buffer =
-                chunk != NULL && chunk->buffer != NULL && chunk->dirty;
+                chunk != NULL && chunk->buffer != 0 && chunk->dirty;
 
             const int score =
                 (invisible << 24) |
@@ -2261,7 +2260,10 @@ void render_players(Attrib *attrib, Player *player) {
     glUniform1f(attrib->timer, time_of_day());
     for (int i = 0; i < g->player_count; i++) {
         Player *other = g->players + i;
-        if (other != player) {
+        float dx = other->state.x - s->x;
+        float dz = other->state.z - s->z;
+        float distance = g->render_radius * CHUNK_SIZE;
+        if (other != player && dx * dx + dz * dz <= distance * distance) {
             draw_player(attrib, other);
         }
     }
@@ -2322,6 +2324,9 @@ void render_cover(Attrib *attrib, Player *player) {
     del_buffer(buffer);
 }
 
+static GLuint crosshair_buffer;
+static int crosshair_width, crosshair_height, crosshair_scale;
+
 static void render_crosshairs(Attrib *attrib) {
     float matrix[16];
     set_matrix_2d(matrix, g->width, g->height);
@@ -2331,15 +2336,30 @@ static void render_crosshairs(Attrib *attrib) {
     glEnable(GL_COLOR_LOGIC_OP);
 #endif
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
-    GLuint crosshair_buffer = gen_crosshair_buffer();
+    if (!crosshair_buffer || crosshair_width != g->width ||
+        crosshair_height != g->height || crosshair_scale != g->scale) {
+        if (crosshair_buffer) del_buffer(crosshair_buffer);
+        crosshair_buffer = gen_crosshair_buffer();
+        crosshair_width = g->width;
+        crosshair_height = g->height;
+        crosshair_scale = g->scale;
+    }
     draw_lines(attrib, crosshair_buffer, 2, 4);
-    del_buffer(crosshair_buffer);
 #ifndef __EMSCRIPTEN__
     glDisable(GL_COLOR_LOGIC_OP);
 #endif
 }
 
 static GLuint item_buffers[256];
+
+static int visible_items(void) {
+    float spacing = 42.0f * g->scale;
+    int visible = 1 + (int)((g->height - 270.0f * g->scale) / spacing);
+    if (visible < 1) visible = 1;
+    if (visible > NUM_INVENTORY_VISIBLE) visible = NUM_INVENTORY_VISIBLE;
+    if (visible > hotbar_item_count) visible = hotbar_item_count;
+    return visible;
+}
 
 void render_item(Attrib *attrib) {
     if (hotbar_item_count <= 0) return;
@@ -2353,10 +2373,7 @@ void render_item(Attrib *attrib) {
     glUniform1f(attrib->timer, time_of_day());
 
     float spacing = 42.0f * g->scale;
-    int visible = 1 + (int)((g->height - 270.0f * g->scale) / spacing);
-    if (visible < 1) visible = 1;
-    if (visible > NUM_INVENTORY_VISIBLE) visible = NUM_INVENTORY_VISIBLE;
-    if (visible > hotbar_item_count) visible = hotbar_item_count;
+    int visible = visible_items();
     for (int i = 0; i < visible; i++) {
         int w = hotbar_items[(g->item_index + i) % hotbar_item_count];
         if (w <= 0 || w >= 256) continue;
@@ -2392,6 +2409,45 @@ static void render_text(
     GLuint buffer = gen_text_buffer(x, y, n, text);
     draw_text(attrib, buffer, length);
     del_buffer(buffer);
+}
+
+typedef struct {
+    GLuint buffer;
+    uint32_t count;
+    int item, width, height, scale, length;
+} ItemCountBuffer;
+static ItemCountBuffer item_count_buffers[NUM_INVENTORY_VISIBLE];
+
+static void render_item_counts(Attrib *attrib) {
+    if (hotbar_item_count <= 0) return;
+    float matrix[16];
+    set_matrix_2d(matrix, g->width, g->height);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glUniform1i(attrib->sampler, 1);
+    glUniform1i(attrib->extra1, 0);
+    for (int i = 0; i < visible_items(); i++) {
+        int w = hotbar_items[(g->item_index + i) % hotbar_item_count];
+        uint32_t count = Inventory_getCount(&g->inventory, w);
+        ItemCountBuffer *cached = &item_count_buffers[i];
+        if (!cached->buffer || cached->count != count || cached->item != w ||
+            cached->width != g->width || cached->height != g->height || cached->scale != g->scale) {
+            if (cached->buffer) del_buffer(cached->buffer);
+            char text[24];
+            snprintf(text, sizeof(text), "%u", (unsigned)count);
+            cached->length = strlen(text);
+            float size = 10.0f * g->scale;
+            float x = g->width - 72.0f * g->scale - size * (cached->length - 1);
+            float y = g->height - (132.0f + i * 42.0f) * g->scale;
+            cached->buffer = gen_text_buffer(x, y, size, text);
+            cached->count = count;
+            cached->item = w;
+            cached->width = g->width;
+            cached->height = g->height;
+            cached->scale = g->scale;
+        }
+        draw_text(attrib, cached->buffer, cached->length);
+    }
 }
 
 void add_message(const char *text) {
@@ -2667,7 +2723,7 @@ void parse_command(const char *buffer, bool forward) {
     char filename[MAX_PATH_LENGTH];
     int radius, count, xc, yc, zc;
     float elapsed;
-    if (sscanf(buffer, "/identity %128s %128s", username, token) == 2) {
+    if (sscanf(buffer, "/identity %127s %127s", username, token) == 2) {
         db_auth_set(username, token);
         add_message("Successfully imported identity token!");
         login();
@@ -2676,7 +2732,7 @@ void parse_command(const char *buffer, bool forward) {
         db_auth_select_none();
         login();
     }
-    else if (sscanf(buffer, "/login %128s", username) == 1) {
+    else if (sscanf(buffer, "/login %127s", username) == 1) {
         if (db_auth_select(username)) {
             login();
         }
@@ -2765,7 +2821,12 @@ void parse_command(const char *buffer, bool forward) {
         cylinder(&g->block0, &g->block1, radius, 0);
     }
     else if (strcmp(buffer, "/noclip") == 0) {
-        g->noclip = !g->noclip;
+        if (g->mode == MODE_ONLINE) {
+            g->noclip = false;
+            add_message("Noclip is unavailable online.");
+        } else {
+            g->noclip = !g->noclip;
+        }
     }
     else if (strcmp(buffer, "/survival") == 0) {
         set_survival_gamemode();
@@ -2832,6 +2893,7 @@ void on_mine() {
     int hw = get_targeted_block(&hx, &hy, &hz, &face);
     if (hw && hy > 0 && hy < 256 && is_destructable(hw)) {
         set_block(hx, hy, hz, 0);
+        if (g->mode != MODE_ONLINE) Inventory_collect(&g->inventory, hw);
 #ifdef __EMSCRIPTEN__
         EM_ASM(if (Module.playBlockSound) Module.playBlockSound(0););
 #endif
@@ -3365,6 +3427,7 @@ void handle_movement(double dt) {
     vy = vy * ut * speed;
     vz = vz * ut * speed;
     for (int i = 0; i < step; i++) {
+        float old_step_x = s->x, old_step_z = s->z;
         if (g->flying) {
             dy = 0;
         }
@@ -3375,7 +3438,29 @@ void handle_movement(double dt) {
         s->x += vx;
         s->y += vy + dy * ut;
         s->z += vz;
-        if (g->noclip) continue;
+#ifdef __EMSCRIPTEN__
+        if (g->mode == MODE_ONLINE) {
+            bool ready = true;
+            for (int dx = -1; dx <= 1 && ready; dx += 2) {
+                for (int dz = -1; dz <= 1; dz += 2) {
+                    Chunk *chunk = find_chunk(chunked(s->x + dx * 0.25f),
+                        chunked(s->z + dz * 0.25f));
+                    if (!chunk || chunk->needs_resync) {
+                        ready = false;
+                        break;
+                    }
+                }
+            }
+            if (!ready) {
+                s->x = old_step_x;
+                s->z = old_step_z;
+            }
+        }
+#else
+        (void)old_step_x;
+        (void)old_step_z;
+#endif
+        if (g->noclip && g->mode != MODE_ONLINE) continue;
         if (collide(2, &s->x, &s->y, &s->z)) {
 #ifdef __EMSCRIPTEN__
             if (dy < 0) grounded = true;
@@ -3487,6 +3572,10 @@ void parse_buffer(char *buffer, int len) {
 #endif
         }
         int bp, bq, bx, by, bz, bw;
+        int mined_item;
+        if (sscanf(line, "I,%d", &mined_item) == 1) {
+            Inventory_collect(&g->inventory, mined_item);
+        }
         if (sscanf(line, "B,%d,%d,%d,%d,%d,%d",
             &bp, &bq, &bx, &by, &bz, &bw) == 6)
         {
@@ -3636,6 +3725,7 @@ void reset_model() {
     g->observe2 = 0;
     g->flying = false;
     g->item_index = 0;
+    Inventory_reset(&g->inventory);
     g->ortho_zoom = 32;
     memset(g->typing_buffer, 0, sizeof(char) * MAX_TEXT_LENGTH);
     g->typing = false;
@@ -3806,10 +3896,13 @@ int main(int argc, char **argv) {
     g->delete_radius = DELETE_CHUNK_RADIUS;
     g->sign_radius = RENDER_SIGN_RADIUS;
 #ifdef __EMSCRIPTEN__
+    g->create_radius = 4;
+    g->render_radius = 4;
+    g->delete_radius = 6;
     if (EM_ASM_INT(return window.matchMedia('(pointer: coarse)').matches;)) {
-        g->create_radius = 4;
-        g->render_radius = 4;
-        g->delete_radius = 6;
+        g->create_radius = 3;
+        g->render_radius = 3;
+        g->delete_radius = 5;
     }
 #endif
 
@@ -4012,6 +4105,16 @@ void main_shutdown() {
     client_stop();
     client_disable();
     del_buffer(sky_buffer);
+    if (crosshair_buffer) {
+        del_buffer(crosshair_buffer);
+        crosshair_buffer = 0;
+    }
+    for (int i = 0; i < NUM_INVENTORY_VISIBLE; i++) {
+        if (item_count_buffers[i].buffer) {
+            del_buffer(item_count_buffers[i].buffer);
+            item_count_buffers[i].buffer = 0;
+        }
+    }
     for (int i = 0; i < 256; i++) {
         if (item_buffers[i]) {
             del_buffer(item_buffers[i]);
@@ -4086,13 +4189,21 @@ void one_iter() {
     }
 
     // SEND POSITION TO SERVER //
+    static State last_sent_position;
+    static bool has_sent_position = false;
     if (now - g->last_update > 0.1
 #ifdef __EMSCRIPTEN__
         && (g->mode != MODE_ONLINE || online_ready)
 #endif
     ) {
         g->last_update = now;
-        client_position(s->x, s->y, s->z, s->rx, s->ry);
+        if (!has_sent_position || s->x != last_sent_position.x ||
+            s->y != last_sent_position.y || s->z != last_sent_position.z ||
+            s->rx != last_sent_position.rx || s->ry != last_sent_position.ry) {
+            client_position(s->x, s->y, s->z, s->rx, s->ry);
+            last_sent_position = *s;
+            has_sent_position = true;
+        }
     }
 
     // PREPARE TO RENDER //
@@ -4102,8 +4213,7 @@ void one_iter() {
     }
     delete_chunks();
     if (g->observe1 || g->observe2) {
-        del_buffer(me->buffer);
-        me->buffer = gen_player_buffer(s->x, s->y, s->z, s->rx, s->ry);
+        me->buffer = update_player_buffer(me->buffer, s->x, s->y, s->z, s->rx, s->ry);
     }
     for (int i = 1; i < g->player_count; i++) {
         interpolate_player(g->players + i);
@@ -4194,6 +4304,7 @@ void render_scene() {
         }
         if (SHOW_ITEM && g->show_ui) {
             render_item(&block_attrib);
+            render_item_counts(&text_attrib);
         }
     } else {
         face_count = 0;

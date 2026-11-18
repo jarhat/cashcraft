@@ -38,7 +38,7 @@
 <body>
   <div class="market-strip" aria-label="Bitcoin Cash blockchain status">
     <span class="market-label">BCH / CHAIN</span>
-    <div id="chain-ticker" class="market-ticker" role="region" tabindex="0" aria-label="Bitcoin Cash blockchain status">Loading blockchain status…</div>
+    <div id="chain-ticker" class="market-ticker" role="region" tabindex="0" aria-label="Bitcoin Cash blockchain status and MINA rewards sent">Loading blockchain status…</div>
     <svg class="holiday-flight" viewBox="0 0 64 24" shape-rendering="crispEdges" aria-hidden="true">
       <path fill="#cf3744" d="M5 10h13v6H5zm4-6h6v6H9z"/><path fill="#fff" d="M8 3h7v2H8zm0 7h8v2H8zM15 5h2v3h-2z"/><path fill="#eac09b" d="M10 7h5v3h-5z"/>
       <path fill="#ad774f" d="M33 10h13v6H33zm11-4h5v7h-5zM35 16h2v4h-2zm8 0h2v4h-2z"/><path fill="#e9c38b" d="M46 3h2v4h-2zm3 1h2v4h-2z"/><path fill="#e34a4a" d="M49 8h2v2h-2z"/><path fill="#9ab8c6" d="M18 15h15v1H18zM3 19h20v1H3z"/>
@@ -76,8 +76,6 @@
           <div id="theme-menu" class="tool-dropdown" hidden>
             <button type="button" data-theme-option="frost">Frost</button>
             <button type="button" data-theme-option="aurora">Aurora</button>
-            <button type="button" data-theme-option="mina">Mina</button>
-            <p class="theme-credit">Mina: NetCraft textures based on Craft by Michael Fogleman (MIT), Pixeludi by Wojtek Mroczek and Piehole Plain by Alex Voelk (<a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener noreferrer">CC BY-SA</a>). <a href="https://github.com/satoshinm/NetCraft#textures" target="_blank" rel="noopener noreferrer">Sources</a>.</p>
           </div>
         </div>
       </div>
@@ -443,7 +441,7 @@
       <p id="pairing-help" class="fine">Choose Connect wallet, then open your wallet and approve the connection. Return to this browser to continue.</p>
       <details id="browser-wallet-section">
         <summary>Browser wallet: create, restore or unlock</summary>
-        <p class="fine">Your encrypted wallet stays in this browser. Back up the recovery phrase offline: clearing browser data or losing both the phrase and password can permanently lose your funds. Anyone with the phrase can spend them.</p>
+        <p class="fine">Create a browser wallet if you don't have a WizardConnect wallet, or restore your existing phrase. Back up the recovery phrase offline; anyone with it can spend your funds. The unlocked account key stays in this tab across refreshes until you disconnect or close the tab. Anyone with access to this tab or browser can spend while it is unlocked.</p>
         <div class="browser-wallet-actions">
           <button id="browser-wallet-create" class="small-button" type="button">Create wallet</button>
           <button id="browser-wallet-restore" class="small-button" type="button">Restore from phrase</button>
@@ -538,7 +536,7 @@
     </nav>
     <p id="game-dialog-status" class="fine" role="status"></p>
     <div id="game-stage" class="game-stage">
-      <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen; gamepad" allowfullscreen></iframe>
+      <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen; gamepad; autoplay" allowfullscreen></iframe>
       <div class="game-controls" aria-label="Game controls">
         <button id="game-fullscreen" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/></svg>
@@ -553,8 +551,28 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9ZM10 20h4"/></svg>
           <span id="game-notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread notification</span></span>
         </button>
+        <button id="game-invite" type="button" aria-label="Invite and support" title="Invite and support" aria-haspopup="dialog" aria-controls="invite-dialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>
+        </button>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="invite-dialog" class="notifications-dialog" aria-labelledby="invite-title">
+    <div class="notifications-heading">
+      <h2 id="invite-title">Invite and support</h2>
+      <button id="invite-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
+    </div>
+    <p>Invite friends to explore NetCraft together, made with love.</p>
+    <code id="invite-url"></code>
+    <div class="browser-wallet-actions">
+      <button id="invite-share" class="small-button" type="button">Share invite</button>
+      <button id="invite-copy" class="small-button" type="button">Copy invite link</button>
+    </div>
+    <p>Support reward payouts and site hosting with a Bitcoin Cash donation. Thank you!</p>
+    <canvas id="donation-qr" aria-label="Bitcoin Cash donation request QR code" hidden></canvas>
+    <p><code id="donation-address"></code></p>
+    <p id="invite-status" class="fine" role="status"></p>
   </dialog>
 
   <dialog id="wiki-dialog" class="notifications-dialog wiki-dialog" aria-labelledby="wiki-title">

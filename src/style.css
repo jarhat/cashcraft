@@ -3083,56 +3083,9 @@ body:not(.wallet-connected) .dashboard { padding-bottom: 0; }
   background: color-mix(in srgb, var(--page-base) 90%, white);
 }
 .topbar .wizard-toggle::after { content: none; }
-.theme-credit { width: 220px; max-width: 100%; margin: 6px 10px 8px; color: var(--muted); font-size: .68rem; line-height: 1.4; }
-.theme-credit a { color: var(--ice); }
-
-html[data-theme="mina"] {
-  --ice: #c9ef9c;
-  --mint: #b7e88b;
-  --glow-color: #8bc65b;
-  --muted: #c3c4a4;
-  --glass-border: #8b805b;
-  --glass-tint: #25291c;
-  --page-base: #18251e;
-  --page-halo: rgb(90 151 107 / 30%);
-  --page-halo-secondary: rgb(110 133 65 / 18%);
-}
-html[data-theme="mina"] body {
-  background: linear-gradient(180deg, #436d78 0, #354f43 280px, #18251e 700px);
-  background-attachment: fixed;
-}
-html[data-theme="mina"] .mesh-landscape { display: none; }
-html[data-theme="mina"] .topbar {
-  border: 2px solid #536e38;
-  border-radius: 2px;
-  background: linear-gradient(rgb(20 32 19 / 72%), rgb(20 32 19 / 72%)),
-    url('./mina-grass.png') repeat;
-  box-shadow: 4px 4px 0 rgb(0 0 0 / 35%);
-}
-html[data-theme="mina"] .panel,
-html[data-theme="mina"] .notifications-dialog,
-html[data-theme="mina"] .tool-dropdown {
-  border: 2px solid #827253;
-  border-radius: 2px;
-  background: linear-gradient(rgb(20 19 14 / 82%), rgb(20 19 14 / 82%)),
-    url('./mina-planks.png') repeat;
-  box-shadow: 4px 4px 0 rgb(0 0 0 / 35%);
-}
-html[data-theme="mina"] .panel::before {
-  width: 100%;
-  height: 6px;
-  background: url('./mina-grass.png') repeat-x;
-}
-html[data-theme="mina"] .topbar .quick-action,
-html[data-theme="mina"] .topbar .theme-toggle,
-html[data-theme="mina"] .topbar .wizard-toggle,
-html[data-theme="mina"] .topbar .wizard-logout {
-  border-color: #84936a;
-  border-radius: 2px;
-  background: #263b27;
-  color: #f0f8e6;
-}
-html[data-theme="mina"] .topbar .quick-action:hover,
-html[data-theme="mina"] .topbar .theme-toggle:hover,
-html[data-theme="mina"] .topbar .wizard-toggle:hover,
-html[data-theme="mina"] .topbar .wizard-logout:hover { background: #3e5b34; }
+.gamba-art path:nth-child(2) { fill: #07512d; }
+.gamba-art path:nth-child(3) { fill: #42e67c; }
+.gamba-art path:nth-child(4) { fill: #12a653; }
+.gamba-art path:nth-child(5) { fill: #80f2a4; }
+.gamba-art path:nth-child(6) { fill: #c1ffd2; }
+.gamba-art path:nth-child(7) { fill: #27d06a; }

@@ -63,6 +63,18 @@ test('password encryption protects the phrase and detects wrong passwords or tam
   assert.throws(() => normalizeMnemonic('abandon '.repeat(12)), /recovery phrase/);
 });
 
+test('tab session restores the same account without saving the recovery phrase', async () => {
+  const wallet = new BrowserWallet(mnemonic);
+  const session = wallet.exportSession('vault');
+  assert.equal(session.includes(mnemonic), false);
+  const restored = BrowserWallet.fromSession(session, 'vault');
+  assert.equal(binToHex(restored.getPubkey(0, 0)), binToHex(wallet.getPubkey(0, 0)));
+  assert.equal(binToHex(restored.getPubkey(1, 4)), binToHex(wallet.getPubkey(1, 4)));
+  assert.throws(() => BrowserWallet.fromSession(session, 'other vault'), /does not match|no longer matches/);
+  await wallet.destroy();
+  await restored.destroy();
+});
+
 test('locally signed CashToken send preserves change and passes the BCH virtual machine', async () => {
   const wallet = new BrowserWallet(mnemonic);
   const publicKey = wallet.getPubkey(0, 0);

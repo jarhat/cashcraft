@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
+import sys
 
 
 spec = importlib.util.spec_from_file_location(
@@ -11,6 +12,24 @@ spec = importlib.util.spec_from_file_location(
 )
 builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
+
+
+class PreviewWorldTests(unittest.TestCase):
+    def test_expanded_islands_have_bridges_and_fit_world_bounds(self):
+        edits = builder.make_park({(0, 40, 0): builder.GRASS})
+        floor = builder.SKY_Y
+        for x, z in ((53, 0), (-53, 0), (0, 53), (0, -53)):
+            self.assertEqual(edits[x, floor, z], builder.GRASS)
+            self.assertEqual(edits[x, floor + 8, z], builder.COLOR_GOLD)
+        for x, z in ((35, 0), (-35, 0), (0, 35), (0, -35)):
+            self.assertEqual(edits[x, floor, z], builder.PLANK)
+        self.assertTrue(all(1 <= y <= 255 for _, y, _ in edits))
+
+    def test_default_command_creates_compose_world(self):
+        with patch.object(sys, "argv", ["builder.py"]), \
+             patch.object(Path, "mkdir"), patch.object(builder, "initialize_park") as initialize:
+            builder.main()
+        self.assertEqual(initialize.call_args.args[0], Path(builder.__file__).resolve().parent.parent / "data" / "netcraft.db")
 
 
 class ExistingWorldParkTests(unittest.TestCase):
@@ -49,6 +68,7 @@ class ExistingWorldParkTests(unittest.TestCase):
             ("block", (0, 0, 1, 180, 1, 0)),
             ("light", (0, 0, 0, 40, -12, 1)),
             ("sign", (0, 0, 1, 181, 1, 0, "existing")),
+            ("light", (1, 0, 53, 170, 0, 1)),
         ]:
             with self.subTest(table=table):
                 with sqlite3.connect(self.path) as db:

@@ -16,7 +16,7 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
       frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '' }, '*');
     }
   };
-  const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog'];
+  const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog'];
   const canFocusGame = () => dialog.open && activeGame &&
     (document.fullscreenElement === stage || dialog.classList.contains('game-auto-open')) &&
     !overlayDialogs.some((id) => $(id).open);
@@ -30,7 +30,7 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
   for (const id of overlayDialogs) {
     $(id).addEventListener('close', () => {
       requestAnimationFrame(() => {
-        if (canFocusGame() && [document.body, $('game-wallet'), $('game-notifications'), frame]
+        if (canFocusGame() && [document.body, $('game-wallet'), $('game-notifications'), $('game-invite'), frame]
           .includes(document.activeElement)) frame.focus({ preventScroll: true });
       });
     });
