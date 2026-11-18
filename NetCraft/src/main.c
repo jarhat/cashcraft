@@ -2908,7 +2908,7 @@ void on_mine() {
         set_block(hx, hy, hz, 0);
         if (g->mode != MODE_ONLINE) Inventory_collect(&g->inventory, hw);
 #ifdef __EMSCRIPTEN__
-        EM_ASM(if (Module.playBlockSound) Module.playBlockSound(0););
+        if (g->mode != MODE_ONLINE) EM_ASM(if (Module.playBlockSound) Module.playBlockSound(0););
 #endif
 
         //struct ItemStack stack = { .type = hw, .count = 1 };
@@ -2949,7 +2949,7 @@ void on_build() {
             }
             set_block(hx, hy, hz, hw);
 #ifdef __EMSCRIPTEN__
-            EM_ASM(if (Module.playBlockSound) Module.playBlockSound(1););
+            if (g->mode != MODE_ONLINE) EM_ASM(if (Module.playBlockSound) Module.playBlockSound(1););
 #endif
             record_block(hx, hy, hz, hw);
         }
@@ -3598,6 +3598,20 @@ void parse_buffer(char *buffer, int len) {
         int mined_item;
         if (line[0] == 'I' && sscanf(line, "I,%d", &mined_item) == 1) {
             Inventory_collect(&g->inventory, mined_item);
+#ifdef __EMSCRIPTEN__
+            EM_ASM(if (Module.playBlockSound) Module.playBlockSound(0););
+#endif
+        }
+        char mined_reward_address[121];
+        if (line[0] == 'Q' && sscanf(line, "Q,%120[^\n]", mined_reward_address) == 1) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({
+                    type: 'netcraft-mina-reward',
+                    address: UTF8ToString($0)
+                }, '*');
+            }, mined_reward_address);
+#endif
         }
         int jx, jy, jz, item, accepted;
         if (line[0] == 'J' && sscanf(line, "J,%d,%d,%d,%d,%d", &jx, &jy, &jz, &item, &accepted) == 5 &&
@@ -3606,6 +3620,9 @@ void parse_buffer(char *buffer, int len) {
             pending_placement.item == item && (accepted == 0 || accepted == 1)) {
             if (!accepted) Inventory_collect(&g->inventory, item);
             pending_placement.active = false;
+#ifdef __EMSCRIPTEN__
+            if (accepted) EM_ASM(if (Module.playBlockSound) Module.playBlockSound(1););
+#endif
         }
         if (line[0] == 'B' && sscanf(line, "B,%d,%d,%d,%d,%d,%d",
             &bp, &bq, &bx, &by, &bz, &bw) == 6)

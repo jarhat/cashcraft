@@ -9,13 +9,19 @@ const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8'
 function receiptHarness(stored = new Map(), wallet = 'wallet') {
   const elements = new Map([
     ['token-receipt-notifications', {
-      notices: [], items: [], prepend(item) { this.notices.unshift(item.textContent); this.items.unshift(item); },
+      notices: [], items: [], childElementCount: 0,
+      prepend(item) { this.notices.unshift(item.textContent); this.items.unshift(item); this.childElementCount++; },
       replaceChildren() { this.notices = []; },
     }],
     ['notifications-empty', { hidden: false }],
     ['notification-indicator', { hidden: true }],
     ['gamba-sound-controls', { hidden: true }],
     ['gamba-art', { cloneNode: () => ({ removeAttribute() {} }) }],
+    ['mining-reward-queue-notice', {
+      querySelector(selector) { return selector === 'strong' ? this.label : this.details; },
+      remove() {},
+      label: { textContent: '' }, details: { textContent: '' },
+    }],
   ]);
   let celebrations = 0;
   const category = 'b'.repeat(64);
@@ -25,7 +31,7 @@ function receiptHarness(stored = new Map(), wallet = 'wallet') {
   };
   const script = source.slice(source.indexOf('let rewardCategory ='), source.indexOf('\nfunction report('));
   const context = {
-    network: 'mainnet', API_BASE_URL: '', localStorage, utxoKey,
+    network: 'mainnet', API_BASE_URL: '', localStorage, utxoKey, walletReady: true,
     addressFor: () => wallet, translate: (text) => text,
     $: (id) => elements.get(id), document: { createElement: () => ({
       children: [], append(...children) { this.children.push(...children); },
@@ -33,9 +39,10 @@ function receiptHarness(stored = new Map(), wallet = 'wallet') {
       set textContent(value) { this.text = value; },
     }) },
     showGambaCelebration() { celebrations++; },
+    refreshBalances: () => new Promise(() => {}),
     fetch: async () => ({ ok: true, json: async () => ({ category }) }),
   };
-  const api = runInNewContext(`${script}\n({ loadRewardCategory, notifyTokenReceipts, rememberSentTransaction })`, context);
+  const api = runInNewContext(`${script}\n({ loadRewardCategory, notifyTokenReceipts, rememberSentTransaction, queueMinedRewardNotification })`, context);
   return { api, category, elements, stored, get celebrations() { return celebrations; } };
 }
 
@@ -102,6 +109,16 @@ test('renames tracked GAMBA receipts without replaying them', async () => {
   assert.equal(h.celebrations, 0);
   assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 MINA TOKEN']);
   assert.deepEqual(JSON.parse(stored.values().next().value).messages, ['Received 1 MINA']);
+});
+
+test('shows a queued mining payout immediately and tracks it until a wallet receipt arrives', () => {
+  const h = receiptHarness();
+  h.api.queueMinedRewardNotification('wallet');
+  const state = JSON.parse(h.stored.get('ctf-token-receipts:mainnet:wallet'));
+  assert.equal(state.pendingMiningRewards, 1);
+  assert.equal(state.unread, true);
+  assert.equal(h.elements.get('notification-indicator').hidden, false);
+  assert.equal(h.elements.get('mining-reward-queue-notice').label.textContent, '1 MINA mining reward queued');
 });
 
 test('does not show an unrecorded celebration if browser storage fails', async () => {
@@ -223,7 +240,7 @@ test('only the open game frame can request notification audio unlock', () => {
   const game = { open: true };
   const context = {
     window: { addEventListener: (_type, callback) => { handler = callback; } },
-    $: (id) => id === 'game-dialog' ? game : { contentWindow: frame },
+    $: (id) => id === 'game-dialog' ? game : { contentWindow: frame, src: '/games/netcraft/craftw.html' },
     notificationAudio: null,
     unlockNotificationAudio: () => { unlocks++; },
   };

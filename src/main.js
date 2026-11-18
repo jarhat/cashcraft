@@ -200,11 +200,14 @@ function receiptStorageKey() {
 
 function readReceiptState() {
   const saved = localStorage.getItem(receiptStorageKey());
-  if (!saved) return { seen: [], sent: [], messages: [], unread: false };
+  if (!saved) return { seen: [], sent: [], messages: [], unread: false, pendingMiningRewards: 0 };
   const state = JSON.parse(saved);
   if (!Array.isArray(state.seen) || !Array.isArray(state.sent) || !Array.isArray(state.messages)) {
     throw new Error('Invalid saved token notification state.');
   }
+  state.pendingMiningRewards = Number.isSafeInteger(state.pendingMiningRewards)
+    ? Math.max(0, state.pendingMiningRewards)
+    : 0;
   return state;
 }
 
@@ -221,6 +224,69 @@ function addReceiptNotice() {
   $('token-receipt-notifications').prepend(notice);
   $('notifications-empty').hidden = true;
   $('gamba-sound-controls').hidden = false;
+}
+
+function renderQueuedMiningRewards(count) {
+  const container = $('token-receipt-notifications');
+  let notice = $('mining-reward-queue-notice');
+  if (!count) {
+    notice?.remove();
+    $('notifications-empty').hidden = container.childElementCount > 0;
+    return;
+  }
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.id = 'mining-reward-queue-notice';
+    notice.className = 'notification-message mining-reward-notice';
+    const label = document.createElement('strong');
+    const details = document.createElement('span');
+    notice.append(label, details);
+    container.prepend(notice);
+    $('notifications-empty').hidden = true;
+  }
+  notice.querySelector('strong').textContent = `${count} MINA mining reward${count === 1 ? '' : 's'} queued`;
+  notice.querySelector('span').textContent = 'Payout is queued for broadcast. The wallet will report the MINA token at zero confirmations once it is sent.';
+}
+
+function queueMinedRewardNotification(address) {
+  if (!walletReady || addressFor(0, 0) !== address) return;
+  try {
+    const state = readReceiptState();
+    state.pendingMiningRewards++;
+    state.unread = true;
+    localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
+    $('notification-indicator').hidden = false;
+    renderQueuedMiningRewards(state.pendingMiningRewards);
+    void refreshMinedRewardReceipts();
+  } catch (error) {
+    logger.warn('Could not show the queued mining reward:', error);
+    $('status').textContent = 'MINA reward queued · wallet notification could not be saved';
+  }
+}
+
+let miningRewardRefreshActive = false;
+async function refreshMinedRewardReceipts() {
+  if (miningRewardRefreshActive || !walletReady) return;
+  miningRewardRefreshActive = true;
+  try {
+    for (let attempt = 0; attempt < 12 && walletReady; attempt++) {
+      try {
+        await refreshBalances({ quiet: true });
+      } catch (error) {
+        logger.warn('Could not refresh a queued MINA reward:', error);
+      }
+      if (!walletReady) return;
+      try {
+        if (!readReceiptState().pendingMiningRewards) return;
+      } catch (error) {
+        logger.warn('Could not check the queued MINA reward state:', error);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+  } finally {
+    miningRewardRefreshActive = false;
+  }
 }
 
 function rememberSentTransaction(txid) {
@@ -251,12 +317,15 @@ function notifyTokenReceipts(scannedUtxos) {
   for (const utxo of matching) seen.add(utxoKey(utxo));
   state.seen = [...seen];
   state.receiptTracking = true;
+  if (!legacy && received.length) {
+    state.pendingMiningRewards = Math.max(0, state.pendingMiningRewards - received.length);
+  }
   if (received.length && !legacy) {
     state.gambaNotified = true;
     state.messages.push(...received.map(() => message));
     state.messages = state.messages.slice(-100);
     state.unread = true;
-  } else if (!state.messages.length) {
+  } else if (!state.messages.length && !state.pendingMiningRewards) {
     state.unread = false;
   }
   localStorage.setItem(wallet, JSON.stringify(state));
@@ -270,6 +339,7 @@ function notifyTokenReceipts(scannedUtxos) {
   } else if (received.length && !legacy) {
     received.forEach(() => addReceiptNotice());
   }
+  renderQueuedMiningRewards(state.pendingMiningRewards);
   if (received.length && !legacy) {
     $('notification-indicator').hidden = false;
     showGambaCelebration();
@@ -1952,9 +2022,15 @@ notificationsDialog.addEventListener('close', () => {
 });
 
 window.addEventListener('message', (event) => {
-  if ($('game-dialog').open && event.source === $('game-frame').contentWindow &&
-      event.data?.type === 'netcraft-user-gesture' && notificationAudio?.state !== 'running') {
+  if (event.source !== $('game-frame').contentWindow) return;
+  if ($('game-dialog').open && event.data?.type === 'netcraft-user-gesture' &&
+      notificationAudio?.state !== 'running') {
     unlockNotificationAudio();
+  }
+  if ($('game-dialog').open && $('game-frame').src.includes('/games/netcraft/') &&
+      event.data?.type === 'netcraft-mina-reward' &&
+      typeof event.data.address === 'string') {
+    queueMinedRewardNotification(event.data.address);
   }
 });
 

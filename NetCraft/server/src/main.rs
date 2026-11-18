@@ -583,6 +583,11 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
             inventory[previous as usize] = inventory[previous as usize].saturating_add(1);
         }
         send(&player, format!("I,{previous}\n"));
+        if reward_queued {
+            if let Some(address) = player.reward_address.as_deref() {
+                send(&player, format!("Q,{address}\n"));
+            }
+        }
     } else {
         state.players.get_mut(&id).unwrap().inventory[w as usize] -= 1;
         send(&player, format!("J,{x},{y},{z},{w},1\n"));
@@ -1154,6 +1159,9 @@ mod tests {
         let (x, y, z) = ores[0];
         move_to(&server, ores[0]);
         block_edit(&server, 1, x, y, z, 0).unwrap();
+        let player_messages = _first.try_iter().flatten().collect::<Vec<_>>();
+        let player_messages = String::from_utf8(player_messages).unwrap();
+        assert!(player_messages.contains(&format!("Q,{address}\n")));
         assert!(wakes.try_recv().is_ok());
         let update = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert!(update.contains(&format!("B,0,0,{x},{y},{z},0\n")));

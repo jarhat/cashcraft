@@ -95,7 +95,7 @@ test('NetCraft parses encoded launch arguments without splitting encoded charact
   ]);
 });
 
-test('game audio starts from a gesture and mutes effects and music', async () => {
+test('game audio starts from a gesture and plays only block and step effects', async () => {
   const elements = new Map();
   const listeners = {};
   const nodes = [];
@@ -116,9 +116,6 @@ test('game audio starts from a gesture and mutes effects and music', async () =>
     createGain() {
       return { gain: { value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} };
     }
-    createOscillator() {
-      return { frequency: {}, connect() {}, start() { nodes.push('music'); }, stop() {} };
-    }
     createBufferSource() { return { playbackRate: {}, connect() {}, start() { nodes.push('effect'); } }; }
   }
   const document = {
@@ -136,21 +133,17 @@ test('game audio starts from a gesture and mutes effects and music', async () =>
   listeners.pointerdown({ isTrusted: true });
   await new Promise(setImmediate);
   assert.equal($('sound-toggle').attributes['aria-label'], 'Disable sound');
-  const musicNotes = nodes.filter((node) => node === 'music').length;
-  assert.ok(musicNotes > 0);
+  assert.deepEqual(nodes, []);
   context.Module.playBlockSound(0);
   assert.equal(nodes.filter((node) => node === 'effect').length, 1);
   $('sound-toggle').listeners.click();
-  assert.equal(timers.size, 0);
   context.Module.playBlockSound(1);
   assert.equal(nodes.filter((node) => node === 'effect').length, 1);
-  assert.equal(nodes.filter((node) => node === 'music').length, musicNotes);
   $('sound-toggle').listeners.click();
   await new Promise(setImmediate);
-  assert.ok(nodes.filter((node) => node === 'music').length >= musicNotes);
   context.Module.playBlockSound(1);
   assert.equal(nodes.filter((node) => node === 'effect').length, 2);
-  assert.equal(timers.size, 1);
+  assert.equal(timers.size, 0);
 });
 
 test('touch controls recover from unavailable pointer capture and release outside', () => {

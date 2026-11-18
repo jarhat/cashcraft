@@ -11,7 +11,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
     if (!elements.has(id)) elements.set(id, {
       listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute(name, value) { this[name] = value; },
-      classList: { add() {}, remove() {}, contains() { return false; } },
+      classList: { add() {}, remove() {}, contains() { return false; }, toggle() {} },
       focus() { this.focused = true; },
       show() { this.open = true; }, close() { this.open = false; this.listeners.close(); },
       removeAttribute(name) { delete this[name]; },
@@ -26,7 +26,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   };
   const documentListeners = {};
   globalThis.document = {
-    fullscreenElement: null,
+    body: { classList: { toggle() {} } }, fullscreenElement: null,
     querySelector() { return { after() {} }; },
     addEventListener(type, fn) { documentListeners[type] = fn; },
     async exitFullscreen() { this.fullscreenElement = null; documentListeners.fullscreenchange(); },
@@ -60,7 +60,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   assert.equal(document.fullscreenElement, null);
   assert.equal($('game-frame').src, url);
   assert.equal($('game-dialog').hidden, true);
-  assert.equal($('game-restore').hidden, false);
+  assert.equal($('game-minimized-controls').hidden, false);
   $('game-restore').listeners.click();
   assert.equal($('game-dialog').hidden, false);
   assert.equal($('game-frame').src, url);
@@ -109,12 +109,13 @@ test('NetCraft receives the connected token address when launched', async (t) =>
   const originalFetch = globalThis.fetch;
   const originalDocument = globalThis.document;
   t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; });
-  globalThis.document = { addEventListener() {}, querySelector() { return { after() {} }; } };
+  globalThis.document = { body: { classList: { toggle() {} } }, addEventListener() {}, querySelector() { return { after() {} }; } };
   const elements = new Map();
   const $ = (id) => {
     if (!elements.has(id)) elements.set(id, {
       listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; },
-      setAttribute() {}, focus() {}, classList: { add() {}, remove() {}, contains() { return false; } },
+      setAttribute(name, value) { this[name] = value; }, removeAttribute(name) { delete this[name]; },
+      focus() {}, classList: { add() {}, remove() {}, contains() { return false; } },
       show() { this.open = true; },
     });
     return elements.get(id);
@@ -129,12 +130,16 @@ test('NetCraft receives the connected token address when launched', async (t) =>
   address = null;
   update(address);
   $('game-frame').listeners.load();
+  assert.equal($('game-wallet')['aria-label'], 'Connect wallet');
   assert.deepEqual(messages, [
     { message: { type: 'netcraft-reward-address', address: '' }, origin: '*' },
     { message: { type: 'netcraft-reward-address', address: '' }, origin: '*' },
   ]);
   update('bitcoincash:zother');
   assert.equal(messages[2].message.address, 'bitcoincash:zother');
+  assert.equal($('game-wallet')['aria-label'], 'Open wallet balances');
+  assert.equal($('game-wallet')['aria-controls'], 'earn-section');
+  assert.equal($('game-wallet')['aria-haspopup'], undefined);
 });
 
 test('fullscreen game regains keyboard focus without stealing focus from other dialogs', async (t) => {
@@ -153,7 +158,7 @@ test('fullscreen game regains keyboard focus without stealing focus from other d
         listeners: {}, open: false,
         addEventListener(type, fn) { this.listeners[type] = fn; },
         setAttribute() {},
-        classList: { add: (value) => classes.add(value), remove: (value) => classes.delete(value), contains: (value) => classes.has(value) },
+        classList: { add: (value) => classes.add(value), remove: (value) => classes.delete(value), contains: (value) => classes.has(value), toggle: (value, force) => force ? classes.add(value) : classes.delete(value) },
         show() { this.open = true; document.activeElement = $('game-close'); },
         focus() { document.activeElement = this; },
       });
@@ -161,7 +166,7 @@ test('fullscreen game regains keyboard focus without stealing focus from other d
     return elements.get(id);
   };
   globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
-  globalThis.document = { body: {}, fullscreenElement: null, activeElement: null, addEventListener() {}, querySelector() { return { after() {} }; } };
+  globalThis.document = { body: { classList: { toggle() {} } }, fullscreenElement: null, activeElement: null, addEventListener() {}, querySelector() { return { after() {} }; } };
   globalThis.requestAnimationFrame = (fn) => callbacks.push(fn);
   setupGames($, { translate: (text) => text });
   $('game-dialog').classList.add('game-auto-open');
