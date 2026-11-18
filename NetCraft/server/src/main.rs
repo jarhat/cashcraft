@@ -14,6 +14,7 @@ const MAX_CLIENTS: usize = 64;
 const MAX_LINE: u64 = 4096;
 const MAX_COORD: i32 = 262_000;
 const CACHE_CHUNKS: usize = 24;
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(20);
 type Blocks = HashMap<(i32, i32, i32), i32>;
 
 extern "C" {
@@ -270,7 +271,12 @@ fn chunk_response(server: &Server, id: u32, p: i32, q: i32, key: i64) -> rusqlit
             output.push_str(&format!("S,{p},{q},{x},{y},{z},{face},{text}\n"));
         }
     }
-    output.push_str(&format!("K,{p},{q},{max_rowid}\nR,{p},{q}\nC,{p},{q}\n"));
+    let refresh = key != -1 || !output.is_empty();
+    output.push_str(&format!("K,{p},{q},{max_rowid}\n"));
+    if refresh {
+        output.push_str(&format!("R,{p},{q}\n"));
+    }
+    output.push_str(&format!("C,{p},{q}\n"));
     send(player, output.into_bytes());
     Ok(())
 }
@@ -582,6 +588,21 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
     Ok(true)
 }
 
+fn write_client(mut stream: TcpStream, receiver: mpsc::Receiver<Vec<u8>>, interval: Duration) {
+    loop {
+        let data = match receiver.recv_timeout(interval) {
+            Ok(data) => data,
+            Err(mpsc::RecvTimeoutError::Timeout) => b"H\n".to_vec(),
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        };
+        if let Err(error) = stream.write_all(&data) {
+            eprintln!("client write failed: {error}");
+            break;
+        }
+    }
+    let _ = stream.shutdown(Shutdown::Both);
+}
+
 fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
     stream.set_nodelay(true)?;
     let reader = stream.try_clone()?;
@@ -631,16 +652,7 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
         state.players.insert(id, player);
         id
     };
-    thread::spawn(move || {
-        let mut stream = stream;
-        for data in receiver {
-            if let Err(error) = stream.write_all(&data) {
-                eprintln!("client {id} write failed: {error}");
-                break;
-            }
-        }
-        let _ = stream.shutdown(Shutdown::Both);
-    });
+    thread::spawn(move || write_client(stream, receiver, HEARTBEAT_INTERVAL));
     let mut reader = BufReader::new(reader);
     let result = (|| -> io::Result<()> {
         loop {
@@ -895,5 +907,44 @@ mod tests {
         let mined = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert!(mined.contains("B,0,0,0,100,0,0\nR,0,0\n"));
         assert!(first.try_recv().is_err());
+    }
+
+    #[test]
+    fn empty_local_baseline_chunk_does_not_trigger_a_refresh() {
+        let (server, first, _) = setup();
+        chunk_response(&server, 1, 0, 0, -1).unwrap();
+        let output = String::from_utf8(first.try_recv().unwrap()).unwrap();
+        assert_eq!(output, "K,0,0,0\nC,0,0\n");
+        chunk_response(&server, 1, 0, 0, 0).unwrap();
+        let output = String::from_utf8(first.try_recv().unwrap()).unwrap();
+        assert!(output.contains("R,0,0\nC,0,0\n"));
+    }
+
+    #[test]
+    fn idle_client_receives_heartbeat_and_normal_messages() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let (stream, _) = listener.accept().unwrap();
+        let (sender, receiver) = mpsc::sync_channel(2);
+        let writer =
+            thread::spawn(move || write_client(stream, receiver, Duration::from_millis(20)));
+        let mut reader = BufReader::new(&mut client);
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert_eq!(line, "H\n");
+        sender.send(b"T,hello\n".to_vec()).unwrap();
+        loop {
+            line.clear();
+            reader.read_line(&mut line).unwrap();
+            if line != "H\n" {
+                break;
+            }
+        }
+        assert_eq!(line, "T,hello\n");
+        drop(sender);
+        writer.join().unwrap();
     }
 }

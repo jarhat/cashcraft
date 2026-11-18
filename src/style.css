@@ -3030,7 +3030,7 @@ body::before { content: none; display: none; }
 .game-switcher { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .game-switcher[hidden], #game-pk2[hidden], #game-beer[hidden] { display: none; }
 .game-switcher [aria-pressed="true"] { border-color: var(--ice); color: var(--ice); }
-.game-stage { position: relative; overflow: hidden; border: 1px solid var(--glass-border); border-radius: 12px; background: #080e17; }
+.game-stage { position: relative; overflow: hidden; border: 1px solid var(--glass-border); border-radius: 12px; background: #080e17; -webkit-touch-callout: none; }
 .game-controls { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; z-index: 1; }
 .game-controls-right { left: auto; right: 12px; }
 .game-controls button { display: grid; place-items: center; width: 44px; height: 44px; padding: 10px; border: 1px solid rgba(255,255,255,.5); border-radius: 50%; background: rgba(0,0,0,.55); color: white; cursor: pointer; touch-action: manipulation; }

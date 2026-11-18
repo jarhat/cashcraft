@@ -107,6 +107,16 @@
 #define MODE_OFFLINE 0
 #define MODE_ONLINE 1
 
+#ifdef __EMSCRIPTEN__
+static bool online_ready = false;
+static bool connecting = false;
+static double reconnect_at = 0;
+static double connect_started = 0;
+static int reconnect_delay = 1;
+static bool has_connected = false;
+static bool preserve_position = false;
+#endif
+
 #define WORKER_IDLE 0
 #define WORKER_BUSY 1
 #define WORKER_DONE 2
@@ -548,6 +558,8 @@ void update_player(Player *player,
     }
     else {
         State *s = &player->state;
+        if (player->buffer && s->x == x && s->y == y && s->z == z &&
+            s->rx == rx && s->ry == ry) return;
         s->x = x; s->y = y; s->z = z; s->rx = rx; s->ry = ry;
         del_buffer(player->buffer);
         player->buffer = gen_player_buffer(s->x, s->y, s->z, s->rx, s->ry);
@@ -1402,6 +1414,9 @@ void request_chunk(int p, int q) {
 void init_chunk(Chunk *chunk, int p, int q) {
     chunk->p = p;
     chunk->q = q;
+#ifdef __EMSCRIPTEN__
+    chunk->needs_resync = 0;
+#endif
     chunk->faces = 0;
     chunk->sign_faces = 0;
     chunk->buffer = 0;
@@ -1423,7 +1438,7 @@ void create_chunk(Chunk *chunk, int p, int q) {
     init_chunk(chunk, p, q);
 
 #ifdef __EMSCRIPTEN__
-    if (get_client_enabled()) {
+    if (online_ready) {
         WorkerItem item = {0};
         item.p = p;
         item.q = q;
@@ -1604,8 +1619,23 @@ void force_chunks(Player *player) {
     const int center_p = chunked(s->x);
     const int center_q = chunked(s->z);
 
+#ifdef __EMSCRIPTEN__
+    static ChunkCandidate candidates[MAX_CANDIDATE_CHUNKS];
+    static int candidate_count = 0;
+    static int last_p, last_q, last_radius, last_heading;
+    static bool candidates_valid = false;
+    int heading = (int)floorf((s->rx + PI / 16) / (PI / 8));
+    bool rebuild_candidates = !candidates_valid || center_p != last_p ||
+        center_q != last_q || g->create_radius != last_radius || heading != last_heading;
+    if (rebuild_candidates) {
+        candidate_count = 0;
+        candidates_valid = true;
+        last_p = center_p; last_q = center_q;
+        last_radius = g->create_radius; last_heading = heading;
+#else
     ChunkCandidate candidates[MAX_CANDIDATE_CHUNKS];
     int candidate_count = 0;
+#endif
 
     float sight_x, sight_y, sight_z;
     get_sight_vector(s->rx, s->ry, &sight_x, &sight_y, &sight_z);
@@ -1667,6 +1697,10 @@ void force_chunks(Player *player) {
                 const int p = ahead_p + side_p * side;
                 const int q = ahead_q + side_q * side;
 
+#ifdef __EMSCRIPTEN__
+                if (ABS(p - center_p) > g->create_radius ||
+                    ABS(q - center_q) > g->create_radius) continue;
+#endif
                 /*
                  * Slightly penalize side chunks; centerline chunks ahead
                  * should be requested first.
@@ -1682,11 +1716,14 @@ void force_chunks(Player *player) {
     }
 
     sort_chunk_candidates(candidates, candidate_count);
+#ifdef __EMSCRIPTEN__
+    }
+#endif
 
     int created = 0;
 
 #ifdef __EMSCRIPTEN__
-    /* Apply edits to existing chunks before spending the frame on new terrain. */
+    /* Finish visible edits before spending a frame on resynchronization. */
     for (int i = 0; i < candidate_count && created < MAX_NEW_CHUNKS_FRAME; ++i) {
         Chunk *chunk = find_chunk(candidates[i].p, candidates[i].q);
         if (chunk && chunk->dirty) {
@@ -1694,6 +1731,30 @@ void force_chunks(Player *player) {
             ++created;
         }
     }
+
+    for (int i = 0; i < candidate_count && created < MAX_NEW_CHUNKS_FRAME; ++i) {
+        Chunk *chunk = find_chunk(candidates[i].p, candidates[i].q);
+        if (chunk && chunk->needs_resync && online_ready) {
+            chunk->needs_resync = 0;
+            map_free(&chunk->map);
+            map_free(&chunk->lights);
+            sign_list_free(&chunk->signs);
+            sign_list_alloc(&chunk->signs, 16);
+            map_alloc(&chunk->map, chunk->p * CHUNK_SIZE - 1, 0,
+                chunk->q * CHUNK_SIZE - 1, 0x7fff);
+            map_alloc(&chunk->lights, chunk->p * CHUNK_SIZE - 1, 0,
+                chunk->q * CHUNK_SIZE - 1, 0xf);
+            WorkerItem item = {0};
+            item.p = chunk->p; item.q = chunk->q;
+            item.block_maps[1][1] = &chunk->map;
+            item.light_maps[1][1] = &chunk->lights;
+            load_chunk(&item);
+            dirty_chunk(chunk);
+            client_chunk(chunk->p, chunk->q, -1);
+            ++created;
+        }
+    }
+
 #endif
 
     for (int i = 0; i < candidate_count; ++i) {
@@ -1976,6 +2037,9 @@ void _set_sign(
 }
 
 void set_sign(int x, int y, int z, int face, int rotation, const char *text) {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
     int p = chunked(x);
     int q = chunked(z);
     _set_sign(p, q, x, y, z, face, rotation, text, true);
@@ -1983,6 +2047,9 @@ void set_sign(int x, int y, int z, int face, int rotation, const char *text) {
 }
 
 void toggle_light(int x, int y, int z) {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
     int p = chunked(x);
     int q = chunked(z);
     Chunk *chunk = find_chunk(p, q);
@@ -2031,6 +2098,9 @@ void _set_block(int p, int q, int x, int y, int z, int w, bool dirty) {
 }
 
 void set_block(int x, int y, int z, int w) {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
     int p = chunked(x);
     int q = chunked(z);
     _set_block(p, q, x, y, z, w, true);
@@ -2762,6 +2832,9 @@ int get_targeted_block(int *x, int *y, int *z, int *face) {
 }
 
 void on_mine() {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
     int hx, hy, hz, face;
     int hw = get_targeted_block(&hx, &hy, &hz, &face);
     if (hw && hy > 0 && hy < 256 && is_destructable(hw)) {
@@ -2781,6 +2854,9 @@ void on_mine() {
 }
 
 void on_build() {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(true, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
@@ -3373,11 +3449,17 @@ void parse_buffer(char *buffer, int len) {
             &pid, &ux, &uy, &uz, &urx, &ury) == 6)
         {
             me->id = pid;
+#ifdef __EMSCRIPTEN__
+            if (!preserve_position) {
+#endif
             s->x = ux; s->y = uy; s->z = uz; s->rx = urx; s->ry = ury;
             force_chunks(me);
             if (uy == 0) {
                 s->y = highest_block(s->x, s->z) + 2;
             }
+#ifdef __EMSCRIPTEN__
+            }
+#endif
         }
         int bp, bq, bx, by, bz, bw;
         if (sscanf(line, "B,%d,%d,%d,%d,%d,%d",
@@ -3686,6 +3768,13 @@ int main(int argc, char **argv) {
     g->render_radius = RENDER_CHUNK_RADIUS;
     g->delete_radius = DELETE_CHUNK_RADIUS;
     g->sign_radius = RENDER_SIGN_RADIUS;
+#ifdef __EMSCRIPTEN__
+    if (EM_ASM_INT(return window.matchMedia('(pointer: coarse)').matches;)) {
+        g->create_radius = 4;
+        g->render_radius = 4;
+        g->delete_radius = 6;
+    }
+#endif
 
 #ifndef __EMSCRIPTEN__
     // INITIALIZE WORKER THREADS
@@ -3730,6 +3819,16 @@ void main_inited(void);
 
 void client_opened(int fd, void *userData) {
 #ifdef __EMSCRIPTEN__
+    if (!client_is_socket(fd) || !connecting) return;
+    connecting = false;
+    online_ready = true;
+    preserve_position = has_connected;
+    has_connected = true;
+    reconnect_delay = 1;
+    for (int i = 0; i < g->chunk_count; ++i) {
+        g->chunks[i].needs_resync = 1;
+    }
+    pending_chunk_request_count = 0;
     EM_ASM(Module.setConnectionStatus(''););
 #endif
     add_message("Connected to server");
@@ -3743,15 +3842,39 @@ void client_opened(int fd, void *userData) {
         client_send(message);
     }
 #endif
+#ifdef __EMSCRIPTEN__
+    State *s = &g->players->state;
+    client_position(s->x, s->y, s->z, s->rx, s->ry);
+#else
     main_inited();
+#endif
 }
 
-void client_closed(int fd, void *userData) {
-    add_message("Client closed the connection");
 #ifdef __EMSCRIPTEN__
-    EM_ASM(Module.setGameReady(); Module.setConnectionStatus('Disconnected from game server. Reload to reconnect.'););
-#endif
+void client_connection_failed(void) {
+    if (!connecting && !online_ready) return;
+    connecting = false;
+    online_ready = false;
+    client_stop();
     client_disable();
+    while (g->player_count > 1) {
+        del_buffer(g->players[--g->player_count].buffer);
+    }
+    g->observe1 = g->observe2 = 0;
+    reconnect_at = emscripten_get_now() + reconnect_delay * 1000.0;
+    reconnect_delay = MIN(reconnect_delay * 2, 30);
+    EM_ASM(Module.setConnectionStatus('Disconnected. Reconnecting automatically; block edits are paused.'););
+}
+#endif
+
+void client_closed(int fd, void *userData) {
+#ifdef __EMSCRIPTEN__
+    if (!client_is_socket(fd)) return;
+    client_connection_failed();
+#else
+    add_message("Client closed the connection");
+    client_disable();
+#endif
 }
 
 void client_socket_error(int fd, int err, const char *msg, void *userData) {
@@ -3759,9 +3882,11 @@ void client_socket_error(int fd, int err, const char *msg, void *userData) {
     snprintf(buf, sizeof(buf), "WebSocket error occurred: %d %s", err, msg);
     add_message(buf);
 #ifdef __EMSCRIPTEN__
-    EM_ASM(Module.setGameReady(); Module.setConnectionStatus('Could not connect to game server. Check the WebSocket domain and reload.'););
-#endif
+    if (!client_is_socket(fd)) return;
+    client_connection_failed();
+#else
     client_disable();
+#endif
 }
 
 void main_init(void *unused) {
@@ -3784,17 +3909,25 @@ void main_init(void *unused) {
 
     // CLIENT INITIALIZATION //
     if (g->mode == MODE_ONLINE) {
+#ifdef __EMSCRIPTEN__
+        online_ready = false;
+        connecting = false;
+        has_connected = false;
+        preserve_position = false;
+        reconnect_delay = 1;
+        reconnect_at = 0;
+        main_inited();
+#else
         client_enable();
+#endif
         char msg[256];
         snprintf(msg, sizeof(msg), "Connecting to server %s:%d...", g->server_addr, g->server_port);
         add_message(msg);
 #ifdef __EMSCRIPTEN__
-        EM_ASM(Module.setConnectionStatus('Connecting to game server...'););
         emscripten_set_socket_error_callback("error", client_socket_error);
         emscripten_set_socket_open_callback("open", client_opened);
         emscripten_set_socket_message_callback((void *)parse_buffer, client_message);
         emscripten_set_socket_close_callback("close", client_closed);
-        client_connect(g->server_addr, g->server_port);
 #else
         client_connect(g->server_addr, g->server_port);
         client_opened(-1, NULL);
@@ -3837,6 +3970,10 @@ void main_shutdown() {
     db_save_state(s->x, s->y, s->z, s->rx, s->ry);
     db_close();
     db_disable();
+#ifdef __EMSCRIPTEN__
+    connecting = false;
+    online_ready = false;
+#endif
     client_stop();
     client_disable();
     del_buffer(sky_buffer);
@@ -3849,6 +3986,21 @@ void one_iter() {
     Player *me = g->players;
     State *s = &g->players->state;
 
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE) {
+        double now_ms = emscripten_get_now();
+        if (connecting && now_ms - connect_started > 15000) {
+            client_connection_failed();
+        }
+        if (!online_ready && !connecting && now_ms >= reconnect_at) {
+            connecting = true;
+            connect_started = now_ms;
+            client_enable();
+            EM_ASM(Module.setConnectionStatus('Connecting to game server...'););
+            client_connect(g->server_addr, g->server_port);
+        }
+    }
+#endif
     glfwSwapInterval(VSYNC);
 
     // FRAME RATE //
@@ -3891,7 +4043,11 @@ void one_iter() {
     }
 
     // SEND POSITION TO SERVER //
-    if (now - g->last_update > 0.1) {
+    if (now - g->last_update > 0.1
+#ifdef __EMSCRIPTEN__
+        && (g->mode != MODE_ONLINE || online_ready)
+#endif
+    ) {
         g->last_update = now;
         client_position(s->x, s->y, s->z, s->rx, s->ry);
     }
@@ -3902,8 +4058,10 @@ void one_iter() {
         g->observe2 = g->observe2 % g->player_count;
     }
     delete_chunks();
-    del_buffer(me->buffer);
-    me->buffer = gen_player_buffer(s->x, s->y, s->z, s->rx, s->ry);
+    if (g->observe1 || g->observe2) {
+        del_buffer(me->buffer);
+        me->buffer = gen_player_buffer(s->x, s->y, s->z, s->rx, s->ry);
+    }
     for (int i = 1; i < g->player_count; i++) {
         interpolate_player(g->players + i);
     }

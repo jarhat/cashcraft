@@ -25,7 +25,7 @@
 
 static bool client_enabled = false;
 static bool running = 0;
-static int sd = 0;
+static int sd = -1;
 static int bytes_sent = 0;
 #ifndef __EMSCRIPTEN__
 static int bytes_received = 0;
@@ -35,6 +35,15 @@ static thrd_t recv_thread;
 static char *queue = 0;
 static int qsize = 0;
 static bool position_sent = false;
+#ifdef __EMSCRIPTEN__
+static char pending[65536];
+static size_t pending_used = 0;
+extern void client_connection_failed(void);
+
+bool client_is_socket(int fd) {
+    return sd >= 0 && fd == sd;
+}
+#endif
 
 void client_enable() {
     client_enabled = true;
@@ -70,7 +79,11 @@ void client_send(char *data) {
     }
     if (client_sendall(sd, data, strlen(data)) == -1) {
         perror("client_sendall");
+#ifdef __EMSCRIPTEN__
+        client_connection_failed();
+#else
         exit(1);
+#endif
     }
 }
 
@@ -163,30 +176,28 @@ void client_talk(const char *text) {
 
 #ifdef __EMSCRIPTEN__
 void client_message(int fd, void *userData) {
-    static char pending[65536];
-    static size_t used = 0;
+    if (!client_is_socket(fd)) return;
     char buf[16384];
     int len;
     while ((len = recv(fd, buf, sizeof(buf), 0)) > 0) {
-        if (used + (size_t)len >= sizeof(pending)) {
+        if (pending_used + (size_t)len >= sizeof(pending)) {
             fprintf(stderr, "Server packet exceeds receive buffer\n");
-            client_disable();
-            close(fd);
-            used = 0;
+            client_connection_failed();
             return;
         }
-        memcpy(pending + used, buf, (size_t)len);
-        used += (size_t)len;
-        size_t complete = used;
+        memcpy(pending + pending_used, buf, (size_t)len);
+        pending_used += (size_t)len;
+        size_t complete = pending_used;
         while (complete && pending[complete - 1] != '\n') complete--;
         if (!complete) continue;
         char next = pending[complete];
         pending[complete] = '\0';
         void (*parse_buffer)(char *, int) = (void (*)(char *, int))userData;
         parse_buffer(pending, (int)complete);
+        if (!client_is_socket(fd)) return;
         pending[complete] = next;
-        memmove(pending, pending + complete, used - complete);
-        used -= complete;
+        memmove(pending, pending + complete, pending_used - complete);
+        pending_used -= complete;
     }
 }
 #else
@@ -256,7 +267,12 @@ void client_connect(char *hostname, int port) {
     struct sockaddr_in address;
     if ((host = gethostbyname(hostname)) == 0) {
         perror("gethostbyname");
+#ifdef __EMSCRIPTEN__
+        client_connection_failed();
+        return;
+#else
         exit(1);
+#endif
     }
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
@@ -268,7 +284,12 @@ void client_connect(char *hostname, int port) {
     address.sin_port = htons(port);
     if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("socket");
+#ifdef __EMSCRIPTEN__
+        client_connection_failed();
+        return;
+#else
         exit(1);
+#endif
     }
 #ifdef __EMSCRIPTEN__
     // Override the address passed to connect(), for WebSockets:
@@ -314,9 +335,7 @@ void client_connect(char *hostname, int port) {
         // Websockets are async, so connect() always returns EINPROGRESS
         if (errno == EINPROGRESS) return;
         perror("connect");
-        client_disable();
-        close(sd);
-        EM_ASM(Module.setGameReady(); Module.setConnectionStatus('Could not connect to game server. Check the WebSocket domain and reload.'););
+        client_connection_failed();
         return;
 #else
         perror("connect");
@@ -331,9 +350,9 @@ void client_start() {
     }
     running = true;
     position_sent = false;
+#ifndef __EMSCRIPTEN__
     queue = (char *)calloc(QUEUE_SIZE, sizeof(char));
     qsize = 0;
-#ifndef __EMSCRIPTEN__ // emscripten gets async message callbacks instead, no receiver thread
     mtx_init(&mutex, mtx_plain);
     if (thrd_create(&recv_thread, recv_worker, NULL) != thrd_success) {
         perror("thrd_create");
@@ -343,11 +362,20 @@ void client_start() {
 }
 
 void client_stop() {
+#ifndef __EMSCRIPTEN__
     if (!client_enabled) {
         return;
     }
+#endif
     running = false;
-    close(sd);
+    if (sd >= 0) {
+        int old_sd = sd;
+        sd = -1;
+        close(old_sd);
+    }
+#ifdef __EMSCRIPTEN__
+    pending_used = 0;
+#else
     // if (thrd_join(recv_thread, NULL) != thrd_success) {
     //     perror("thrd_join");
     //     exit(1);
@@ -355,6 +383,8 @@ void client_stop() {
     // mtx_destroy(&mutex);
     qsize = 0;
     free(queue);
+    queue = NULL;
+#endif
     // printf("Bytes Sent: %d, Bytes Received: %d\n",
     //     bytes_sent, bytes_received);
 }

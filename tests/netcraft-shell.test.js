@@ -19,6 +19,8 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
     return elements.get(id);
   };
   const document = {
+    listeners: {},
+    addEventListener(type, fn) { this.listeners[type] = fn; },
     getElementById: $,
     querySelector(selector) { return selector === '.mobile-controls' ? $('controls') : null; },
   };
@@ -30,6 +32,14 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
   assert.equal(typeof $('mobile-stick').listeners.pointermove, 'function');
   assert.equal(typeof $('sound-toggle').listeners.click, 'function');
   assert.equal(typeof context.Module.playBlockSound, 'function');
+  let prevented = false;
+  document.listeners.contextmenu({ preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  $('canvas').listeners.webglcontextlost();
+  assert.match($('connection-status').textContent, /Graphics context lost/);
+  context.Module.setConnectionStatus('');
+  assert.equal($('connection-status').hidden, false);
+  context.Module.graphicsLost = false;
   context.Module.setConnectionStatus('Connecting');
   assert.equal($('connection-status').textContent, 'Connecting');
   assert.equal($('connection-status').hidden, false);

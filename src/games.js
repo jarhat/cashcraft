@@ -8,6 +8,7 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
+  stage.addEventListener('contextmenu', (event) => event.preventDefault());
   let generation = 0;
   let activeGame = null;
   for (const [id, game] of Object.entries(games)) {

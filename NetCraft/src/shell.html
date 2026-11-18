@@ -23,9 +23,9 @@
 
       .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
       div.emscripten { text-align: center; }      
-      div.emscripten_border { border: 1px solid black; }
+      div.emscripten_border { border: 0; }
       /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
-      canvas.emscripten { border: 0px none; background-color: black; }
+      canvas.emscripten { border: 0px none; background-color: #101e1b; touch-action: none; user-select: none; -webkit-touch-callout: none; }
 
       #emscripten_logo {
         display: inline-block;
@@ -109,7 +109,7 @@
         font-family: 'Lucida Console', Monaco, monospace;
         outline: none;
       }
-      .mobile-controls { display: none; position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+      .mobile-controls { display: none; position: fixed; inset: 0; z-index: 20; pointer-events: none; -webkit-touch-callout: none; }
       .mobile-controls button, .mobile-stick {
         pointer-events: auto; touch-action: none; user-select: none;
         background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.5);
@@ -1268,6 +1268,7 @@
         postRun: [],
         websocket: {},
         setConnectionStatus: function(text) {
+          if (Module.graphicsLost) text = 'Graphics context lost. Reload the game to restore rendering.';
           var element = document.getElementById('connection-status');
           element.textContent = text;
           element.hidden = !text;
@@ -1302,10 +1303,11 @@
         canvas: (function() {
           var canvas = document.getElementById('canvas');
 
-          // As a default initial behavior, pop up an alert when webgl context is lost. To make your
-          // application robust, you may want to override this behavior before shipping!
-          // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
-          canvas.addEventListener("webglcontextlost", function(e) { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
+          canvas.addEventListener('webglcontextlost', function() {
+            Module.graphicsLost = true;
+            Module.setGameReady();
+            Module.setConnectionStatus('Graphics context lost. Reload the game to restore rendering.');
+          }, false);
 
           return canvas;
         })(),
@@ -1347,6 +1349,8 @@
           if (text) Module.printErr('[post-exception status] ' + text);
         };
       };
+
+        document.addEventListener('contextmenu', function(event) { event.preventDefault(); });
 
         (function() {
           var context = null;
