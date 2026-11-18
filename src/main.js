@@ -420,7 +420,7 @@ function setTheme(theme) {
   });
 }
 const migratedTheme = { dark: 'frost', blue: 'frost', green: 'aurora', bch: 'aurora', 'bch-sunrise': 'aurora' }[savedTheme] || savedTheme;
-setTheme(['frost', 'aurora'].includes(migratedTheme) ? migratedTheme : 'aurora');
+setTheme(['frost', 'aurora', 'miami'].includes(migratedTheme) ? migratedTheme : 'aurora');
 
 for (const name of ['theme', 'language']) {
   const toggle = $(`${name}-toggle`);

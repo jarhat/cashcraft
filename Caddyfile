@@ -3,6 +3,19 @@
   handle /craftws {
     reverse_proxy netcraft-websockify:4081
   }
+  handle /api/craft-preview.png {
+    reverse_proxy auth:3000 {
+      @preview_unavailable status 5xx
+      handle_response @preview_unavailable {
+        root * /srv
+        rewrite * /craft-preview-fallback.png
+        header Cache-Control "public, max-age=30"
+        file_server {
+          status 200
+        }
+      }
+    }
+  }
   handle /api/* {
     reverse_proxy auth:3000 {
       header_up X-Preview-Origin {scheme}://{host}
@@ -39,5 +52,19 @@
     templates
     try_files {path} /index.html
     file_server
+  }
+  handle_errors {
+    @preview_error path /api/craft-preview.png
+    handle @preview_error {
+      root * /srv
+      rewrite * /craft-preview-fallback.png
+      header Cache-Control "public, max-age=30"
+      file_server {
+        status 200
+      }
+    }
+    handle {
+      respond "{http.error.status_text}" {http.error.status_code}
+    }
   }
 }

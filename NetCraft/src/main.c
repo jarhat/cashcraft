@@ -665,6 +665,16 @@ Chunk *find_chunk(int p, int q) {
     return 0;
 }
 
+static bool chunk_is_ready(const Chunk *chunk) {
+#ifdef __EMSCRIPTEN__
+    return g->mode != MODE_ONLINE ||
+        (online_ready && !chunk->needs_resync && !chunk->sync_pending);
+#else
+    (void)chunk;
+    return true;
+#endif
+}
+
 typedef struct {
     int p;
     int q;
@@ -848,6 +858,9 @@ int hit_test(
     get_sight_vector(rx, ry, &vx, &vy, &vz);
     for (int i = 0; i < g->chunk_count; i++) {
         Chunk *chunk = g->chunks + i;
+        if (!chunk_is_ready(chunk)) {
+            continue;
+        }
         if (chunk_distance(chunk, p, q) > 1) {
             continue;
         }
@@ -1431,6 +1444,7 @@ void init_chunk(Chunk *chunk, int p, int q) {
     chunk->q = q;
 #ifdef __EMSCRIPTEN__
     chunk->needs_resync = 0;
+    chunk->sync_pending = 0;
 #endif
     chunk->faces = 0;
     chunk->sign_faces = 0;
@@ -1460,6 +1474,7 @@ void create_chunk(Chunk *chunk, int p, int q) {
         item.block_maps[1][1] = &chunk->map;
         item.light_maps[1][1] = &chunk->lights;
         load_chunk(&item);
+        chunk->sync_pending = 1;
         request_chunk(p, q);
     } else {
         WorkerItem item = {0};
@@ -1488,6 +1503,11 @@ void delete_chunks() {
     State *states[3] = {s1, s2, s3};
     for (int i = 0; i < count; i++) {
         Chunk *chunk = g->chunks + i;
+#ifdef __EMSCRIPTEN__
+        if (online_ready && chunk->sync_pending) {
+            continue;
+        }
+#endif
         int delete = 1;
         for (int j = 0; j < 3; j++) {
             State *s = states[j];
@@ -1741,7 +1761,7 @@ void force_chunks(Player *player) {
     /* Finish visible edits before spending a frame on resynchronization. */
     for (int i = 0; i < candidate_count && created < MAX_NEW_CHUNKS_FRAME; ++i) {
         Chunk *chunk = find_chunk(candidates[i].p, candidates[i].q);
-        if (chunk && chunk->dirty) {
+        if (chunk && chunk->dirty && chunk_is_ready(chunk)) {
             gen_chunk_buffer(chunk);
             ++created;
         }
@@ -1765,6 +1785,7 @@ void force_chunks(Player *player) {
             item.light_maps[1][1] = &chunk->lights;
             load_chunk(&item);
             dirty_chunk(chunk);
+            chunk->sync_pending = 1;
             client_chunk(chunk->p, chunk->q, -1);
             ++created;
         }
@@ -1783,7 +1804,7 @@ void force_chunks(Player *player) {
              * do this when a chunk becomes visible or dirty rather than
              * rebuilding every frame.
              */
-            if (chunk->dirty && created < MAX_NEW_CHUNKS_FRAME) {
+            if (chunk->dirty && chunk_is_ready(chunk) && created < MAX_NEW_CHUNKS_FRAME) {
                 gen_chunk_buffer(chunk);
                 ++created;
             }
@@ -1802,7 +1823,7 @@ void force_chunks(Player *player) {
          * If create_chunk() already builds the buffer, remove this call.
          * For asynchronous generation, build only after data is ready.
          */
-        gen_chunk_buffer(chunk);
+        if (chunk_is_ready(chunk)) gen_chunk_buffer(chunk);
         ++created;
     }
 }
@@ -2118,6 +2139,10 @@ void set_block(int x, int y, int z, int w) {
 #endif
     int p = chunked(x);
     int q = chunked(z);
+#ifdef __EMSCRIPTEN__
+    Chunk *target = find_chunk(p, q);
+    if (g->mode == MODE_ONLINE && (!target || !chunk_is_ready(target))) return;
+#endif
     _set_block(p, q, x, y, z, w, true);
     for (int dx = -1; dx <= 1; dx++) {
         for (int dz = -1; dz <= 1; dz++) {
@@ -2193,6 +2218,9 @@ int render_chunks(Attrib *attrib, Player *player) {
     glUniform1f(attrib->timer, time_of_day());
     for (int i = 0; i < g->chunk_count; i++) {
         Chunk *chunk = g->chunks + i;
+#ifdef __EMSCRIPTEN__
+        if (!chunk_is_ready(chunk) || chunk->dirty) continue;
+#endif
         if (chunk_distance(chunk, p, q) > g->render_radius) {
             continue;
         }
@@ -2223,6 +2251,9 @@ void render_signs(Attrib *attrib, Player *player) {
     glUniform1i(attrib->extra1, 1);
     for (int i = 0; i < g->chunk_count; i++) {
         Chunk *chunk = g->chunks + i;
+#ifdef __EMSCRIPTEN__
+        if (!chunk_is_ready(chunk) || chunk->dirty) continue;
+#endif
         if (chunk_distance(chunk, p, q) > g->sign_radius) {
             continue;
         }
@@ -2951,6 +2982,10 @@ void on_build() {
         if (hy > 0 && hy < 256 && !player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
             int hw = hotbar_items[g->item_index];
 
+#ifdef __EMSCRIPTEN__
+            Chunk *target = find_chunk(chunked(hx), chunked(hz));
+            if (g->mode == MODE_ONLINE && (!target || !chunk_is_ready(target))) return;
+#endif
             if (g->mode == MODE_ONLINE && pending_placement.active) return;
             if (!Inventory_use(&g->inventory, hw)) {
                 add_message("Mine this block type before building with it.");
@@ -3465,7 +3500,7 @@ void handle_movement(double dt) {
     vy = vy * ut * speed;
     vz = vz * ut * speed;
     for (int i = 0; i < step; i++) {
-        float old_step_x = s->x, old_step_z = s->z;
+        float old_step_x = s->x, old_step_y = s->y, old_step_z = s->z;
         if (g->flying) {
             dy = 0;
         }
@@ -3483,7 +3518,7 @@ void handle_movement(double dt) {
                 for (int dz = -1; dz <= 1; dz += 2) {
                     Chunk *chunk = find_chunk(chunked(s->x + dx * 0.25f),
                         chunked(s->z + dz * 0.25f));
-                    if (!chunk || chunk->needs_resync) {
+                    if (!chunk || !chunk_is_ready(chunk)) {
                         ready = false;
                         break;
                     }
@@ -3491,11 +3526,15 @@ void handle_movement(double dt) {
             }
             if (!ready) {
                 s->x = old_step_x;
+                s->y = old_step_y;
                 s->z = old_step_z;
+                dy = 0;
+                continue;
             }
         }
 #else
         (void)old_step_x;
+        (void)old_step_y;
         (void)old_step_z;
 #endif
         if (g->noclip && g->mode != MODE_ONLINE) continue;
@@ -3702,6 +3741,15 @@ void parse_buffer(char *buffer, int len) {
                 dirty_chunk(chunk);
             }
         }
+#ifdef __EMSCRIPTEN__
+        if (line[0] == 'C' && sscanf(line, "C,%d,%d", &kp, &kq) == 2) {
+            Chunk *chunk = find_chunk(kp, kq);
+            if (chunk && chunk->sync_pending) {
+                chunk->sync_pending = 0;
+                dirty_chunk(chunk);
+            }
+        }
+#endif
         double elapsed;
         int day_length;
         if (line[0] == 'E' && sscanf(line, "E,%lf,%d", &elapsed, &day_length) == 2) {
@@ -4038,6 +4086,7 @@ void client_opened(int fd, void *userData) {
     reconnect_delay = 1;
     for (int i = 0; i < g->chunk_count; ++i) {
         g->chunks[i].needs_resync = 1;
+        g->chunks[i].sync_pending = 0;
     }
     pending_chunk_request_count = 0;
     EM_ASM(Module.setConnectionStatus("", 'Connected to game server'););
@@ -4066,6 +4115,10 @@ void client_connection_failed(void) {
     if (!connecting && !online_ready) return;
     connecting = false;
     online_ready = false;
+    for (int i = 0; i < g->chunk_count; ++i) {
+        g->chunks[i].sync_pending = 0;
+        g->chunks[i].needs_resync = 1;
+    }
     Inventory_reset(&g->inventory);
     pending_placement.active = false;
     animals_clear();

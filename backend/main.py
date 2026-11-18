@@ -857,6 +857,8 @@ def bch_rpc(method: str, params: list, *, wallet: bool = False):
         raise RuntimeError("BCHN returned an invalid RPC response.")
     if payload.get("error"):
         rpc_error = payload["error"]
+        code = rpc_error.get("code") if isinstance(rpc_error, dict) else None
+        logger.error("BCHN RPC %s failed (code %s)", method, code if type(code) is int else "unknown")
         message = (
             rpc_error.get("message", "BCHN RPC error")
             if isinstance(rpc_error, dict)
@@ -885,6 +887,20 @@ def check_balance() -> int:
 
 def _bch_amount(satoshis: int) -> str:
     return f"{satoshis // 100_000_000}.{satoshis % 100_000_000:08d}"
+
+
+def payout_failure_reason(exc: Exception) -> str:
+    safe_messages = {
+        "Could not communicate with BCHN.",
+        "BCHN returned an HTTP error.",
+        "No spendable fungible reward tokens are available.",
+        "Insufficient BCH for the reward transaction.",
+        "A signed wallet payout requires recovery.",
+        "A signed mining payout requires recovery.",
+        "BCHN could not fully sign the reward transaction.",
+        "Reward transaction fee is below one satoshi per byte.",
+    }
+    return str(exc) if isinstance(exc, RuntimeError) and str(exc) in safe_messages else type(exc).__name__
 
 
 def ensure_no_pending_signed_payout() -> None:
@@ -1136,7 +1152,7 @@ def reward_worker() -> None:
                 with reward_payout_lock:
                     processed = process() or processed
             except (RewardDatabaseError, RuntimeError, sqlite3.Error, ValueError, KeyError, TypeError) as exc:
-                logger.error("Could not process %s (%s); it will be retried.", name, type(exc).__name__)
+                logger.error("Could not process %s (%s); it will be retried.", name, payout_failure_reason(exc))
         if not processed:
             reward_wake.wait(30)
 
@@ -1169,7 +1185,7 @@ def pay_mining_reward(reward_id: int, request: Request) -> Response:
         if not paid:
             raise HTTPException(status_code=429, detail="Mining payout limit reached.")
     except (RuntimeError, sqlite3.Error, ValueError, KeyError, TypeError) as exc:
-        logger.error("Could not pay mining reward %s (%s).", reward_id, type(exc).__name__)
+        logger.error("Could not pay mining reward %s (%s).", reward_id, payout_failure_reason(exc))
         reward_wake.set()
         raise HTTPException(status_code=503, detail="Mining payout failed; contact the operator.") from exc
     return Response(status_code=204)

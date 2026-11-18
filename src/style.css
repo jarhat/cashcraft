@@ -2084,10 +2084,11 @@ html[data-theme="frost"] {
   --glow-color: #55bfff;
   --page-base: #080c19;
   --page-halo: rgb(48 119 197 / 25%);
-  --page-halo-secondary: rgb(68 88 195 / 17%);
+  --page-halo-secondary: rgb(43 121 166 / 17%);
   --glass-tint: rgb(9 20 40 / 93%);
   --glass-border: rgb(164 215 255 / 25%);
   --mesh-color: #85d9ff;
+  --mesh-highlight: #4a91c6;
   --sun-color: #7baaff;
 }
 html[data-theme="aurora"] {
@@ -2096,11 +2097,25 @@ html[data-theme="aurora"] {
   --glow-color: #4df4de;
   --page-base: #081b27;
   --page-halo: rgb(21 171 184 / 25%);
-  --page-halo-secondary: rgb(255 111 126 / 18%);
+  --page-halo-secondary: rgb(224 164 83 / 14%);
   --glass-tint: rgb(8 28 39 / 93%);
   --glass-border: rgb(125 245 236 / 24%);
   --mesh-color: #7ff5f0;
-  --sun-color: #ff9988;
+  --mesh-highlight: #459c90;
+  --sun-color: #efb877;
+}
+html[data-theme="miami"] {
+  --ice: #a4eff1;
+  --mint: #ffd5a0;
+  --glow-color: #4bd7dc;
+  --page-base: #091820;
+  --page-halo: rgb(26 153 164 / 23%);
+  --page-halo-secondary: rgb(241 147 80 / 14%);
+  --glass-tint: rgb(8 25 33 / 93%);
+  --glass-border: rgb(139 223 222 / 25%);
+  --mesh-color: #56d3d5;
+  --mesh-highlight: #9bdcdb;
+  --sun-color: #ffb46f;
 }
 body { display: flex; flex-direction: column; }
 .shell { flex: 1; display: flex; flex-direction: column; }
@@ -2998,7 +3013,9 @@ body::before { content: none; display: none; }
   box-shadow: none;
   pointer-events: none;
 }
-.topbar .mesh-lines { stroke: url(#mesh-rgb); stroke-width: 1; }
+.topbar .mesh-lines { stroke: url(#mesh-gradient); stroke-width: 1; }
+.mesh-start { stop-color: var(--mesh-color); }
+.mesh-end { stop-color: var(--mesh-highlight); }
 .balance-extras { display: grid; gap: 6px; margin: 14px 0; }
 .balance-extras p, .wallet-notification-summary p { display: flex; justify-content: space-between; gap: 12px; margin: 0; }
 .balance-extras strong { text-align: right; }

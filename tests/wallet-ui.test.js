@@ -22,8 +22,8 @@ test('payment defaults to PUSD only on mainnet and preserves an existing categor
 });
 
 test('theme preferences migrate and select the correct palette', () => {
-  for (const [saved, expected] of [[null, 'aurora'], ['bch', 'aurora'], ['bch-sunrise', 'aurora'], ['green', 'aurora'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'aurora'], ['frost', 'frost'], ['mina', 'aurora'], ['unknown', 'aurora']]) {
-    const buttons = ['frost', 'aurora'].map((themeOption) => ({
+  for (const [saved, expected] of [[null, 'aurora'], ['bch', 'aurora'], ['bch-sunrise', 'aurora'], ['green', 'aurora'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'aurora'], ['frost', 'frost'], ['miami', 'miami'], ['mina', 'aurora'], ['unknown', 'aurora']]) {
+    const buttons = ['frost', 'aurora', 'miami'].map((themeOption) => ({
       dataset: { themeOption },
       setAttribute(name, value) { this[name] = value; },
     }));

@@ -432,6 +432,31 @@ class RewardTests(unittest.TestCase):
         self.assertIn("RuntimeError", captured.output[0])
         self.assertNotIn(tx_detail, "\n".join(captured.output))
 
+    def test_payout_logs_actionable_safe_reason_without_transaction_details(self):
+        client = TestClient(backend.app)
+        with patch.object(backend, "NETCRAFT_REWARD_WAKE_SECRET", "test-secret"), \
+             patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
+             patch.object(backend, "NETCRAFT_DB_PATH", "unused"), \
+             patch.object(backend, "process_one_mining_reward", side_effect=RuntimeError(
+                 "No spendable fungible reward tokens are available."
+             )), self.assertLogs(backend.logger, level="ERROR") as captured:
+            response = client.post("/api/internal/netcraft-mining-reward/7",
+                                   headers={"Authorization": "Bearer test-secret"})
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("No spendable fungible reward tokens are available.", captured.output[0])
+
+    def test_bchn_rpc_logs_error_code_without_transaction_details(self):
+        response = type("RpcResponse", (), {
+            "json": lambda self: {"error": {"code": -26, "message": "sensitive transaction data"}}
+        })()
+        with patch.object(backend.httpx, "post", return_value=response), \
+             self.assertLogs(backend.logger, level="ERROR") as captured, \
+             self.assertRaises(RuntimeError):
+            backend.bch_rpc("sendrawtransaction", ["signed transaction"])
+        self.assertIn("sendrawtransaction failed (code -26)", captured.output[0])
+        self.assertNotIn("sensitive transaction data", captured.output[0])
+        self.assertNotIn("signed transaction", captured.output[0])
+
     def test_wake_requires_shared_secret_and_only_wakes_worker(self):
         client = TestClient(backend.app)
         backend.reward_wake.clear()

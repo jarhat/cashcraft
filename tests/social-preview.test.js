@@ -36,3 +36,13 @@ test('craft unfurlers use the same QR-enabled artwork and dimensions', async () 
   assert.match(html, /property="og:image:height" content="675"/);
   assert.doesNotMatch(html, /floating Bitcoin Cash island|dragon/i);
 });
+
+test('crawler image has a correctly sized local fallback for backend errors', async () => {
+  const caddy = await readFile(new URL('../Caddyfile', import.meta.url), 'utf8');
+  const image = await readFile(new URL('../public/craft-preview-fallback.png', import.meta.url));
+  assert.deepEqual([...image.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.equal(image.readUInt32BE(16), 1200);
+  assert.equal(image.readUInt32BE(20), 675);
+  assert.match(caddy, /@preview_unavailable status 5xx[\s\S]*?craft-preview-fallback\.png[\s\S]*?status 200/);
+  assert.match(caddy, /handle_errors[\s\S]*?craft-preview-fallback\.png[\s\S]*?status 200/);
+});

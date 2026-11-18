@@ -16,6 +16,7 @@ typedef struct {
     int dirty;
 #ifdef __EMSCRIPTEN__
     int needs_resync;
+    int sync_pending;
 #endif
     int miny;
     int maxy;
