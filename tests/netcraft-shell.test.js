@@ -95,7 +95,7 @@ test('NetCraft parses encoded launch arguments without splitting encoded charact
   ]);
 });
 
-test('game audio starts from a gesture and plays only block and step effects', async () => {
+test('game audio starts ambience from a gesture and mutes both ambience and effects', async () => {
   const elements = new Map();
   const listeners = {};
   const nodes = [];
@@ -123,8 +123,11 @@ test('game audio starts from a gesture and plays only block and step effects', a
     addEventListener(name, callback) { listeners[name] = callback; }
   };
   const window = { webkitAudioContext: AudioContext, addEventListener() {} };
+  const music = { paused: true, async play() { this.paused = false; }, pause() { this.paused = true; } };
   const context = {
     document, window, console, Date, Math,
+    Blob: class Blob {}, URL: { createObjectURL: () => 'blob:music' },
+    Audio: class Audio { constructor() { return music; } },
     setTimeout(callback) { timers.set(++timerId, callback); return timerId; },
     clearTimeout(id) { timers.delete(id); }
   };
@@ -133,14 +136,18 @@ test('game audio starts from a gesture and plays only block and step effects', a
   listeners.pointerdown({ isTrusted: true });
   await new Promise(setImmediate);
   assert.equal($('sound-toggle').attributes['aria-label'], 'Disable sound');
+  assert.equal(music.paused, false);
+  assert.equal(music.loop, true);
   assert.deepEqual(nodes, []);
   context.Module.playBlockSound(0);
   assert.equal(nodes.filter((node) => node === 'effect').length, 1);
   $('sound-toggle').listeners.click();
+  assert.equal(music.paused, true);
   context.Module.playBlockSound(1);
   assert.equal(nodes.filter((node) => node === 'effect').length, 1);
   $('sound-toggle').listeners.click();
   await new Promise(setImmediate);
+  assert.equal(music.paused, false);
   context.Module.playBlockSound(1);
   assert.equal(nodes.filter((node) => node === 'effect').length, 2);
   assert.equal(timers.size, 0);

@@ -211,19 +211,28 @@ function readReceiptState() {
   return state;
 }
 
-function addReceiptNotice() {
+function addReceiptNotice(amount = '1') {
   const notice = document.createElement('div');
   notice.className = 'notification-message gamba-notice';
   const art = $('gamba-art').cloneNode(true);
   art.removeAttribute('id');
   const label = document.createElement('strong');
-  label.textContent = '1 MINA TOKEN';
+  label.textContent = `${amount} MINA TOKEN${amount === '1' ? '' : 'S'}`;
   const details = document.createElement('div');
   details.append(label);
   notice.append(art, details);
   $('token-receipt-notifications').prepend(notice);
   $('notifications-empty').hidden = true;
   $('gamba-sound-controls').hidden = false;
+}
+
+const miningPayoutFailure = 'MINA mining payout could not be confirmed. Contact the operator.';
+function addMiningFailureNotice() {
+  const notice = document.createElement('div');
+  notice.className = 'notification-message';
+  notice.textContent = miningPayoutFailure;
+  $('token-receipt-notifications').prepend(notice);
+  $('notifications-empty').hidden = true;
 }
 
 function renderQueuedMiningRewards(count) {
@@ -244,8 +253,26 @@ function renderQueuedMiningRewards(count) {
     container.prepend(notice);
     $('notifications-empty').hidden = true;
   }
-  notice.querySelector('strong').textContent = `${count} MINA mining reward${count === 1 ? '' : 's'} queued`;
-  notice.querySelector('span').textContent = 'Payout is queued for broadcast. The wallet will report the MINA token at zero confirmations once it is sent.';
+  notice.querySelector('strong').textContent = `${count} MINA mining payout${count === 1 ? '' : 's'} pending`;
+  notice.querySelector('span').textContent = 'A payout was requested. The wallet will report the MINA token at zero confirmations once it is sent.';
+}
+
+function reportMinedRewardFailure(address) {
+  if (!walletReady || addressFor(0, 0) !== address) return;
+  try {
+    const state = readReceiptState();
+    state.pendingMiningRewards = Math.max(0, state.pendingMiningRewards - 1);
+    state.unread = true;
+    state.messages.push(miningPayoutFailure);
+    state.messages = state.messages.slice(-100);
+    localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
+    addMiningFailureNotice();
+    $('notification-indicator').hidden = false;
+    renderQueuedMiningRewards(state.pendingMiningRewards);
+  } catch (error) {
+    logger.warn('Could not save the mining payout failure:', error);
+    $('status').textContent = 'MINA payout failed · contact the operator';
+  }
 }
 
 function queueMinedRewardNotification(address) {
@@ -303,14 +330,16 @@ function notifyTokenReceipts(scannedUtxos) {
   const message = 'Received 1 MINA';
   const legacy = !state.receiptTracking && (state.gambaNotified ||
     state.messages.includes(legacyMessage) || state.messages.includes(previousMessage) || state.messages.includes(message));
-  state.messages = state.messages.filter((entry) => [message, previousMessage, legacyMessage].includes(entry))
-    .map(() => message);
+  state.messages = state.messages
+    .filter((entry) => entry === miningPayoutFailure || entry === previousMessage || entry === legacyMessage ||
+      /^Received [1-9]\d* MINA$/.test(entry))
+    .map((entry) => [previousMessage, legacyMessage].includes(entry) ? message : entry);
   const sent = new Set(state.sent);
   const seen = new Set(state.seen);
   const matching = scannedUtxos.filter((utxo) =>
-    utxo.token && !utxo.token.nft &&
+    utxo.token &&
     String(utxo.token.category).toLowerCase() === rewardCategory &&
-    BigInt(utxo.token.amount || 0) === 1n &&
+    BigInt(utxo.token.amount || 0) > 0n &&
     !sent.has(utxo.txid.toLowerCase()) && utxoKey(utxo),
   );
   const received = matching.filter((utxo) => !seen.has(utxoKey(utxo)));
@@ -318,11 +347,12 @@ function notifyTokenReceipts(scannedUtxos) {
   state.seen = [...seen];
   state.receiptTracking = true;
   if (!legacy && received.length) {
-    state.pendingMiningRewards = Math.max(0, state.pendingMiningRewards - received.length);
+    const singleUnitReceipts = received.filter((utxo) => BigInt(utxo.token.amount) === 1n).length;
+    state.pendingMiningRewards = Math.max(0, state.pendingMiningRewards - singleUnitReceipts);
   }
   if (received.length && !legacy) {
     state.gambaNotified = true;
-    state.messages.push(...received.map(() => message));
+    state.messages.push(...received.map((utxo) => `Received ${BigInt(utxo.token.amount)} MINA`));
     state.messages = state.messages.slice(-100);
     state.unread = true;
   } else if (!state.messages.length && !state.pendingMiningRewards) {
@@ -333,16 +363,19 @@ function notifyTokenReceipts(scannedUtxos) {
   if (receiptWallet !== wallet) {
     $('token-receipt-notifications').replaceChildren();
     $('gamba-sound-controls').hidden = true;
-    state.messages.forEach(() => addReceiptNotice());
+    state.messages.forEach((entry) => {
+      if (entry === miningPayoutFailure) addMiningFailureNotice();
+      else addReceiptNotice(entry.split(' ')[1]);
+    });
     if (state.unread) $('notification-indicator').hidden = false;
     receiptWallet = wallet;
   } else if (received.length && !legacy) {
-    received.forEach(() => addReceiptNotice());
+    received.forEach((utxo) => addReceiptNotice(String(BigInt(utxo.token.amount))));
   }
   renderQueuedMiningRewards(state.pendingMiningRewards);
   if (received.length && !legacy) {
     $('notification-indicator').hidden = false;
-    showGambaCelebration();
+    showGambaCelebration(received.length);
   }
 }
 
@@ -2032,14 +2065,23 @@ window.addEventListener('message', (event) => {
       typeof event.data.address === 'string') {
     queueMinedRewardNotification(event.data.address);
   }
+  if ($('game-dialog').open && $('game-frame').src.includes('/games/netcraft/') &&
+      event.data?.type === 'netcraft-mina-reward-failed' &&
+      typeof event.data.address === 'string') {
+    reportMinedRewardFailure(event.data.address);
+  }
 });
 
 let notificationAudio;
+let nextNotificationSoundAt = 0;
 
 function prepareNotificationAudio() {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   if (!AudioContext) throw new Error('Audio is not supported.');
-  if (!notificationAudio || notificationAudio.state === 'closed') notificationAudio = new AudioContext();
+  if (!notificationAudio || notificationAudio.state === 'closed') {
+    notificationAudio = new AudioContext();
+    nextNotificationSoundAt = 0;
+  }
   return notificationAudio;
 }
 
@@ -2061,7 +2103,7 @@ function unlockNotificationAudio() {
 document.addEventListener('pointerdown', unlockNotificationAudio);
 document.addEventListener('keydown', unlockNotificationAudio);
 
-async function playGambaSound() {
+async function playGambaSound(count = 1) {
   try {
     const audio = prepareNotificationAudio();
     if (audio.state !== 'running') {
@@ -2079,20 +2121,23 @@ async function playGambaSound() {
     }
     if (audio.state !== 'running') throw new Error('Audio playback requires a user gesture.');
 
-    const start = audio.currentTime;
-    [880, 1320, 1760].forEach((frequency, index) => {
-      const tone = audio.createOscillator();
-      const volume = audio.createGain();
-      const time = start + index * 0.09;
-      tone.type = 'triangle';
-      tone.frequency.value = frequency;
-      volume.gain.setValueAtTime(0.15, time);
-      volume.gain.exponentialRampToValueAtTime(0.001, time + 0.16);
-      tone.connect(volume);
-      volume.connect(audio.destination);
-      tone.start(time);
-      tone.stop(time + 0.16);
-    });
+    const start = Math.max(audio.currentTime, nextNotificationSoundAt);
+    for (let receipt = 0; receipt < count; receipt++) {
+      [880, 1320, 1760].forEach((frequency, index) => {
+        const tone = audio.createOscillator();
+        const volume = audio.createGain();
+        const time = start + receipt * 0.4 + index * 0.09;
+        tone.type = 'triangle';
+        tone.frequency.value = frequency;
+        volume.gain.setValueAtTime(0.15, time);
+        volume.gain.exponentialRampToValueAtTime(0.001, time + 0.16);
+        tone.connect(volume);
+        volume.connect(audio.destination);
+        tone.start(time);
+        tone.stop(time + 0.16);
+      });
+    }
+    nextNotificationSoundAt = start + count * 0.4;
     $('gamba-sound-status').textContent = '';
   } catch (error) {
     logger.warn('Notification sound unavailable:', error);
@@ -2100,9 +2145,9 @@ async function playGambaSound() {
   }
 }
 
-function showGambaCelebration() {
+function showGambaCelebration(count = 1) {
   if (!notificationsDialog.open && !$('game-dialog')?.open) notificationsDialog.showModal();
-  void playGambaSound();
+  void playGambaSound(count);
 }
 
 $('gamba-sound').addEventListener('click', () => { void playGambaSound(); });

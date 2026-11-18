@@ -235,18 +235,27 @@ ore. Deposits currently appear on roughly one in 32 terrain columns; placed or
 previously mined blocks do not earn another reward. Offline play and disconnected edits
 cannot create rewards; a connected player must supply a valid token-aware
 wallet address. The interface calls the default reward MINA; the configured
-CashToken category is unchanged by that display name. Rewards are queued and
-the notification appears after the payout is broadcast and the wallet scan
-detects it (normally within 30 seconds, subject to network delays). The red
+CashToken category is unchanged by that display name. The game server requests
+an immediate BCHN transaction for each eligible block; wallet transaction
+creation is serialized to avoid spending the same inputs twice. The wallet
+refreshes after the request and shows a receipt once it sees the zero-confirmation
+output. A request can fail or take longer if the node or network is unavailable.
+The red
 wallet notification indicator is shared between the wallet and game; opening notifications
 marks them read. Browsers may require a user gesture before sound can play.
+The HUD counts MINA ore blocks mined during the current game session, including
+placed ore; it is not a token balance or a count of successful payouts. Chat
+messages fade after a few seconds and remain visible while typing.
 MINA ore pays the `BCH_REWARD_CATEGORY` category; fund the BCHN wallet with
 that category and BCH for transaction fees. Set
-`NETCRAFT_MINING_REWARDS_ENABLED=false` to stop new rewards and payouts. Pending
-rewards remain in the database and resume when enabled again. Back up the
+`NETCRAFT_MINING_REWARDS_ENABLED=false` to stop new rewards and payouts. Back up the
 world database and BCHN wallet together. Run only one payout worker. Set
 `NETCRAFT_REWARD_WAKE_SECRET` to the same long random ASCII secret for both
-services. The database queue remains authoritative if the wake request fails.
+services. Mining edits and payout records are committed together; if dispatch
+or transaction creation fails, the player is notified and the operator must
+investigate the unsent record. Previously queued unsigned records are retained
+but are not automatically paid. Signed transactions are stored before
+broadcast and retried unchanged after an uncertain broadcast.
 The top ticker counts successfully broadcast one-unit payouts for the current
 MINA category recorded in both reward databases, not all on-chain transfers.
 The discontinued bonus is not paid or newly queued. On backend startup,
@@ -265,8 +274,9 @@ grant wallet access. Keep only limited funds in the payout wallet.
 The protocol does not authenticate players or prevent automated mining.
 The backend reserves at most `NETCRAFT_DAILY_PAYOUT_LIMIT` mining broadcasts
 per UTC day (default 1,000), and `NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT` per
-address (default 100). Queued rewards above either limit wait for a later day;
-retries reuse their reservation on the same day. These caps do not cover
+address (default 100). Requests beyond either limit are reported as blocked
+and are not automatically paid later; signed transaction recovery reuses its
+reservation on the same day. These caps do not cover
 welcome rewards and do not guarantee wallet security. A public
 server can still spend configured tokens and BCH available for fees. Standalone server and backend processes default to
 rewards disabled unless `NETCRAFT_MINING_REWARDS_ENABLED=true`.

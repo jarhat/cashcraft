@@ -110,6 +110,7 @@ app = FastAPI(title="CashToken-aware CashAddr receiver")
 logger = logging.getLogger(__name__)
 reward_stop = threading.Event()
 reward_wake = threading.Event()
+reward_payout_lock = threading.Lock()
 reward_thread = None
 db_identity = None
 
@@ -886,6 +887,22 @@ def _bch_amount(satoshis: int) -> str:
     return f"{satoshis // 100_000_000}.{satoshis % 100_000_000:08d}"
 
 
+def ensure_no_pending_signed_payout() -> None:
+    with open_db(timeout=10) as db:
+        if db.execute(
+            "SELECT 1 FROM token_rewards WHERE signed_tx IS NOT NULL AND sent_at IS NULL LIMIT 1"
+        ).fetchone():
+            raise RuntimeError("A signed wallet payout requires recovery.")
+    if NETCRAFT_MINING_REWARDS_ENABLED == "true" and NETCRAFT_DB_PATH:
+        with sqlite3.connect(
+            Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro", uri=True, timeout=10
+        ) as db:
+            if db.execute(
+                "SELECT 1 FROM mining_rewards WHERE signed_tx IS NOT NULL AND sent_at IS NULL LIMIT 1"
+            ).fetchone():
+                raise RuntimeError("A signed mining payout requires recovery.")
+
+
 def build_reward_transaction(address: str, category: str) -> tuple[str, str]:
     utxos = bch_rpc(
         "listunspent", [0, 9999999, [], True, {"includeTokens": True}], wallet=True
@@ -968,6 +985,7 @@ def process_one_reward() -> bool:
             return False
         address, category, signed_tx, txid = row
         if not signed_tx:
+            ensure_no_pending_signed_payout()
             signed_tx, txid = build_reward_transaction(address, category)
             db.execute(
                 f"UPDATE {table} SET signed_tx = ?, txid = ? WHERE cash_address = ?",
@@ -1001,7 +1019,7 @@ def process_one_reward() -> bool:
         return True
 
 
-def process_one_mining_reward() -> bool:
+def process_one_mining_reward(reward_id: int | None = None) -> bool:
     if NETCRAFT_MINING_REWARDS_ENABLED != "true" or not NETCRAFT_DB_PATH:
         return False
     with sqlite3.connect(
@@ -1013,6 +1031,14 @@ def process_one_mining_reward() -> bool:
             reward_id INTEGER NOT NULL, day TEXT NOT NULL, PRIMARY KEY (reward_id, day)
         )""")
         db.execute("CREATE INDEX IF NOT EXISTS mining_payout_reservations_day ON mining_payout_reservations (day)")
+        if reward_id is not None:
+            existing = db.execute(
+                "SELECT sent_at FROM mining_rewards WHERE id = ?", (reward_id,)
+            ).fetchone()
+            if not existing:
+                raise RuntimeError("Mining reward not found.")
+            if existing[0] is not None:
+                return True
         row = db.execute(
             """WITH daily_address_counts AS (
                    SELECT m.cash_address, COUNT(*) AS count
@@ -1021,7 +1047,9 @@ def process_one_mining_reward() -> bool:
                    WHERE r.day = date('now') GROUP BY m.cash_address
                )
                SELECT id, cash_address, category, signed_tx, txid FROM mining_rewards m
-               WHERE sent_at IS NULL AND (
+               WHERE sent_at IS NULL
+               AND ((? IS NULL AND signed_tx IS NOT NULL) OR id = ?)
+               AND (
                    EXISTS (SELECT 1 FROM mining_payout_reservations r
                            WHERE r.reward_id = m.id AND r.day = date('now'))
                    OR (
@@ -1030,7 +1058,7 @@ def process_one_mining_reward() -> bool:
                                      WHERE c.cash_address = m.cash_address), 0) < ?
                    )
                ) ORDER BY signed_tx IS NULL, id LIMIT 1""",
-            (NETCRAFT_DAILY_PAYOUT_LIMIT, NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT),
+            (reward_id, reward_id, NETCRAFT_DAILY_PAYOUT_LIMIT, NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT),
         ).fetchone()
         if not row:
             return False
@@ -1038,15 +1066,6 @@ def process_one_mining_reward() -> bool:
         validate_token_aware_cashaddr(address)
         if not CATEGORY_RE.fullmatch(category):
             raise RuntimeError("Invalid mining reward category.")
-        if not signed_tx:
-            candidate, candidate_txid = build_reward_transaction(address, category)
-            db.execute(
-                """UPDATE mining_rewards SET signed_tx = ?, txid = ?
-                   WHERE id = ? AND signed_tx IS NULL AND sent_at IS NULL""",
-                (candidate, candidate_txid, reward_id),
-            )
-            db.commit()
-            return True
         db.execute("BEGIN IMMEDIATE")
         day = db.execute("SELECT date('now')").fetchone()[0]
         reserved = db.execute(
@@ -1071,6 +1090,15 @@ def process_one_mining_reward() -> bool:
                 (reward_id, day),
             )
         db.commit()
+        if not signed_tx:
+            ensure_no_pending_signed_payout()
+            signed_tx, txid = build_reward_transaction(address, category)
+            db.execute(
+                """UPDATE mining_rewards SET signed_tx = ?, txid = ?
+                   WHERE id = ? AND signed_tx IS NULL AND sent_at IS NULL""",
+                (signed_tx, txid, reward_id),
+            )
+            db.commit()
         try:
             result = bch_rpc("sendrawtransaction", [signed_tx])
         except RuntimeError as broadcast_error:
@@ -1105,7 +1133,8 @@ def reward_worker() -> None:
         processed = False
         for name, process in (("wallet rewards", process_one_reward), ("mining rewards", process_one_mining_reward)):
             try:
-                processed = process() or processed
+                with reward_payout_lock:
+                    processed = process() or processed
             except (RewardDatabaseError, RuntimeError, sqlite3.Error, ValueError, KeyError, TypeError) as exc:
                 logger.error("Could not process %s (%s); it will be retried.", name, type(exc).__name__)
         if not processed:
@@ -1120,6 +1149,29 @@ def wake_mining_rewards(request: Request) -> Response:
     ):
         raise HTTPException(status_code=403, detail="Forbidden")
     reward_wake.set()
+    return Response(status_code=204)
+
+
+@app.post("/api/internal/netcraft-mining-reward/{reward_id}", status_code=204)
+def pay_mining_reward(reward_id: int, request: Request) -> Response:
+    provided = request.headers.get("authorization", "")
+    if not NETCRAFT_REWARD_WAKE_SECRET or not secrets.compare_digest(
+        provided.encode("utf-8"), f"Bearer {NETCRAFT_REWARD_WAKE_SECRET}".encode("utf-8")
+    ):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if reward_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid reward ID.")
+    if NETCRAFT_MINING_REWARDS_ENABLED != "true" or not NETCRAFT_DB_PATH:
+        raise HTTPException(status_code=503, detail="Mining payouts are disabled.")
+    try:
+        with reward_payout_lock:
+            paid = process_one_mining_reward(reward_id)
+        if not paid:
+            raise HTTPException(status_code=429, detail="Mining payout limit reached.")
+    except (RuntimeError, sqlite3.Error, ValueError, KeyError, TypeError) as exc:
+        logger.error("Could not pay mining reward %s (%s).", reward_id, type(exc).__name__)
+        reward_wake.set()
+        raise HTTPException(status_code=503, detail="Mining payout failed; contact the operator.") from exc
     return Response(status_code=204)
 
 

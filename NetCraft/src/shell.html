@@ -1394,6 +1394,7 @@
           var buffers = {};
           var button = document.getElementById('sound-toggle');
           var loading = null;
+          var music = null;
           async function unlock() {
             if (!enabled) return;
             var AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -1411,6 +1412,18 @@
             }
             await loading;
             if (!enabled) return;
+            if (!music) {
+              var musicBytes = Module.FS.readFile('/sounds/forest-ambience.mp3');
+              var musicBlob = new Blob([musicBytes], { type: 'audio/mpeg' });
+              music = new Audio(URL.createObjectURL(musicBlob));
+              music.loop = true;
+              music.volume = 0.22;
+            }
+            if (music.paused) await music.play();
+            if (!enabled) {
+              music.pause();
+              return;
+            }
             button.setAttribute('aria-label', 'Disable sound');
             button.title = 'Disable sound';
           }
@@ -1426,6 +1439,7 @@
           document.addEventListener('keydown', unlockOnGesture, true);
           button.addEventListener('click', function() {
             enabled = !enabled;
+            if (!enabled && music) music.pause();
             button.setAttribute('aria-pressed', String(enabled));
             var label = enabled ? 'Sound enabled; interact with the game to hear it' : 'Enable sound';
             button.setAttribute('aria-label', label);

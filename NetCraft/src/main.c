@@ -223,6 +223,8 @@ typedef struct {
     int message_index;
     int message_view_index;
     char messages[MAX_MESSAGES][MAX_TEXT_LENGTH];
+    double message_times[MAX_MESSAGES];
+    uint32_t mina_mined;
     int width;
     int height;
     int observe1;
@@ -2408,8 +2410,8 @@ void render_item(Attrib *attrib) {
     }
 }
 
-static void render_text(
-    Attrib *attrib, int justify, float x, float y, float n, char *text)
+static void render_text_opacity(
+    Attrib *attrib, int justify, float x, float y, float n, char *text, float opacity)
 {
     float matrix[16];
     set_matrix_2d(matrix, g->width, g->height);
@@ -2417,11 +2419,18 @@ static void render_text(
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
     glUniform1i(attrib->sampler, 1);
     glUniform1i(attrib->extra1, 0);
+    glUniform1f(attrib->extra2, opacity);
     int length = strlen(text);
     x -= n * justify * (length - 1) / 2;
     GLuint buffer = gen_text_buffer(x, y, n, text);
     draw_text(attrib, buffer, length);
     del_buffer(buffer);
+}
+
+static void render_text(
+    Attrib *attrib, int justify, float x, float y, float n, char *text)
+{
+    render_text_opacity(attrib, justify, x, y, n, text, 1.0f);
 }
 
 typedef struct {
@@ -2439,6 +2448,7 @@ static void render_item_counts(Attrib *attrib) {
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
     glUniform1i(attrib->sampler, 1);
     glUniform1i(attrib->extra1, 0);
+    glUniform1f(attrib->extra2, 1.0f);
     for (int i = 0; i < visible_items(); i++) {
         int w = hotbar_items[(g->item_index + i) % hotbar_item_count];
         uint32_t count = Inventory_getCount(&g->inventory, w);
@@ -2467,6 +2477,7 @@ void add_message(const char *text) {
     printf("%s\n", text);
     snprintf(
         g->messages[g->message_index], MAX_TEXT_LENGTH, "%s", text);
+    g->message_times[g->message_index] = glfwGetTime();
     g->message_index = (g->message_index + 1) % MAX_MESSAGES;
 
     g->message_view_index = g->message_index - MAX_VISIBLE_MESSAGES;
@@ -2906,7 +2917,10 @@ void on_mine() {
     int hw = get_targeted_block(&hx, &hy, &hz, &face);
     if (hw && hy > 0 && hy < 256 && is_destructable(hw)) {
         set_block(hx, hy, hz, 0);
-        if (g->mode != MODE_ONLINE) Inventory_collect(&g->inventory, hw);
+        if (g->mode != MODE_ONLINE) {
+            Inventory_collect(&g->inventory, hw);
+            if (hw == Item_MINA_ORE && g->mina_mined < UINT32_MAX) g->mina_mined++;
+        }
 #ifdef __EMSCRIPTEN__
         if (g->mode != MODE_ONLINE) EM_ASM(if (Module.playBlockSound) Module.playBlockSound(0););
 #endif
@@ -3598,6 +3612,7 @@ void parse_buffer(char *buffer, int len) {
         int mined_item;
         if (line[0] == 'I' && sscanf(line, "I,%d", &mined_item) == 1) {
             Inventory_collect(&g->inventory, mined_item);
+            if (mined_item == Item_MINA_ORE && g->mina_mined < UINT32_MAX) g->mina_mined++;
 #ifdef __EMSCRIPTEN__
             EM_ASM(if (Module.playBlockSound) Module.playBlockSound(0););
 #endif
@@ -3608,6 +3623,16 @@ void parse_buffer(char *buffer, int len) {
             EM_ASM_ARGS({
                 parent.postMessage({
                     type: 'netcraft-mina-reward',
+                    address: UTF8ToString($0)
+                }, '*');
+            }, mined_reward_address);
+#endif
+        }
+        if (line[0] == 'F' && sscanf(line, "F,%120[^\n]", mined_reward_address) == 1) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({
+                    type: 'netcraft-mina-reward-failed',
                     address: UTF8ToString($0)
                 }, '*');
             }, mined_reward_address);
@@ -3780,6 +3805,8 @@ void reset_model() {
     g->typing = false;
     g->just_clicked = false;
     memset(g->messages, 0, sizeof(char) * MAX_MESSAGES * MAX_TEXT_LENGTH);
+    memset(g->message_times, 0, sizeof(g->message_times));
+    g->mina_mined = 0;
     g->message_index = 0;
     g->message_view_index = 0;
     g->day_length = DAY_LENGTH;
@@ -3907,6 +3934,7 @@ int main(int argc, char **argv) {
     text_attrib.matrix = glGetUniformLocation(program, "matrix");
     text_attrib.sampler = glGetUniformLocation(program, "sampler");
     text_attrib.extra1 = glGetUniformLocation(program, "is_sign");
+    text_attrib.extra2 = glGetUniformLocation(program, "opacity");
 
     program = load_program(
         "shaders/sky_vertex.glsl", "shaders/sky_fragment.glsl");
@@ -4367,6 +4395,10 @@ void render_scene() {
     char text_buffer[1024];
     float tx = ts / 2;
     float ty = g->height - ts;
+    if (g->show_ui && g->initialized) {
+        snprintf(text_buffer, sizeof(text_buffer), "MINA ore mined: %u", (unsigned)g->mina_mined);
+        render_text(&text_attrib, ALIGN_CENTER, g->width / 2, g->height - ts, ts, text_buffer);
+    }
     if (g->show_info_text && g->show_ui && g->initialized) {
         static char *build_info_string =
            "CashCraft"
@@ -4415,8 +4447,11 @@ void render_scene() {
         for (int i = 0; i < MAX_VISIBLE_MESSAGES; i++) {
             int index = (g->message_view_index + i) % MAX_MESSAGES;
             if (strlen(g->messages[index])) {
-                render_text(&text_attrib, ALIGN_LEFT, tx, ty, ts,
-                    g->messages[index]);
+                double age = glfwGetTime() - g->message_times[index];
+                float opacity = g->typing ? 1.0f : (float)fmax(0.0, fmin(1.0, 6.0 - age));
+                if (opacity <= 0.0f) continue;
+                render_text_opacity(&text_attrib, ALIGN_LEFT, tx, ty, ts,
+                    g->messages[index], opacity);
                 ty -= ts * 2;
             }
         }

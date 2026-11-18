@@ -110,10 +110,10 @@ struct Server {
     terrain: Mutex<Terrain>,
     default_reward_category: Option<String>,
     address_prefix: String,
-    reward_wake: Option<SyncSender<()>>,
+    reward_wake: Option<SyncSender<(i64, Player)>>,
 }
 
-fn start_reward_wake() -> Result<Option<SyncSender<()>>, String> {
+fn start_reward_wake() -> Result<Option<SyncSender<(i64, Player)>>, String> {
     let target = env::var("NETCRAFT_REWARD_API").unwrap_or_default();
     let secret = env::var("NETCRAFT_REWARD_WAKE_SECRET").unwrap_or_default();
     if target.is_empty() && secret.is_empty() {
@@ -122,28 +122,38 @@ fn start_reward_wake() -> Result<Option<SyncSender<()>>, String> {
     if target.is_empty() || secret.is_empty() || secret.bytes().any(|b| !(33..=126).contains(&b)) {
         return Err("Set NETCRAFT_REWARD_API and a printable NETCRAFT_REWARD_WAKE_SECRET".into());
     }
-    let (sender, receiver) = mpsc::sync_channel::<()>(1);
+    let (sender, receiver) = mpsc::sync_channel::<(i64, Player)>(1024);
     thread::spawn(move || {
-        while receiver.recv().is_ok() {
+        while let Ok((reward_id, player)) = receiver.recv() {
             let result = (|| -> io::Result<()> {
                 let address = target
                     .to_socket_addrs()?
                     .next()
                     .ok_or_else(|| io::Error::other("reward API address did not resolve"))?;
                 let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2))?;
-                stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+                stream.set_read_timeout(Some(Duration::from_secs(95)))?;
                 stream.set_write_timeout(Some(Duration::from_secs(2)))?;
-                write!(stream, "POST /api/internal/netcraft-reward-wake HTTP/1.1\r\nHost: {target}\r\nAuthorization: Bearer {secret}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")?;
+                write!(stream, "POST /api/internal/netcraft-mining-reward/{reward_id} HTTP/1.1\r\nHost: {target}\r\nAuthorization: Bearer {secret}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")?;
                 let mut response = String::new();
                 BufReader::new(stream).read_line(&mut response)?;
+                if response.starts_with("HTTP/1.1 429 ") || response.starts_with("HTTP/1.0 429 ") {
+                    return Err(io::Error::other("daily mining payout limit reached"));
+                }
                 if !response.starts_with("HTTP/1.1 204 ") && !response.starts_with("HTTP/1.0 204 ")
                 {
-                    return Err(io::Error::other("reward API rejected wake request"));
+                    return Err(io::Error::other("mining payout request failed"));
                 }
                 Ok(())
             })();
             if let Err(error) = result {
-                eprintln!("Mining reward wake failed ({error}); queued rewards will be retried by the backend");
+                eprintln!("Mining reward {reward_id} failed ({error}); check the payout backend");
+                send(
+                    &player,
+                    format!("T,MINA payout not confirmed: {error}. Contact the operator.\n"),
+                );
+                if let Some(address) = player.reward_address.as_deref() {
+                    send(&player, format!("F,{address}\n"));
+                }
             }
         }
     });
@@ -554,7 +564,7 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
             changes.push(format!("B,{np},{nq},{x},{y},{z},{value}\nR,{np},{nq}\n"));
         }
     }
-    let mut reward_queued = false;
+    let mut reward_id = None;
     if w == 0 {
         transaction.execute(
             "DELETE FROM sign WHERE x=?1 AND y=?2 AND z=?3",
@@ -565,10 +575,12 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
                 player.reward_address.as_ref(),
                 server.default_reward_category.as_ref(),
             ) {
-                reward_queued = transaction.execute(
+                if transaction.execute(
                     "INSERT OR IGNORE INTO mining_rewards (x,y,z,cash_address,category) VALUES (?1,?2,?3,?4,?5)",
                     params![x, y, z, address, category],
-                )? > 0;
+                )? > 0 {
+                    reward_id = Some(transaction.last_insert_rowid());
+                }
             }
         }
         transaction.execute(
@@ -583,7 +595,7 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
             inventory[previous as usize] = inventory[previous as usize].saturating_add(1);
         }
         send(&player, format!("I,{previous}\n"));
-        if reward_queued {
+        if reward_id.is_some() {
             if let Some(address) = player.reward_address.as_deref() {
                 send(&player, format!("Q,{address}\n"));
             }
@@ -593,9 +605,18 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
         send(&player, format!("J,{x},{y},{z},{w},1\n"));
     }
     broadcast(&state, Some(id), &changes.concat());
-    if reward_queued {
-        if let Some(wake) = &server.reward_wake {
-            let _ = wake.try_send(());
+    if let Some(reward_id) = reward_id {
+        if server.reward_wake.as_ref().map_or(true, |sender| {
+            sender.try_send((reward_id, player.clone())).is_err()
+        }) {
+            eprintln!("Could not dispatch mining reward {reward_id}; check the payout backend");
+            send(
+                &player,
+                "T,MINA payout could not start. Contact the operator.\n",
+            );
+            if let Some(address) = player.reward_address.as_deref() {
+                send(&player, format!("F,{address}\n"));
+            }
         }
     }
     Ok(())

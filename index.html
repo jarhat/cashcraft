@@ -11,19 +11,22 @@
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="alternate icon" href="/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="/icon-192.png">
-  <meta name="description" content="Connect a Bitcoin Cash wallet to send and receive CashTokens, create payment links and QR codes, and track token balances.">
-  <link rel="canonical" href='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/'>
+  <meta name="description" content="Explore, build and mine together in a Bitcoin Cash voxel world.">
+  <link rel="canonical" href='{{if or (eq (placeholder "http.request.scheme") "https") (eq (placeholder "http.request.header.X-Forwarded-Proto") "https")}}https{{else}}http{{end}}://{{placeholder "http.request.host"}}/'>
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="CTF Cash">
-  <meta property="og:title" content="CTF Cash | Bitcoin Cash CashTokens">
-  <meta property="og:description" content="Send and receive CashTokens, create payment links and QR codes, and track token balances with your Bitcoin Cash wallet.">
-  <meta property="og:url" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/'>
-  <meta property="og:image" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/social-preview.png'>
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="CTF Cash: send and receive CashTokens">
-  <meta name="twitter:card" content="summary">
-  <meta name="twitter:image" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/social-preview.png'>
+  <meta property="og:site_name" content="CashCraft">
+  <meta property="og:title" content="CashCraft | Bitcoin Cash voxel world">
+  <meta property="og:description" content="Explore, build and mine together in a Bitcoin Cash voxel world.">
+  <meta property="og:url" content='{{if or (eq (placeholder "http.request.scheme") "https") (eq (placeholder "http.request.header.X-Forwarded-Proto") "https")}}https{{else}}http{{end}}://{{placeholder "http.request.host"}}/'>
+  <meta property="og:image" content='{{if or (eq (placeholder "http.request.scheme") "https") (eq (placeholder "http.request.header.X-Forwarded-Proto") "https")}}https{{else}}http{{end}}://{{placeholder "http.request.host"}}/craft-preview.png?v=3'>
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1672">
+  <meta property="og:image:height" content="941">
+  <meta property="og:image:alt" content="A voxel explorer looks toward a floating Bitcoin Cash island and a green dragon.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="CashCraft | Bitcoin Cash voxel world">
+  <meta name="twitter:description" content="Explore, build and mine together in a Bitcoin Cash voxel world.">
+  <meta name="twitter:image" content='{{if or (eq (placeholder "http.request.scheme") "https") (eq (placeholder "http.request.header.X-Forwarded-Proto") "https")}}https{{else}}http{{end}}://{{placeholder "http.request.host"}}/craft-preview.png?v=3'>
   <title>CTF / CASH</title>
   <script type="application/ld+json">
     {
