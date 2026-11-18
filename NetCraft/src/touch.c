@@ -20,7 +20,6 @@ void init_touch_callbacks(GLFWwindow *w) {}
 #include <emscripten.h>
 #include <emscripten/html5.h>
 
-static GLFWwindow *window = NULL;
 static double touch_activated_at = 0;
 static bool touch_just_activated = false;
 static bool touch_moved = false;
@@ -44,7 +43,6 @@ static EM_BOOL on_touchstart(int eventType, const EmscriptenTouchEvent *touchEve
     touch_activated_at = glfwGetTime();
     touch_just_activated = true;
     touch_moved = false;
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     // Hold = mine
     if (!button_mining) mining_start();
@@ -76,7 +74,6 @@ static EM_BOOL on_touchend(int eventType, const EmscriptenTouchEvent *touchEvent
         EmscriptenTouchPoint touch = touchEvent->touches[i];
         if (touch.isChanged && touch.identifier + 1 == touch_active) {
             // Was the first touch released? If so, exit touch.
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             if (!button_mining) mining_stop();
             touch_active = 0;
 
@@ -95,7 +92,6 @@ static EM_BOOL on_touchend(int eventType, const EmscriptenTouchEvent *touchEvent
 static EM_BOOL on_touchcancel(int eventType, const EmscriptenTouchEvent *touchEvent, void *userData) {
     touch_active = 0;
     if (!button_mining) mining_stop();
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     return EM_TRUE;
 }
 
@@ -118,7 +114,6 @@ EMSCRIPTEN_KEEPALIVE void touch_build(void) {
 }
 
 void init_touch_callbacks(GLFWwindow *w) {
-    window = w;
     emscripten_set_touchstart_callback("#canvas", NULL, EM_FALSE, on_touchstart);
     emscripten_set_touchmove_callback("#canvas", NULL, EM_FALSE, on_touchmove);
     emscripten_set_touchend_callback("#canvas", NULL, EM_FALSE, on_touchend);

@@ -42,7 +42,7 @@ export function setupGameInvite($, network, loadDependencies) {
   $('invite-share').addEventListener('click', async () => {
     try {
       if (!navigator.share) throw new Error('Sharing is unavailable. Use Copy invite link.');
-      await navigator.share({ title: 'NetCraft', text: 'Come explore NetCraft with me!', url });
+      await navigator.share({ title: 'CashCraft', text: 'Come explore CashCraft with me!', url });
     } catch (error) {
       if (error.name !== 'AbortError') status(error.message || 'Could not share the invite link.');
     }

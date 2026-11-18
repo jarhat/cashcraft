@@ -127,8 +127,8 @@ services:
 
   auth:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "127.0.0.1:3001:3000"
     environment:
@@ -144,6 +144,7 @@ services:
       NETCRAFT_DB_PATH: /data/netcraft.db
       NETCRAFT_MINING_REWARDS_ENABLED: ${NETCRAFT_MINING_REWARDS_ENABLED:-true}
       NETCRAFT_REWARD_WAKE_SECRET: ${NETCRAFT_REWARD_WAKE_SECRET:?Set NETCRAFT_REWARD_WAKE_SECRET in .env}
+      CRAFT_PREVIEW_IMAGE: /app/craft-preview.png
 
       BCH_RPC_URL: http://172.31.0.10:8332/
       BCH_RPC_USER: ${BCH_RPC_USER:?Set BCH_RPC_USER in .env}

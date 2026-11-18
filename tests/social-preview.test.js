@@ -11,3 +11,12 @@ test('social metadata points to a real 1200 by 630 image without client-side ren
   assert.equal(image.readUInt32BE(16), 1200);
   assert.equal(image.readUInt32BE(20), 630);
 });
+
+test('craft unfurlers use the server-generated donation preview', async () => {
+  const html = await readFile(new URL('../public/craft-preview.html', import.meta.url), 'utf8');
+  assert.match(html, /property="og:title" content="CashCraft \| Bitcoin Cash voxel world"/);
+  assert.match(html, /property="og:image" content='[^']+\/api\/craft-preview\.png'/);
+  assert.match(html, /name="twitter:image" content='[^']+\/api\/craft-preview\.png'/);
+  assert.match(html, /property="og:image:width" content="1200"/);
+  assert.match(html, /property="og:image:height" content="675"/);
+});

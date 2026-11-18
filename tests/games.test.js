@@ -54,6 +54,8 @@ test('game buttons open mounted shells and unload them on close', async (t) => {
   await $('game-netcraft').listeners.click();
   assert.equal(url, '/games/netcraft/craftw.html');
   assert.equal($('game-frame').src, url);
+  assert.equal($('game-title').textContent, 'CashCraft');
+  assert.equal($('game-frame').title, 'CashCraft');
   $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); };
   await $('game-fullscreen').listeners.click();
   $('game-close').listeners.click();

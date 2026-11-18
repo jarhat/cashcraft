@@ -88,7 +88,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 19h16" /></svg>
           <span>Receive</span>
         </button>
-        <button id="game-netcraft" class="quick-action" type="button" aria-label="Play Netcraft">
+        <button id="game-netcraft" class="quick-action" type="button" aria-label="Play CashCraft">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 17 7m-5-4c3-1 7 0 9 4l-3 1-3-3-3-2ZM3 19l2 2"/></svg>
           <span>Mining</span>
         </button>
@@ -531,12 +531,12 @@
       <button id="game-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
     </div>
     <nav class="game-switcher" aria-label="Choose a game" hidden>
-      <button id="switch-netcraft" class="small-button" type="button" aria-pressed="false">⛏️ Netcraft</button>
+      <button id="switch-netcraft" class="small-button" type="button" aria-pressed="false">⛏️ CashCraft</button>
       <button id="switch-pk2" class="small-button" type="button" aria-pressed="false">🐔 Pekka Kana 2</button>
     </nav>
     <p id="game-dialog-status" class="fine" role="status"></p>
     <div id="game-stage" class="game-stage">
-      <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen; gamepad; autoplay" allowfullscreen></iframe>
+      <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen; gamepad *" allowfullscreen></iframe>
       <div class="game-controls" aria-label="Game controls">
         <button id="game-fullscreen" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/></svg>
@@ -563,7 +563,7 @@
       <h2 id="invite-title">Invite and support</h2>
       <button id="invite-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
     </div>
-    <p>Invite friends to explore NetCraft together, made with love.</p>
+    <p>Invite friends to explore CashCraft together, made with love.</p>
     <code id="invite-url"></code>
     <div class="browser-wallet-actions">
       <button id="invite-share" class="small-button" type="button">Share invite</button>

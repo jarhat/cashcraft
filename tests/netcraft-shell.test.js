@@ -119,7 +119,7 @@ test('game audio starts from a gesture and mutes effects and music', async () =>
     createOscillator() {
       return { frequency: {}, connect() {}, start() { nodes.push('music'); }, stop() {} };
     }
-    createBufferSource() { return { connect() {}, start() { nodes.push('effect'); } }; }
+    createBufferSource() { return { playbackRate: {}, connect() {}, start() { nodes.push('effect'); } }; }
   }
   const document = {
     getElementById: $, querySelector: () => $('controls'),
@@ -136,7 +136,7 @@ test('game audio starts from a gesture and mutes effects and music', async () =>
   listeners.pointerdown({ isTrusted: true });
   await new Promise(setImmediate);
   assert.equal($('sound-toggle').attributes['aria-label'], 'Disable sound');
-  assert.equal(nodes.filter((node) => node === 'music').length, 1);
+  assert.equal(nodes.filter((node) => node === 'music').length, 2);
   context.Module.playBlockSound(0);
   assert.equal(nodes.filter((node) => node === 'effect').length, 1);
   $('sound-toggle').listeners.click();
@@ -145,8 +145,41 @@ test('game audio starts from a gesture and mutes effects and music', async () =>
   assert.equal(nodes.filter((node) => node === 'effect').length, 1);
   $('sound-toggle').listeners.click();
   await new Promise(setImmediate);
-  assert.equal(nodes.filter((node) => node === 'music').length, 2);
+  assert.equal(nodes.filter((node) => node === 'music').length, 4);
   context.Module.playBlockSound(1);
   assert.equal(nodes.filter((node) => node === 'effect').length, 2);
   assert.equal(timers.size, 1);
+});
+
+test('touch controls recover from unavailable pointer capture and release outside', () => {
+  const elements = new Map();
+  const windowListeners = {};
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      style: {}, value: '', listeners: {},
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      setAttribute() {},
+      setPointerCapture() { throw Object.assign(new Error('inactive pointer'), { name: 'InvalidStateError' }); },
+      getBoundingClientRect() { return { left: 0, top: 0, width: 100 }; },
+    });
+    return elements.get(id);
+  };
+  const document = { getElementById: $, querySelector: () => $('controls'), addEventListener() {} };
+  const window = { addEventListener(type, fn) { (windowListeners[type] ||= []).push(fn); } };
+  const warnings = [];
+  const context = { document, window, Date, Math, console: { warn: (...args) => warnings.push(args) } };
+  runInNewContext(script, context);
+  const calls = [];
+  context.Module._touch_set_mine = true;
+  context.Module._touch_set_move = true;
+  context.Module.ccall = (name, _result, _types, args) => calls.push([name, Array.from(args)]);
+  $('mobile-mine').listeners.pointerdown({ pointerId: 7 });
+  windowListeners.pointerup.forEach((fn) => fn({ pointerId: 7 }));
+  $('mobile-mine').listeners.pointerdown({ pointerId: 8 });
+  windowListeners.blur.forEach((fn) => fn());
+  $('mobile-stick').listeners.pointerdown({ pointerId: 9, clientX: 100, clientY: 50 });
+  windowListeners.pointercancel.forEach((fn) => fn({ pointerId: 9 }));
+  assert.deepEqual(calls.filter(([name]) => name === 'touch_set_mine').map(([, args]) => args[0]), [1, 0, 1, 0, 0]);
+  assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);
+  assert.equal(warnings.length, 3);
 });

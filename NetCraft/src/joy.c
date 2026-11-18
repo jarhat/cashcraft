@@ -5,6 +5,9 @@
 #include "joy.h"
 #include "config.h"
 #include "mining.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 extern void on_scroll(GLFWwindow *window, double xdelta, double ydelta);
 extern void on_key(GLFWwindow *window, int key, int scancode, int action, int mods);
@@ -152,6 +155,20 @@ void on_joystick_connection(int joy, int event) {
 
 void init_joystick_callbacks() {
     gamepad_connected = -1;
+#ifdef __EMSCRIPTEN__
+    int available = EM_ASM_INT({
+        if (typeof navigator.getGamepads !== 'function') return 0;
+        try {
+            navigator.getGamepads();
+            return 1;
+        } catch (error) {
+            if (error.name !== 'SecurityError' && error.name !== 'NotAllowedError') throw error;
+            console.warn('Gamepad access is unavailable; keyboard, mouse and touch remain available.');
+            return 0;
+        }
+    });
+    if (!available) return;
+#endif
 #ifdef USE_EM_GAMEPAD
     emscripten_set_gamepadconnected_callback(NULL, EM_FALSE, on_gamepadconnected);
     emscripten_set_gamepaddisconnected_callback(NULL, EM_FALSE, on_gamepaddisconnected);

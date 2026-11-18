@@ -4,7 +4,7 @@ WORKDIR /build
 
 RUN npm install --global cashc@0.14.0
 
-COPY contracts/HodlVault.cash ./contracts/HodlVault.cash
+COPY backend/contracts/HodlVault.cash ./contracts/HodlVault.cash
 
 RUN mkdir -p /artifacts \
     && cashc ./contracts/HodlVault.cash \
@@ -25,10 +25,11 @@ WORKDIR /app
 RUN addgroup --system app \
     && adduser --system --ingroup app app
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py .
+COPY backend/main.py .
+COPY public/craft-preview.png /app/craft-preview.png
 COPY --from=contract-build /artifacts/HodlVault.json /app/artifacts/HodlVault.json
 
 USER app

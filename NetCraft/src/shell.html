@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>NetCraft</title>
+    <title>CashCraft</title>
     <style>
       body {
         font-family: arial;
@@ -1335,10 +1335,11 @@
         })(),
         setStatus: function(text) {
           if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
-          if (text === Module.setStatus.text) return;
+          if (text === Module.setStatus.last.text) return;
           var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
           var now = Date.now();
-          if (m && now - Date.now() < 30) return; // if this is a progress update, skip it if too soon
+          if (m && now - Module.setStatus.last.time < 30) return;
+          Module.setStatus.last = { time: now, text: text };
           if (m) {
             text = m[1];
             progressElement.value = parseInt(m[2])*100;
@@ -1401,30 +1402,45 @@
           var loading = null;
           var musicTimer = null;
           var noteIndex = 0;
-          var melody = [392, 440, 523.25, 587.33, 523.25, 440, 392, 349.23,
-            392, 440, 523.25, 659.25, 587.33, 523.25, 440, 0,
-            523.25, 587.33, 659.25, 698.46, 659.25, 587.33, 523.25, 440,
-            392, 440, 523.25, 587.33, 523.25, 440, 392, 0];
+          var melody = [
+            [392, 1], [440, .5], [493.88, .5], [587.33, 1.5], [523.25, .5],
+            [493.88, 1], [440, 1], [392, 2], [0, .5],
+            [440, .5], [523.25, 1], [587.33, 1], [659.25, 1.5], [587.33, .5],
+            [523.25, 1], [493.88, 1], [440, 2], [0, .5],
+            [587.33, 1], [659.25, .5], [698.46, .5], [783.99, 1.5], [659.25, .5],
+            [587.33, 1], [523.25, 1], [493.88, 2], [0, .5],
+            [523.25, .5], [587.33, 1], [493.88, 1], [440, 1], [392, 3], [0, 1]
+          ];
           function playMusicNote() {
             musicTimer = null;
             if (!enabled || !context || context.state !== 'running') return;
-            var frequency = melody[noteIndex++ % melody.length];
+            var note = melody[noteIndex++ % melody.length];
+            var frequency = note[0];
+            var duration = note[1] * 0.34;
             if (frequency) {
               var start = context.currentTime;
               var oscillator = context.createOscillator();
+              var overtone = context.createOscillator();
+              var overtoneGain = context.createGain();
               var gain = context.createGain();
               oscillator.type = 'sine';
               oscillator.frequency.value = frequency;
+              overtone.type = 'sine';
+              overtone.frequency.value = frequency * 2;
+              overtoneGain.gain.value = 0.12;
               gain.gain.setValueAtTime(0.0001, start);
-              gain.gain.linearRampToValueAtTime(0.07, start + 0.045);
-              gain.gain.linearRampToValueAtTime(0.05, start + 0.25);
-              gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.34);
+              gain.gain.linearRampToValueAtTime(0.055, start + Math.min(.06, duration / 3));
+              gain.gain.exponentialRampToValueAtTime(0.0001, start + duration * .9);
               oscillator.connect(gain);
+              overtone.connect(overtoneGain);
+              overtoneGain.connect(gain);
               gain.connect(context.destination);
               oscillator.start(start);
-              oscillator.stop(start + 0.35);
+              overtone.start(start);
+              oscillator.stop(start + duration);
+              overtone.stop(start + duration);
             }
-            musicTimer = setTimeout(playMusicNote, 360);
+            musicTimer = setTimeout(playMusicNote, duration * 1000);
           }
           async function unlock() {
             if (!enabled) return;
@@ -1477,10 +1493,17 @@
           });
           Module.playGameSound = function(name) {
             if (!enabled || !context || context.state !== 'running') return;
-            if (!buffers[name]) return;
+            if (!buffers[name]) {
+              unlock().catch(function(error) { console.error('Game sound could not load:', error); });
+              return;
+            }
             var source = context.createBufferSource();
             source.buffer = buffers[name];
-            source.connect(context.destination);
+            source.playbackRate.value = (name === 'step' ? .85 : 1) + Math.random() * .1;
+            var effectGain = context.createGain();
+            effectGain.gain.value = name === 'step' ? .65 : .9;
+            source.connect(effectGain);
+            effectGain.connect(context.destination);
             source.start();
           };
           Module.playBlockSound = function(placed) { Module.playGameSound(placed ? 'build' : 'mine'); };
@@ -1510,15 +1533,26 @@
             knob.style.transform = '';
             call('touch_set_move', [0, 0]);
           }
+          function capturePointer(element, pointerId) {
+            try {
+              element.setPointerCapture(pointerId);
+            } catch (error) {
+              if (error.name !== 'InvalidStateError' && error.name !== 'NotFoundError') throw error;
+              console.warn('Pointer capture unavailable; using window release events.', error.name);
+            }
+          }
           stick.addEventListener('pointerdown', function(event) {
             if (stickPointer !== null) return;
             stickPointer = event.pointerId;
-            stick.setPointerCapture(event.pointerId);
+            capturePointer(stick, event.pointerId);
             move(event);
           });
           stick.addEventListener('pointermove', function(event) { if (event.pointerId === stickPointer) move(event); });
           ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(type) {
             stick.addEventListener(type, function(event) { if (event.pointerId === stickPointer) releaseStick(); });
+          });
+          ['pointerup', 'pointercancel'].forEach(function(type) {
+            window.addEventListener(type, function(event) { if (event.pointerId === stickPointer) releaseStick(); });
           });
           function hold(id, name) {
             var button = document.getElementById(id);
@@ -1526,16 +1560,19 @@
             button.addEventListener('pointerdown', function(event) {
               if (pointer !== null) return;
               pointer = event.pointerId;
-              button.setPointerCapture(pointer);
+              capturePointer(button, pointer);
               call(name, [1]);
             });
+            function release(event) {
+              if (event.pointerId !== pointer) return;
+              pointer = null;
+              call(name, [0]);
+            }
             ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(type) {
-              button.addEventListener(type, function(event) {
-                if (event.pointerId !== pointer) return;
-                pointer = null;
-                call(name, [0]);
-              });
+              button.addEventListener(type, release);
             });
+            ['pointerup', 'pointercancel'].forEach(function(type) { window.addEventListener(type, release); });
+            window.addEventListener('blur', function() { if (pointer !== null) release({ pointerId: pointer }); });
           }
           hold('mobile-mine', 'touch_set_mine');
           hold('mobile-jump', 'touch_set_jump');

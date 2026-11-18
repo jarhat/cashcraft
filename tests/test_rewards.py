@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import os
 import sqlite3
 import tempfile
@@ -7,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from PIL import Image
 
 os.environ.update({
     "BCH_NETWORK": "mainnet",
@@ -37,6 +39,29 @@ class RewardTests(unittest.TestCase):
         with patch.object(backend, "bch_rpc", side_effect=RuntimeError("unavailable")):
             with self.assertRaises(RuntimeError):
                 backend.check_balance()
+
+    def test_craft_social_preview_contains_donation_qr(self):
+        address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
+        client = TestClient(backend.app)
+        with patch.object(backend, "donation_address", return_value={"address": address, "network": "mainnet"}):
+            response = client.get("/api/craft-preview.png")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "image/png")
+        with Image.open(io.BytesIO(response.content)) as image:
+            self.assertEqual(image.size, (1200, 675))
+            qr = list(backend.segno.make(address, error="h").matrix)
+            scale = min(image.size) // (3 * (len(qr) + 8))
+            left = image.width - (len(qr) + 8) * scale - 28
+            top = image.height - (len(qr) + 8) * scale - 74
+            for y, row in enumerate(qr):
+                for x, dark in enumerate(row):
+                    pixel = image.getpixel((left + (x + 4) * scale, top + (y + 4) * scale))
+                    self.assertEqual(pixel, (0, 0, 0) if dark else (255, 255, 255))
+
+    def test_craft_social_preview_reports_missing_artwork(self):
+        with patch.object(backend, "donation_address", return_value={"address": "bitcoincash:test"}), \
+             patch.dict(os.environ, {"CRAFT_PREVIEW_IMAGE": str(Path(self.tmp.name) / "missing.png")}):
+            self.assertEqual(TestClient(backend.app).get("/api/craft-preview.png").status_code, 503)
 
     def test_mining_reward_retries_the_same_transaction(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"

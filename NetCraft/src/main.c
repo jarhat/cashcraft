@@ -3287,7 +3287,7 @@ EMSCRIPTEN_KEEPALIVE void touch_next_item(void) {
 
 void create_window() {
     g->window = glfwCreateWindow(
-        WINDOW_WIDTH, WINDOW_HEIGHT, "Craft", NULL, NULL);
+        WINDOW_WIDTH, WINDOW_HEIGHT, "CashCraft", NULL, NULL);
 
     init_fullscreen_monitor_dimensions(g->window);
 
@@ -3781,7 +3781,9 @@ int main(int argc, char **argv) {
     }
 
     glfwMakeContextCurrent(g->window);
+#ifndef __EMSCRIPTEN__
     glfwSetInputMode(g->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+#endif
     glfwSetDropCallback(g->window, on_file_drop);
     glfwSetKeyCallback(g->window, on_key);
     glfwSetCharCallback(g->window, on_char);
@@ -4316,7 +4318,7 @@ void render_scene() {
     float ty = g->height - ts;
     if (g->show_info_text && g->show_ui && g->initialized) {
         static char *build_info_string =
-           "NetCraft"
+           "CashCraft"
 #ifdef BUILD_NUM
            " build #" BUILD_NUM
 #endif

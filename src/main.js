@@ -34,8 +34,12 @@ setupSnow(document.getElementById('snow-canvas'));
 setupMesh(document.querySelector('.mesh-terrain'));
 
 const craftRoute = window.location.pathname.replace(/\/+$/, '') === '/craft';
+if (craftRoute) {
+  document.title = 'CashCraft | Bitcoin Cash voxel world';
+  document.querySelector('meta[property="og:title"]').content = document.title;
+}
 for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
-  document.querySelector(selector).content = new URL(craftRoute ? '/craft-preview.png' : '/social-preview.png', window.location.origin).href;
+  document.querySelector(selector).content = new URL(craftRoute ? '/api/craft-preview.png' : '/social-preview.png', window.location.origin).href;
 }
 
 if (!['mainnet', 'chipnet'].includes(network)) {
