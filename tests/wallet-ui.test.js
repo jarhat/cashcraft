@@ -172,6 +172,7 @@ test('notification can be dismissed outside and reopened with its request intact
   const end = source.indexOf("\nif (document.readyState", start);
   runInNewContext(source.slice(start, end), {
     $: element, setTransferTab() {}, document: { addEventListener() {} },
+    MutationObserver: class { observe() {} },
   });
   const dialog = element('notifications-dialog');
   const indicator = element('notification-indicator');

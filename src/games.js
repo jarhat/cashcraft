@@ -4,7 +4,7 @@ const games = {
 };
 const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 
-export function setupGames($, { claimBeer, translate, getRewardAddress = () => null }) {
+export function setupGames($, { claimBeer, translate, getRewardAddress = () => null, autoOpen = false }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
@@ -61,6 +61,10 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
     };
     $(`game-${id}`).addEventListener('click', open);
     $(`switch-${id}`).addEventListener('click', open);
+    if (id === 'netcraft' && autoOpen) {
+      dialog.classList.add('game-auto-open');
+      void open();
+    }
   }
   $('game-close').addEventListener('click', () => dialog.close());
   $('game-wallet').addEventListener('click', () => $('connection-open').click());
@@ -91,6 +95,7 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
     }
     generation++;
     activeGame = null;
+    dialog.classList.remove('game-auto-open');
     frame.removeAttribute('src');
     $('game-dialog-status').textContent = '';
     for (const key of Object.keys(games)) $(`switch-${key}`).setAttribute('aria-pressed', 'false');

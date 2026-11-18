@@ -7,7 +7,7 @@ const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8'
 
 test('beer reward waits for balance scan, alerts once and persists completion', async () => {
   const start = source.indexOf('let beerPolling = null;');
-  const end = source.indexOf('\nsetupGames(', start);
+  const end = source.indexOf('\nupdateGameRewardAddress = setupGames(', start);
   const values = new Map([['ctf-beer-reward:mainnet:address', 'pending']]);
   const nodes = {
     'game-status': { textContent: '' },

@@ -3039,6 +3039,14 @@ body::before { content: none; display: none; }
 .game-dialog iframe { display: block; width: 100%; height: min(65vh, 640px); border: 0; background: #080e17; }
 .game-stage:fullscreen { width: 100%; height: 100%; border: 0; border-radius: 0; }
 .game-stage:fullscreen iframe { height: 100%; }
+.game-dialog.game-auto-open { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; }
+.game-auto-open .notifications-heading, .game-auto-open #game-dialog-status { position: absolute; z-index: 31; }
+.game-auto-open .notifications-heading { right: 12px; top: 60px; }
+.game-auto-open .notifications-heading h2 { display: none; }
+.game-auto-open .game-stage, .game-auto-open .game-stage iframe { width: 100%; height: 100%; border: 0; border-radius: 0; }
+.game-wallet-indicator { display: none; position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border: 2px solid #102333; border-radius: 50%; background: #35d779; }
+.wallet-connected .game-wallet-indicator { display: block; }
+.game-controls button { position: relative; }
 .game-dialog[open] { animation: game-panel-enter .24s ease-out both; }
 .game-shift-in { animation: game-panel-enter .24s ease-out both; }
 @keyframes game-panel-enter { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }

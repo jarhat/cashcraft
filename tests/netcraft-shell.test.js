@@ -46,17 +46,42 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
   document.listeners.contextmenu({ preventDefault() { prevented = true; } });
   assert.equal(prevented, true);
   $('canvas').listeners.webglcontextlost();
-  assert.match($('connection-status').textContent, /Graphics context lost/);
-  context.Module.setConnectionStatus('');
-  assert.equal($('connection-status').hidden, false);
-  context.Module.graphicsLost = false;
-  context.Module.setConnectionStatus('Connecting');
+  assert.match($('game-error').textContent, /Graphics context lost/);
+  context.Module.setConnectionStatus('Connecting', 'Connecting to game server');
+  assert.match($('game-error').textContent, /Connecting to game server/);
   assert.equal($('connection-status').textContent, 'Connecting');
   assert.equal($('connection-status').hidden, false);
   context.Module.setGameReady();
   assert.equal($('loading-screen').hidden, true);
   context.Module.setConnectionStatus('');
   assert.equal($('connection-status').hidden, true);
+});
+
+test('NetCraft reports renderer errors separately from server connection state', () => {
+  const elements = new Map();
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      style: {}, value: '', hidden: false,
+      addEventListener() {}, setAttribute() {},
+    });
+    return elements.get(id);
+  };
+  const document = { getElementById: $, querySelector: () => $('controls'), addEventListener() {} };
+  const window = { addEventListener() {} };
+  const context = { document, window, console, Date, Math };
+  runInNewContext(script, context);
+  context.Module.setConnectionStatus('', 'Connected to game server');
+  window.onerror('WebAssembly runtime error');
+  assert.match($('game-error').textContent, /renderer could not start.*WebAssembly runtime error.*Connected to game server/);
+  assert.equal($('loading-screen').hidden, false);
+  context.Module.setConnectionStatus('Disconnected', 'Disconnected from game server');
+  assert.match($('game-error').textContent, /renderer could not start.*Disconnected from game server/);
+  assert.equal($('game-error').hidden, false);
+  context.Module.gameError = '';
+  context.Module.setGameReady();
+  context.Module.setConnectionStatus('', 'Connected to game server');
+  window.onerror('Late failure');
+  assert.match($('game-error').textContent, /error after rendering started.*Late failure.*Connected to game server/);
 });
 
 test('NetCraft parses encoded launch arguments without splitting encoded characters', async () => {

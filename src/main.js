@@ -231,20 +231,26 @@ function notifyTokenReceipts(scannedUtxos) {
   const wallet = receiptStorageKey();
   const legacyMessage = 'Welcome! Your GAMBA token has arrived: enjoy your special diamond perk.';
   const message = 'Received 1 GAMBA';
-  if (state.messages.includes(legacyMessage) || state.messages.includes(message)) {
-    state.gambaNotified = true;
-  }
-  state.messages = state.gambaNotified ? [message] : [];
+  const legacy = !state.receiptTracking && (state.gambaNotified ||
+    state.messages.includes(legacyMessage) || state.messages.includes(message));
+  state.messages = state.messages.filter((entry) => entry === message || entry === legacyMessage)
+    .map(() => message);
   const sent = new Set(state.sent);
-  const received = !state.gambaNotified && scannedUtxos.some((utxo) =>
+  const seen = new Set(state.seen);
+  const matching = scannedUtxos.filter((utxo) =>
     utxo.token && !utxo.token.nft &&
     String(utxo.token.category).toLowerCase() === rewardCategory &&
     BigInt(utxo.token.amount || 0) === 1n &&
-    !sent.has(utxo.txid.toLowerCase()),
+    !sent.has(utxo.txid.toLowerCase()) && utxoKey(utxo),
   );
-  if (received) {
+  const received = matching.filter((utxo) => !seen.has(utxoKey(utxo)));
+  for (const utxo of matching) seen.add(utxoKey(utxo));
+  state.seen = [...seen];
+  state.receiptTracking = true;
+  if (received.length && !legacy) {
     state.gambaNotified = true;
-    state.messages = [message];
+    state.messages.push(...received.map(() => message));
+    state.messages = state.messages.slice(-100);
     state.unread = true;
   } else if (!state.messages.length && !state.beerNotified) {
     state.unread = false;
@@ -254,14 +260,14 @@ function notifyTokenReceipts(scannedUtxos) {
   if (receiptWallet !== wallet) {
     $('token-receipt-notifications').replaceChildren();
     $('gamba-sound-controls').hidden = true;
-    if (state.messages.length) addReceiptNotice();
+    state.messages.forEach(() => addReceiptNotice());
     if (state.beerNotified) addReceiptNotice();
     if (state.unread) $('notification-indicator').hidden = false;
     receiptWallet = wallet;
-  } else if (received) {
-    addReceiptNotice();
+  } else if (received.length && !legacy) {
+    received.forEach(() => addReceiptNotice());
   }
-  if (received) {
+  if (received.length && !legacy) {
     $('notification-indicator').hidden = false;
     showGambaCelebration();
   }
@@ -539,6 +545,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         $('log').textContent = '';
         $('address').textContent = address;
         addressReady = true;
+        if ($('connection-dialog').open) $('connection-dialog').close();
         $('connection-loading').hidden = false;
         const submission = submitCashAddress(address).catch((error) => {
           if (walletReady && manager === connectionManager) {
@@ -1851,6 +1858,7 @@ updateGameRewardAddress = setupGames($, {
   claimBeer: claimBeerReward,
   translate,
   getRewardAddress: () => walletReady ? addressFor(0, 0) : null,
+  autoOpen: new URLSearchParams(window.location.search).has('c'),
 });
 
 $('show-nfts').addEventListener('change', () => {
@@ -1912,6 +1920,12 @@ for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notific
 function markNotificationsRead() {
   $('notification-indicator').hidden = true;
 }
+const gameNotificationIndicator = $('game-notification-indicator');
+const syncGameNotificationIndicator = () => {
+  gameNotificationIndicator.hidden = $('notification-indicator').hidden;
+};
+new MutationObserver(syncGameNotificationIndicator).observe($('notification-indicator'), { attributes: true, attributeFilter: ['hidden'] });
+syncGameNotificationIndicator();
 $('notifications-toggle').addEventListener('click', () => {
   if (!notificationsDialog.open) notificationsDialog.showModal();
   markNotificationsRead();
@@ -1989,7 +2003,7 @@ async function playGambaSound() {
 }
 
 function showGambaCelebration() {
-  if (!notificationsDialog.open) notificationsDialog.showModal();
+  if (!notificationsDialog.open && !$('game-dialog')?.open) notificationsDialog.showModal();
   void playGambaSound();
 }
 

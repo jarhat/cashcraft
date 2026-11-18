@@ -191,6 +191,13 @@ Block edits are paused while disconnected; they are not queued.
 Disconnecting a wallet does not close the game; its reward address is cleared
 and can be connected again while playing.
 
+The loading screen remains until the first frame is rendered. Graphics and
+runtime errors are reported separately from the server connection, which can
+remain connected even if rendering fails. Check the browser console for the
+underlying error; a lost WebGL context requires reloading the game. After
+changing the client, rebuild the WASM files in `NETCRAFT_BUILD_PATH`; restarting
+only the server does not update the browser client.
+
 The server simulates up to eight passive, sheep-like animals near active
 players. Their movement is shared with all connected clients and follows the
 current terrain and block edits. Animals despawn when no players are nearby;
@@ -216,7 +223,9 @@ rewards disabled unless `NETCRAFT_MINING_REWARDS_ENABLED=true`.
 
 On touch devices, use the joystick to move, drag the game view to look, and use
 the on-screen buttons to jump, mine, build, and change blocks. The Sound button
-enables synthesized block sounds; the game dialog also has a fullscreen button.
+enables block and footstep sounds after a user gesture; the game dialog also
+has a fullscreen button. The `?c` URL parameter opens the game in a
+viewport-filling dialog; browser fullscreen still requires a user gesture.
 Touch devices start with a four-chunk viewing radius to limit rendering cost;
 use `/view <radius>` to adjust it.
 

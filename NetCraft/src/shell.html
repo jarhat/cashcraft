@@ -118,7 +118,8 @@
       .mobile-stick { position: absolute; left: 16px; bottom: 20px; width: 140px; height: 140px; }
       .mobile-stick-knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: rgba(255,255,255,.35); }
       .mobile-controls button { position: absolute; width: 68px; height: 68px; font-size: 15px; }
-      #mobile-mine { right: 92px; bottom: 70px; }
+      #mobile-mine { right: 92px; bottom: 70px; background: radial-gradient(circle at 35% 25%, #856948, #392d22 70%); border: 2px solid #d5be8d; box-shadow: inset 0 2px 6px #ffffff38, 0 4px 10px #0009; }
+      #mobile-mine:active { transform: scale(.92) rotate(-8deg); }
       #mobile-build { right: 16px; bottom: 20px; }
       #mobile-jump { right: 16px; bottom: 100px; }
       #mobile-next { right: 168px; bottom: 20px; }
@@ -127,6 +128,8 @@
       #sound-toggle[aria-pressed="true"] .sound-muted { display: none; }
       #connection-status { display: block !important; position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 26; max-width: 90%; padding: 8px 12px; background: rgba(0,0,0,.8); color: white; text-align: center; }
       #connection-status[hidden] { display: none !important; }
+      #game-error { display: block !important; position: fixed; top: 110px; left: 50%; transform: translateX(-50%); z-index: 41; width: min(90%, 600px); padding: 14px; background: #351c1c; color: white; font: 14px system-ui, sans-serif; text-align: center; overflow-wrap: anywhere; }
+      #game-error[hidden] { display: none !important; }
       @media (pointer: coarse) { .mobile-controls { display: block !important; } }
     </style>
   </head>
@@ -1247,12 +1250,13 @@
       <span id="loading-message">Preparing your world...</span>
     </div>
     <div id="connection-status" role="status" hidden></div>
+    <div id="game-error" role="alert" hidden></div>
     <button id="sound-toggle" type="button" aria-pressed="false" aria-label="Enable sound" title="Enable sound">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3zM16 8a6 6 0 0 1 0 8"/><path class="sound-muted" d="M17 3 3 21"/></svg>
     </button>
     <div class="mobile-controls" aria-label="Touch controls">
       <div id="mobile-stick" class="mobile-stick" aria-label="Move"><div id="mobile-stick-knob" class="mobile-stick-knob"></div></div>
-      <button id="mobile-mine" type="button" aria-label="Mine" title="Mine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 17 7m-5-4c3-1 7 0 9 4l-3 1-3-3-3-2ZM3 19l2 2"/></svg></button>
+      <button id="mobile-mine" type="button" aria-label="Mine" title="Hold to mine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 16 8m-4-4c4-2 8-1 10 3l-4 1-3-2-3-2ZM3 19l2 2"/></svg></button>
       <button id="mobile-build" type="button" aria-label="Build" title="Build"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4v10l-8 4-8-4V7zM4 7l8 4 8-4m-8 4v10"/></svg></button>
       <button id="mobile-jump" type="button" aria-label="Jump" title="Jump"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6M5 21h14"/></svg></button>
       <button id="mobile-next" type="button" aria-label="Next block" title="Next block"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-5-5 5 5-5 5M4 5h4v4H4zM4 15h4v4H4z"/></svg></button>
@@ -1267,14 +1271,33 @@
         preRun: [],
         postRun: [],
         websocket: {},
-        setConnectionStatus: function(text) {
-          if (Module.graphicsLost) text = 'Graphics context lost. Reload the game to restore rendering.';
+        connectionState: 'Server connection not started',
+        gameReady: false,
+        gameError: '',
+        setConnectionStatus: function(text, state) {
+          if (state) Module.connectionState = state;
           var element = document.getElementById('connection-status');
           element.textContent = text;
           element.hidden = !text;
           if (text) document.getElementById('loading-message').textContent = text;
+          Module.updateGameError();
         },
-        setGameReady: function() { document.getElementById('loading-screen').hidden = true; },
+        updateGameError: function() {
+          var element = document.getElementById('game-error');
+          element.hidden = !Module.gameError;
+          if (Module.gameError) element.textContent = Module.gameError + ' ' + Module.connectionState + '.';
+        },
+        reportGameError: function(message) {
+          if (!Module.gameError) Module.gameError = message;
+          Module.updateGameError();
+        },
+        setGameReady: function() {
+          Module.gameReady = true;
+          document.getElementById('loading-screen').hidden = true;
+        },
+        onAbort: function(reason) {
+          Module.reportGameError('Game stopped: ' + String(reason).slice(0, 200) + '. Reload the game.');
+        },
         print: (function() {
           var element = document.getElementById('output');
           if (element) element.value = ''; // clear browser cache
@@ -1305,8 +1328,7 @@
 
           canvas.addEventListener('webglcontextlost', function() {
             Module.graphicsLost = true;
-            Module.setGameReady();
-            Module.setConnectionStatus('Graphics context lost. Reload the game to restore rendering.');
+            Module.reportGameError('Graphics context lost. Reload the game to restore rendering.');
           }, false);
 
           return canvas;
@@ -1356,15 +1378,10 @@
         });
       })();
       Module.setStatus('Downloading...');
-      window.onerror = function(event) {
-        // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
-        Module.setStatus('Exception thrown, see JavaScript console');
-        Module.setGameReady();
-        Module.setConnectionStatus('Game could not start. Check the browser console and reload.');
+      window.onerror = function(message) {
+        var stage = Module.gameReady ? 'Game error after rendering started' : 'Game renderer could not start';
+        Module.reportGameError(stage + ': ' + String(message).slice(0, 200) + '. Check the browser console and reload if needed.');
         spinnerElement.style.display = 'none';
-        Module.setStatus = function(text) {
-          if (text) Module.printErr('[post-exception status] ' + text);
-        };
       };
 
         document.addEventListener('contextmenu', function(event) { event.preventDefault(); });
@@ -1372,9 +1389,12 @@
         (function() {
           var context = null;
           var enabled = false;
+          var buffers = {};
           var button = document.getElementById('sound-toggle');
-          button.addEventListener('click', function() {
-            if (!enabled) {
+          button.addEventListener('click', async function() {
+            if (enabled) {
+              enabled = false;
+            } else {
               var AudioContext = window.AudioContext || window.webkitAudioContext;
               if (!AudioContext) {
                 button.setAttribute('aria-label', 'Sound unavailable');
@@ -1382,29 +1402,36 @@
                 return;
               }
               context = context || new AudioContext();
-              context.resume().catch(function(error) { console.error('Audio could not start:', error); });
+              try {
+                await context.resume();
+                await Promise.all(['mine', 'build', 'step'].map(async function(name) {
+                  if (buffers[name]) return;
+                  var bytes = Module.FS.readFile('/sounds/' + name + '.wav');
+                  buffers[name] = await context.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+                }));
+                enabled = true;
+              } catch (error) {
+                console.error('Game audio could not start:', error);
+                button.setAttribute('aria-label', 'Sound unavailable; tap to retry');
+                button.title = 'Sound unavailable; tap to retry';
+                Module.setConnectionStatus('Game sound unavailable. Tap sound to retry.');
+                return;
+              }
             }
-            enabled = !enabled;
             button.setAttribute('aria-pressed', String(enabled));
             var label = enabled ? 'Disable sound' : 'Enable sound';
             button.setAttribute('aria-label', label);
             button.title = label;
           });
-          Module.playBlockSound = function(placed) {
+          Module.playGameSound = function(name) {
             if (!enabled || !context || context.state !== 'running') return;
-            var oscillator = context.createOscillator();
-            var gain = context.createGain();
-            var now = context.currentTime;
-            oscillator.type = 'triangle';
-            oscillator.frequency.setValueAtTime(placed ? 240 : 120, now);
-            oscillator.frequency.exponentialRampToValueAtTime(placed ? 140 : 55, now + .08);
-            gain.gain.setValueAtTime(.08, now);
-            gain.gain.exponentialRampToValueAtTime(.001, now + .09);
-            oscillator.connect(gain);
-            gain.connect(context.destination);
-            oscillator.start(now);
-            oscillator.stop(now + .1);
+            if (!buffers[name]) return;
+            var source = context.createBufferSource();
+            source.buffer = buffers[name];
+            source.connect(context.destination);
+            source.start();
           };
+          Module.playBlockSound = function(placed) { Module.playGameSound(placed ? 'build' : 'mine'); };
         })();
 
         (function() {

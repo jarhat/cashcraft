@@ -4,9 +4,12 @@ Run before starting the server:
 
     mkdir -p data
     python3 NetCraft/builder.py --init-park data/netcraft.db
+    python3 NetCraft/builder.py --add-park data/existing-world.db
 
-The database path must not already exist. The server then opens it normally;
-this script does not change a running server or overwrite an existing world.
+Stop the server before running either command. --init-park creates a new
+database; --add-park requires an existing Rust-server world and aborts
+without changes if its tower or sky park overlaps any existing world edits.
+Back up existing worlds before building.
 It requires a C compiler and the checked-in terrain sources so it can clear
 only blocks that actually exist in the server's generated terrain.
 
@@ -445,6 +448,19 @@ def make_park(terrain):
         put(x, floor + 22 - (x - 18) // 2, 0, COLOR_CYAN)
     return edits
 
+def park_rows(edits):
+    """Include the mirrored chunk-edge entries expected by the server."""
+    for (x, y, z), block in edits.items():
+        p, q = x // 32, z // 32
+        for dx in (-1, 0, 1):
+            for dz in (-1, 0, 1):
+                if dx and (x + dx) // 32 == p:
+                    continue
+                if dz and (z + dz) // 32 == q:
+                    continue
+                yield (p + dx, q + dz, x, y, z,
+                       block if dx == dz == 0 else -block)
+
 def initialize_park(path):
     """Create, but never replace, a database for the Rust server."""
     terrain = terrain_in_park()
@@ -457,31 +473,49 @@ def initialize_park(path):
         with closing(sqlite3.connect(path)) as db, db:
             db.execute("CREATE TABLE block (p INTEGER NOT NULL, q INTEGER NOT NULL, x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL, w INTEGER NOT NULL)")
             db.execute("CREATE UNIQUE INDEX block_pqxyz_idx ON block (p,q,x,y,z)")
-            rows = []
-            for (x, y, z), block in edits.items():
-                p, q = x // 32, z // 32
-                for dx in (-1, 0, 1):
-                    for dz in (-1, 0, 1):
-                        if dx and (x + dx) // 32 == p:
-                            continue
-                        if dz and (z + dz) // 32 == q:
-                            continue
-                        rows.append((p + dx, q + dz, x, y, z,
-                                     block if dx == dz == 0 else -block))
-            db.executemany("INSERT INTO block VALUES (?,?,?,?,?,?)", rows)
+            db.executemany("INSERT INTO block VALUES (?,?,?,?,?,?)", park_rows(edits))
         completed = True
     finally:
         if not completed:
             os.unlink(path)
     print("Created %s with %d park edits. Start the server with this database." % (path, len(edits)))
 
+def add_park(path):
+    """Atomically add the park to a stopped Rust world if its footprint is clear."""
+    terrain = terrain_in_park()
+    edits = make_park(terrain)
+    with closing(sqlite3.connect(Path(path).resolve().as_uri() + "?mode=rw", uri=True, timeout=10)) as db:
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            for table in ("block", "light", "sign"):
+                conflict = db.execute(
+                    "SELECT x,y,z FROM " + table + " WHERE "
+                    "(x BETWEEN ? AND ? AND z BETWEEN ? AND ? AND y BETWEEN ? AND ?) OR "
+                    "(x BETWEEN -8 AND 8 AND z BETWEEN ? AND ? AND y BETWEEN 31 AND ?) LIMIT 1",
+                    (-PARK_HALF_WIDTH, PARK_HALF_WIDTH, PARK_Z_MIN, PARK_Z_MAX,
+                     SKY_Y, SKY_Y + 36, TOWER_Z - 8, TOWER_Z + 8, SKY_Y),
+                ).fetchone()
+                if conflict:
+                    raise ValueError("Existing %s edit at %s overlaps the park; no changes made" % (table, conflict))
+            db.executemany("INSERT INTO block VALUES (?,?,?,?,?,?)", park_rows(edits))
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+    print("Added %d park edits to %s. Restart the server." % (len(edits), path))
+
 def main():
-    if any(arg in ('--init-park', '--help', '-h') for arg in sys.argv[1:]):
+    if any(arg in ('--init-park', '--add-park', '--help', '-h') for arg in sys.argv[1:]):
         parser = argparse.ArgumentParser(description=__doc__,
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
-        parser.add_argument('--init-park', required=True, metavar='NEW_DATABASE')
+        group = parser.add_mutually_exclusive_group(required=True)
+        group.add_argument('--init-park', metavar='NEW_DATABASE')
+        group.add_argument('--add-park', metavar='EXISTING_DATABASE')
         args = parser.parse_args()
-        initialize_park(args.init_park)
+        if args.init_park:
+            initialize_park(args.init_park)
+        else:
+            add_park(args.add_park)
         return
     client = get_client()
     set_block = client.set_block

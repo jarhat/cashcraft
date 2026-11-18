@@ -3318,6 +3318,11 @@ void handle_mouse_input() {
 
 void handle_movement(double dt) {
     static float dy = 0;
+#ifdef __EMSCRIPTEN__
+    static float step_distance = 0;
+    float old_x = g->players->state.x, old_z = g->players->state.z;
+    bool grounded = false;
+#endif
     State *s = &g->players->state;
     double sz = 0;
     double sx = 0;
@@ -3396,12 +3401,26 @@ void handle_movement(double dt) {
         s->z += vz;
         if (g->noclip) continue;
         if (collide(2, &s->x, &s->y, &s->z)) {
+#ifdef __EMSCRIPTEN__
+            if (dy < 0) grounded = true;
+#endif
             dy = 0;
         }
     }
     if (s->y < 0) {
         s->y = highest_block(s->x, s->z) + 2;
     }
+#ifdef __EMSCRIPTEN__
+    if (grounded && !g->flying) {
+        step_distance += hypotf(s->x - old_x, s->z - old_z);
+        if (step_distance >= 2.0f) {
+            step_distance = 0;
+            EM_ASM(if (Module.playGameSound) Module.playGameSound('step'););
+        }
+    } else {
+        step_distance = 0;
+    }
+#endif
 }
 
 void handle_compressed_multiblock_update(char *buffer, int len,
@@ -3592,7 +3611,7 @@ void parse_buffer(char *buffer, int len) {
         }
 #ifdef __EMSCRIPTEN__
         char url[256] = {0};
-        if (sscanf(line, "t,%256[^\n]", url) == 1) {
+        if (sscanf(line, "t,%255[^\n]", url) == 1) {
             printf("server provided texture url: %s\n", url);
             if (strcmp(url, "-") == 0 || strlen(url) == 0) {
 #pragma clang diagnostic push
@@ -3606,7 +3625,7 @@ void parse_buffer(char *buffer, int len) {
 
                     function writeString(p, s, n) {
                         if (s.length + 1 > n) {
-                            console.err("url is too long, ignoring: " + s);
+                            console.error("url is too long, ignoring: " + s);
                             return;
                         }
 
@@ -3681,10 +3700,16 @@ int main(int argc, char **argv) {
 
     // WINDOW INITIALIZATION //
     if (!glfwInit()) {
+#ifdef __EMSCRIPTEN__
+        EM_ASM(Module.reportGameError('Could not initialize the game window. Check WebGL support and reload.'););
+#endif
         return -1;
     }
     create_window();
     if (!g->window) {
+#ifdef __EMSCRIPTEN__
+        EM_ASM(Module.reportGameError('Could not create the game window. Check WebGL support and reload.'););
+#endif
         glfwTerminate();
         return -1;
     }
@@ -3714,6 +3739,9 @@ int main(int argc, char **argv) {
 #endif
 
     if (glewInit() != GLEW_OK) {
+#ifdef __EMSCRIPTEN__
+        EM_ASM(Module.reportGameError('Could not initialize graphics. Check WebGL support and reload.'););
+#endif
         return -1;
     }
 
@@ -3862,7 +3890,7 @@ void client_opened(int fd, void *userData) {
         g->chunks[i].needs_resync = 1;
     }
     pending_chunk_request_count = 0;
-    EM_ASM(Module.setConnectionStatus(''););
+    EM_ASM(Module.setConnectionStatus("", 'Connected to game server'););
 #endif
     add_message("Connected to server");
     client_start();
@@ -3897,7 +3925,7 @@ void client_connection_failed(void) {
     g->observe1 = g->observe2 = 0;
     reconnect_at = emscripten_get_now() + reconnect_delay * 1000.0;
     reconnect_delay = MIN(reconnect_delay * 2, 30);
-    EM_ASM(Module.setConnectionStatus('Disconnected. Reconnecting automatically; block edits are paused.'););
+    EM_ASM(Module.setConnectionStatus('Disconnected. Reconnecting automatically; block edits are paused.', 'Disconnected from game server'););
 }
 #endif
 
@@ -3992,9 +4020,6 @@ void main_inited() {
     // BEGIN MAIN LOOP //
     g->previous_iter_timestamp = glfwGetTime();
     g->initialized = true;
-#ifdef __EMSCRIPTEN__
-    EM_ASM(Module.setGameReady(););
-#endif
 }
 
 void main_shutdown() {
@@ -4022,6 +4047,7 @@ void one_iter() {
     State *s = &g->players->state;
 
 #ifdef __EMSCRIPTEN__
+    static bool game_frame_presented = false;
     if (g->mode == MODE_ONLINE) {
         double now_ms = emscripten_get_now();
         if (connecting && now_ms - connect_started > 15000) {
@@ -4031,7 +4057,7 @@ void one_iter() {
             connecting = true;
             connect_started = now_ms;
             client_enable();
-            EM_ASM(Module.setConnectionStatus('Connecting to game server...'););
+            EM_ASM(Module.setConnectionStatus('Connecting to game server...', 'Connecting to game server'););
             client_connect(g->server_addr, g->server_port);
         }
     }
@@ -4122,6 +4148,12 @@ void one_iter() {
 
     // SWAP AND POLL //
     glfwSwapBuffers(g->window);
+#ifdef __EMSCRIPTEN__
+    if (g->initialized && !game_frame_presented) {
+        game_frame_presented = true;
+        EM_ASM(Module.setGameReady(););
+    }
+#endif
     glfwPollEvents();
     if (glfwWindowShouldClose(g->window)) {
         g->running = false;

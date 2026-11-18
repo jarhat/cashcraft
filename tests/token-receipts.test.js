@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
+import { utxoKey } from '../src/utils.js';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
@@ -24,7 +25,7 @@ function receiptHarness(stored = new Map(), wallet = 'wallet') {
   };
   const script = source.slice(source.indexOf('let rewardCategory ='), source.indexOf('\nfunction report('));
   const context = {
-    network: 'mainnet', API_BASE_URL: '', localStorage,
+    network: 'mainnet', API_BASE_URL: '', localStorage, utxoKey,
     addressFor: () => wallet, translate: (text) => text,
     $: (id) => elements.get(id), document: { createElement: () => ({
       children: [], append(...children) { this.children.push(...children); },
@@ -38,7 +39,7 @@ function receiptHarness(stored = new Map(), wallet = 'wallet') {
   return { api, category, elements, stored, get celebrations() { return celebrations; } };
 }
 
-test('celebrates one GAMBA once per wallet, not other tokens or self-sent change', async () => {
+test('announces each distinct GAMBA output once, not other tokens or self-sent change', async () => {
   const h = receiptHarness();
   await h.api.loadRewardCategory();
   h.api.rememberSentTransaction('self');
@@ -50,11 +51,11 @@ test('celebrates one GAMBA once per wallet, not other tokens or self-sent change
   assert.equal(h.celebrations, 0);
   assert.deepEqual(h.elements.get('token-receipt-notifications').notices, []);
 
-  const reward = { txid: 'reward', token: { category: h.category, amount: 1n } };
+  const reward = { txid: 'reward', vout: 0, token: { category: h.category, amount: 1n } };
   h.api.notifyTokenReceipts([other, reward]);
   h.api.notifyTokenReceipts([reward, { ...reward, txid: 'another' }]);
-  assert.equal(h.celebrations, 1);
-  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 GAMBA TOKEN']);
+  assert.equal(h.celebrations, 2);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 GAMBA TOKEN', '1 GAMBA TOKEN']);
   const notice = h.elements.get('token-receipt-notifications').items[0];
   assert.equal(notice.className, 'notification-message gamba-notice');
   assert.equal(notice.children.length, 2);
@@ -66,7 +67,7 @@ test('celebrates one GAMBA once per wallet, not other tokens or self-sent change
   await reload.api.loadRewardCategory();
   reload.api.notifyTokenReceipts([reward]);
   assert.equal(reload.celebrations, 0);
-  assert.deepEqual(reload.elements.get('token-receipt-notifications').notices, ['1 GAMBA TOKEN']);
+  assert.deepEqual(reload.elements.get('token-receipt-notifications').notices, ['1 GAMBA TOKEN', '1 GAMBA TOKEN']);
 
   const anotherWallet = receiptHarness(h.stored, 'another-wallet');
   await anotherWallet.api.loadRewardCategory();
@@ -84,7 +85,7 @@ test('migrates existing notices without replaying GAMBA or showing other tokens'
   })]]);
   const h = receiptHarness(stored);
   await h.api.loadRewardCategory();
-  h.api.notifyTokenReceipts([{ txid: 'reward', token: { category: h.category, amount: 1n } }]);
+  h.api.notifyTokenReceipts([{ txid: 'reward', vout: 0, token: { category: h.category, amount: 1n } }]);
   assert.equal(h.celebrations, 0);
   assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 GAMBA TOKEN']);
   assert.deepEqual(JSON.parse(stored.values().next().value).messages, ['Received 1 GAMBA']);
@@ -96,7 +97,7 @@ test('does not show an unrecorded celebration if browser storage fails', async (
   await h.api.loadRewardCategory();
   stored.set = () => { throw new Error('Storage unavailable'); };
   assert.throws(
-    () => h.api.notifyTokenReceipts([{ txid: 'reward', token: { category: h.category, amount: 1n } }]),
+    () => h.api.notifyTokenReceipts([{ txid: 'reward', vout: 0, token: { category: h.category, amount: 1n } }]),
     /Storage unavailable/,
   );
   assert.equal(h.celebrations, 0);

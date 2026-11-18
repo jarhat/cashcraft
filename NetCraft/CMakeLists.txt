@@ -72,7 +72,7 @@ if (EMSCRIPTEN)
     #set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s AUDIO_WORKLET=1")
     #set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s WASM_WORKERS=1")
     # C functions callable from JavaScript
-    set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s EXPORTED_RUNTIME_METHODS=\"['cwrap','ccall','HEAP8']\"")
+    set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s EXPORTED_RUNTIME_METHODS=\"['cwrap','ccall','HEAP8','FS']\"")
     #set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS "  -s USE_PTHREADS=1")
 
     set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -lwebsocket.js")
@@ -102,11 +102,11 @@ if (EMSCRIPTEN)
         set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -O3")
 
         # Generate a .data file preloaded with shaders and textures
-        set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " --preload-file ${CMAKE_SOURCE_DIR}/shaders@/shaders --preload-file ${CMAKE_SOURCE_DIR}/textures@/textures")
+        set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " --preload-file ${CMAKE_SOURCE_DIR}/shaders@/shaders --preload-file ${CMAKE_SOURCE_DIR}/textures@/textures --preload-file ${CMAKE_SOURCE_DIR}/sounds@/sounds")
     else ()
         message("warning: embedding data files in .js, for a smaller build rerun cmake with -CMAKE_BUILD_TYPE=Release")
         # Embedding data files in the .js is less efficient, but allows running from a local file so is useful for testing
-        set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " --embed-file ${CMAKE_SOURCE_DIR}/shaders@/shaders --embed-file ${CMAKE_SOURCE_DIR}/textures@/textures")
+        set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " --embed-file ${CMAKE_SOURCE_DIR}/shaders@/shaders --embed-file ${CMAKE_SOURCE_DIR}/textures@/textures --embed-file ${CMAKE_SOURCE_DIR}/sounds@/sounds")
     endif ()
 
     if (WASM)
