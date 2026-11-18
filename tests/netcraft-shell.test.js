@@ -39,7 +39,7 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
   assert.deepEqual(updates, [['netcraft_set_reward_address', ''], ['netcraft_set_reward_address', 'new']]);
   assert.ok(context.Module.websocket);
   assert.equal(typeof $('mobile-mine').listeners.pointerdown, 'function');
-  assert.equal(typeof $('mobile-stick').listeners.pointermove, 'function');
+  assert.equal(typeof window.listeners.pointermove, 'function');
   assert.equal(typeof $('sound-toggle').listeners.click, 'function');
   assert.equal(typeof context.Module.playBlockSound, 'function');
   let prevented = false;
@@ -136,7 +136,7 @@ test('game audio starts from a gesture and mutes effects and music', async () =>
   listeners.pointerdown({ isTrusted: true });
   await new Promise(setImmediate);
   assert.equal($('sound-toggle').attributes['aria-label'], 'Disable sound');
-  assert.equal(nodes.filter((node) => node === 'music').length, 2);
+  assert.equal(nodes.filter((node) => node === 'music').length, 3);
   context.Module.playBlockSound(0);
   assert.equal(nodes.filter((node) => node === 'effect').length, 1);
   $('sound-toggle').listeners.click();
@@ -145,7 +145,7 @@ test('game audio starts from a gesture and mutes effects and music', async () =>
   assert.equal(nodes.filter((node) => node === 'effect').length, 1);
   $('sound-toggle').listeners.click();
   await new Promise(setImmediate);
-  assert.equal(nodes.filter((node) => node === 'music').length, 4);
+  assert.equal(nodes.filter((node) => node === 'music').length, 3);
   context.Module.playBlockSound(1);
   assert.equal(nodes.filter((node) => node === 'effect').length, 2);
   assert.equal(timers.size, 1);
@@ -178,6 +178,8 @@ test('touch controls recover from unavailable pointer capture and release outsid
   $('mobile-mine').listeners.pointerdown({ pointerId: 8 });
   windowListeners.blur.forEach((fn) => fn());
   $('mobile-stick').listeners.pointerdown({ pointerId: 9, clientX: 100, clientY: 50 });
+  windowListeners.pointermove.forEach((fn) => fn({ pointerId: 9, clientX: 50, clientY: 0 }));
+  assert.deepEqual(calls.at(-1), ['touch_set_move', [0, -1]]);
   windowListeners.pointercancel.forEach((fn) => fn({ pointerId: 9 }));
   assert.deepEqual(calls.filter(([name]) => name === 'touch_set_mine').map(([, args]) => args[0]), [1, 0, 1, 0, 0]);
   assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);

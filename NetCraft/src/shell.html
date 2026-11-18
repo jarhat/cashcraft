@@ -130,7 +130,7 @@
       #connection-status[hidden] { display: none !important; }
       #game-error { display: block !important; position: fixed; top: 110px; left: 50%; transform: translateX(-50%); z-index: 41; width: min(90%, 600px); padding: 14px; background: #351c1c; color: white; font: 14px system-ui, sans-serif; text-align: center; overflow-wrap: anywhere; }
       #game-error[hidden] { display: none !important; }
-      @media (pointer: coarse) { .mobile-controls { display: block !important; } }
+      @media (any-pointer: coarse) { .mobile-controls { display: block !important; } }
     </style>
   </head>
   <body>
@@ -1401,46 +1401,30 @@
           var button = document.getElementById('sound-toggle');
           var loading = null;
           var musicTimer = null;
-          var noteIndex = 0;
-          var melody = [
-            [392, 1], [440, .5], [493.88, .5], [587.33, 1.5], [523.25, .5],
-            [493.88, 1], [440, 1], [392, 2], [0, .5],
-            [440, .5], [523.25, 1], [587.33, 1], [659.25, 1.5], [587.33, .5],
-            [523.25, 1], [493.88, 1], [440, 2], [0, .5],
-            [587.33, 1], [659.25, .5], [698.46, .5], [783.99, 1.5], [659.25, .5],
-            [587.33, 1], [523.25, 1], [493.88, 2], [0, .5],
-            [523.25, .5], [587.33, 1], [493.88, 1], [440, 1], [392, 3], [0, 1]
-          ];
+          var beat = 0;
+          var bass = [55, 0, 55, 0, 65.41, 0, 73.42, 0, 49, 0, 55, 0, 82.41, 0, 73.42, 0];
+          function synth(type, frequency, volume, duration) {
+            var start = context.currentTime;
+            var oscillator = context.createOscillator();
+            var gain = context.createGain();
+            oscillator.type = type;
+            oscillator.frequency.value = frequency;
+            gain.gain.setValueAtTime(volume, start);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+            oscillator.connect(gain);
+            gain.connect(context.destination);
+            oscillator.start(start);
+            oscillator.stop(start + duration);
+          }
           function playMusicNote() {
             musicTimer = null;
             if (!enabled || !context || context.state !== 'running') return;
-            var note = melody[noteIndex++ % melody.length];
-            var frequency = note[0];
-            var duration = note[1] * 0.34;
-            if (frequency) {
-              var start = context.currentTime;
-              var oscillator = context.createOscillator();
-              var overtone = context.createOscillator();
-              var overtoneGain = context.createGain();
-              var gain = context.createGain();
-              oscillator.type = 'sine';
-              oscillator.frequency.value = frequency;
-              overtone.type = 'sine';
-              overtone.frequency.value = frequency * 2;
-              overtoneGain.gain.value = 0.12;
-              gain.gain.setValueAtTime(0.0001, start);
-              gain.gain.linearRampToValueAtTime(0.055, start + Math.min(.06, duration / 3));
-              gain.gain.exponentialRampToValueAtTime(0.0001, start + duration * .9);
-              oscillator.connect(gain);
-              overtone.connect(overtoneGain);
-              overtoneGain.connect(gain);
-              gain.connect(context.destination);
-              oscillator.start(start);
-              overtone.start(start);
-              oscillator.stop(start + duration);
-              overtone.stop(start + duration);
-            }
-            musicTimer = setTimeout(playMusicNote, duration * 1000);
+            var step = beat++ % 16;
+            if (bass[step]) synth('sawtooth', bass[step], 0.025, 0.16);
+            if (step === 0 || step === 7 || step === 10) synth('sine', 58, 0.08, 0.1);
+            if (step === 4 || step === 12) synth('triangle', 190, 0.04, 0.07);
+            if (step % 2 === 0) synth('square', 2200, 0.008, 0.025);
+            musicTimer = setTimeout(playMusicNote, 100);
           }
           async function unlock() {
             if (!enabled) return;
@@ -1547,7 +1531,7 @@
             capturePointer(stick, event.pointerId);
             move(event);
           });
-          stick.addEventListener('pointermove', function(event) { if (event.pointerId === stickPointer) move(event); });
+          window.addEventListener('pointermove', function(event) { if (event.pointerId === stickPointer) move(event); });
           ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(type) {
             stick.addEventListener(type, function(event) { if (event.pointerId === stickPointer) releaseStick(); });
           });

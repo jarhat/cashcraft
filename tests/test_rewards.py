@@ -43,7 +43,9 @@ class RewardTests(unittest.TestCase):
     def test_craft_social_preview_contains_donation_qr(self):
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
         client = TestClient(backend.app)
-        with patch.object(backend, "donation_address", return_value={"address": address, "network": "mainnet"}):
+        with sqlite3.connect(backend.DB_PATH) as db:
+            db.execute("INSERT INTO donation_addresses (network, address) VALUES (?, ?)", ("mainnet", address))
+        with patch.object(backend, "bch_rpc", side_effect=AssertionError("preview must not call BCHN")):
             response = client.get("/api/craft-preview.png")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-type"], "image/png")
@@ -58,9 +60,16 @@ class RewardTests(unittest.TestCase):
                     pixel = image.getpixel((left + (x + 4) * scale, top + (y + 4) * scale))
                     self.assertEqual(pixel, (0, 0, 0) if dark else (255, 255, 255))
 
+    def test_craft_social_preview_without_donation_address_still_serves_dragon(self):
+        with patch.object(backend, "bch_rpc", side_effect=AssertionError("preview must not call BCHN")):
+            response = TestClient(backend.app).get("/api/craft-preview.png")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "public, max-age=30")
+        with Image.open(io.BytesIO(response.content)) as image:
+            self.assertEqual(image.size, (1200, 675))
+
     def test_craft_social_preview_reports_missing_artwork(self):
-        with patch.object(backend, "donation_address", return_value={"address": "bitcoincash:test"}), \
-             patch.dict(os.environ, {"CRAFT_PREVIEW_IMAGE": str(Path(self.tmp.name) / "missing.png")}):
+        with patch.dict(os.environ, {"CRAFT_PREVIEW_IMAGE": str(Path(self.tmp.name) / "missing.png")}):
             self.assertEqual(TestClient(backend.app).get("/api/craft-preview.png").status_code, 503)
 
     def test_mining_reward_retries_the_same_transaction(self):
@@ -89,6 +98,58 @@ class RewardTests(unittest.TestCase):
         with patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "false"), \
              patch.object(backend, "NETCRAFT_DB_PATH", str(Path(self.tmp.name) / "missing.sqlite3")):
             self.assertFalse(backend.process_one_mining_reward())
+
+    def test_daily_mining_limit_persists_across_retries_and_defers_next_payout(self):
+        path = Path(self.tmp.name) / "netcraft.sqlite3"
+        address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
+        with sqlite3.connect(path) as db:
+            db.execute("""CREATE TABLE mining_rewards (
+                id INTEGER PRIMARY KEY, cash_address TEXT, category TEXT,
+                signed_tx TEXT, txid TEXT, sent_at TEXT
+            )""")
+            db.executemany("INSERT INTO mining_rewards VALUES (?, ?, ?, ?, ?, NULL)", [
+                (1, address, "a" * 64, "abcd", "c" * 64),
+                (2, address, "a" * 64, "ef01", "d" * 64),
+            ])
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path)), \
+             patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
+             patch.object(backend, "NETCRAFT_DAILY_PAYOUT_LIMIT", 1):
+            with patch.object(backend, "bch_rpc", side_effect=[RuntimeError("timeout"), RuntimeError("unavailable")]):
+                with self.assertRaises(RuntimeError):
+                    backend.process_one_mining_reward()
+            with patch.object(backend, "bch_rpc", return_value="c" * 64):
+                self.assertTrue(backend.process_one_mining_reward())
+            with patch.object(backend, "bch_rpc") as rpc:
+                self.assertFalse(backend.process_one_mining_reward())
+                rpc.assert_not_called()
+            with sqlite3.connect(path) as db:
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM mining_payout_reservations").fetchone()[0], 1)
+                db.execute("UPDATE mining_payout_reservations SET day = date('now', '-1 day')")
+            with patch.object(backend, "bch_rpc", return_value="d" * 64):
+                self.assertTrue(backend.process_one_mining_reward())
+
+    def test_address_limit_does_not_block_another_address(self):
+        path = Path(self.tmp.name) / "netcraft.sqlite3"
+        with sqlite3.connect(path) as db:
+            db.execute("""CREATE TABLE mining_rewards (
+                id INTEGER PRIMARY KEY, cash_address TEXT, category TEXT,
+                signed_tx TEXT, txid TEXT, sent_at TEXT
+            )""")
+            db.executemany("INSERT INTO mining_rewards VALUES (?, ?, ?, ?, ?, NULL)", [
+                (1, "first", "a" * 64, "01", "1" * 64),
+                (2, "first", "a" * 64, "02", "2" * 64),
+                (3, "second", "a" * 64, "03", "3" * 64),
+            ])
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path)), \
+             patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
+             patch.object(backend, "NETCRAFT_DAILY_PAYOUT_LIMIT", 2), \
+             patch.object(backend, "NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT", 1), \
+             patch.object(backend, "validate_token_aware_cashaddr"), \
+             patch.object(backend, "bch_rpc", side_effect=["1" * 64, "3" * 64]) as rpc:
+            self.assertTrue(backend.process_one_mining_reward())
+            self.assertTrue(backend.process_one_mining_reward())
+            self.assertFalse(backend.process_one_mining_reward())
+            self.assertEqual([call.args[1] for call in rpc.call_args_list], [["01"], ["03"]])
 
     def test_mina_total_counts_only_sent_rewards_in_current_category(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"

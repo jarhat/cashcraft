@@ -85,6 +85,13 @@ DB_PATH = Path(os.getenv("CASHADDR_DB_PATH", "/data/cash-addresses.sqlite3"))
 NETCRAFT_DB_PATH = os.getenv("NETCRAFT_DB_PATH", "").strip()
 NETCRAFT_MINING_REWARDS_ENABLED = os.getenv("NETCRAFT_MINING_REWARDS_ENABLED", "false")
 NETCRAFT_REWARD_WAKE_SECRET = os.getenv("NETCRAFT_REWARD_WAKE_SECRET", "")
+try:
+    NETCRAFT_DAILY_PAYOUT_LIMIT = int(os.getenv("NETCRAFT_DAILY_PAYOUT_LIMIT", "1000"))
+    NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT = int(os.getenv("NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT", "100"))
+except ValueError as exc:
+    raise RuntimeError("Mining payout limits must be positive integers.") from exc
+if NETCRAFT_DAILY_PAYOUT_LIMIT <= 0 or NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT <= 0:
+    raise RuntimeError("Mining payout limits must be positive integers.")
 if NETCRAFT_MINING_REWARDS_ENABLED not in ("true", "false"):
     raise RuntimeError("NETCRAFT_MINING_REWARDS_ENABLED must be true or false.")
 
@@ -249,6 +256,7 @@ def startup() -> None:
     reward_wake.clear()
     reward_thread = threading.Thread(target=reward_worker, daemon=True)
     reward_thread.start()
+    threading.Thread(target=prepare_donation_address, daemon=True).start()
 
 
 @app.on_event("shutdown")
@@ -458,47 +466,65 @@ def donation_address() -> dict[str, str]:
                 address, _, _ = validate_cashaddr(address, token_aware=False)
                 db.execute("INSERT INTO donation_addresses (network, address) VALUES (?, ?)", (NETWORK, address))
             return {"address": address, "network": NETWORK}
-    except (RuntimeError, ValueError, sqlite3.Error) as exc:
+    except (RewardDatabaseError, RuntimeError, ValueError, sqlite3.Error) as exc:
         logger.error("Donation address unavailable (%s)", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Donation address unavailable.") from exc
 
 
+def prepare_donation_address() -> None:
+    while not reward_stop.is_set():
+        try:
+            donation_address()
+            return
+        except HTTPException as exc:
+            logger.warning("Could not prepare donation address (%s); the preview will omit the QR code.", exc.status_code)
+            reward_stop.wait(60)
+
+
 @app.get("/api/craft-preview.png")
 def craft_preview_image() -> Response:
-    address = donation_address()["address"]
+    address = None
+    try:
+        with open_db(timeout=1) as db:
+            row = db.execute("SELECT address FROM donation_addresses WHERE network = ?", (NETWORK,)).fetchone()
+            if row:
+                address = row[0]
+    except (RewardDatabaseError, sqlite3.Error) as exc:
+        logger.warning("Could not read the donation address for the preview (%s)", type(exc).__name__)
     path = Path(os.getenv(
         "CRAFT_PREVIEW_IMAGE", str(Path(__file__).resolve().parent.parent / "public" / "craft-preview.png")
     ))
     try:
         with Image.open(path) as source:
             image = ImageOps.fit(source.convert("RGB"), (1200, 675), method=Image.Resampling.LANCZOS)
-        draw = ImageDraw.Draw(image)
-        width, height = image.size
-        qr = segno.make(address, error="h")
-        modules = list(qr.matrix)
-        scale = max(1, min(width, height) // (3 * (len(modules) + 8)))
-        qr_size = (len(modules) + 8) * scale
-        left, top = width - qr_size - 28, height - qr_size - 74
-        if left < 8 or top < 45:
-            raise ValueError("Preview image is too small")
-        draw.rounded_rectangle((left - 12, top - 42, width - 16, height - 18), radius=14, fill="white")
-        font = ImageFont.load_default(size=max(12, scale * 3))
-        draw.text((left + 27, top - 32), "DONATE BCH", fill="#183c28", font=font)
-        draw.ellipse((left, top - 31, left + 10, top - 21), fill="#d62647")
-        draw.ellipse((left + 8, top - 31, left + 18, top - 21), fill="#d62647")
-        draw.polygon(((left, top - 25), (left + 18, top - 25), (left + 9, top - 15)), fill="#d62647")
-        for y, row in enumerate(modules):
-            for x, dark in enumerate(row):
-                if dark:
-                    x0, y0 = left + (x + 4) * scale, top + (y + 4) * scale
-                    draw.rectangle((x0, y0, x0 + scale - 1, y0 + scale - 1), fill="black")
+        if address:
+            draw = ImageDraw.Draw(image)
+            width, height = image.size
+            qr = segno.make(address, error="h")
+            modules = list(qr.matrix)
+            scale = max(1, min(width, height) // (3 * (len(modules) + 8)))
+            qr_size = (len(modules) + 8) * scale
+            left, top = width - qr_size - 28, height - qr_size - 74
+            if left < 8 or top < 45:
+                raise ValueError("Preview image is too small")
+            draw.rounded_rectangle((left - 12, top - 42, width - 16, height - 18), radius=14, fill="white")
+            font = ImageFont.load_default(size=max(12, scale * 3))
+            draw.text((left + 27, top - 32), "DONATE BCH", fill="#183c28", font=font)
+            draw.ellipse((left, top - 31, left + 10, top - 21), fill="#d62647")
+            draw.ellipse((left + 8, top - 31, left + 18, top - 21), fill="#d62647")
+            draw.polygon(((left, top - 25), (left + 18, top - 25), (left + 9, top - 15)), fill="#d62647")
+            for y, row in enumerate(modules):
+                for x, dark in enumerate(row):
+                    if dark:
+                        x0, y0 = left + (x + 4) * scale, top + (y + 4) * scale
+                        draw.rectangle((x0, y0, x0 + scale - 1, y0 + scale - 1), fill="black")
         output = io.BytesIO()
         image.save(output, format="PNG", optimize=True)
     except (OSError, ValueError) as exc:
         logger.error("Could not generate craft preview (%s)", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Craft preview unavailable.") from exc
     return Response(content=output.getvalue(), media_type="image/png",
-                    headers={"Cache-Control": "public, max-age=300"})
+                    headers={"Cache-Control": f"public, max-age={300 if address else 30}"})
 
 
 _chain_status_lock = threading.Lock()
@@ -1005,9 +1031,28 @@ def process_one_mining_reward() -> bool:
         uri=True,
         timeout=10,
     ) as db:
+        db.execute("""CREATE TABLE IF NOT EXISTS mining_payout_reservations (
+            reward_id INTEGER NOT NULL, day TEXT NOT NULL, PRIMARY KEY (reward_id, day)
+        )""")
+        db.execute("CREATE INDEX IF NOT EXISTS mining_payout_reservations_day ON mining_payout_reservations (day)")
         row = db.execute(
-            """SELECT id, cash_address, category, signed_tx, txid FROM mining_rewards
-               WHERE sent_at IS NULL ORDER BY signed_tx IS NULL, id LIMIT 1"""
+            """WITH daily_address_counts AS (
+                   SELECT m.cash_address, COUNT(*) AS count
+                   FROM mining_payout_reservations r
+                   JOIN mining_rewards m ON m.id = r.reward_id
+                   WHERE r.day = date('now') GROUP BY m.cash_address
+               )
+               SELECT id, cash_address, category, signed_tx, txid FROM mining_rewards m
+               WHERE sent_at IS NULL AND (
+                   EXISTS (SELECT 1 FROM mining_payout_reservations r
+                           WHERE r.reward_id = m.id AND r.day = date('now'))
+                   OR (
+                       (SELECT COUNT(*) FROM mining_payout_reservations WHERE day = date('now')) < ?
+                       AND COALESCE((SELECT count FROM daily_address_counts c
+                                     WHERE c.cash_address = m.cash_address), 0) < ?
+                   )
+               ) ORDER BY signed_tx IS NULL, id LIMIT 1""",
+            (NETCRAFT_DAILY_PAYOUT_LIMIT, NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT),
         ).fetchone()
         if not row:
             return False
@@ -1024,6 +1069,30 @@ def process_one_mining_reward() -> bool:
             )
             db.commit()
             return True
+        db.execute("BEGIN IMMEDIATE")
+        day = db.execute("SELECT date('now')").fetchone()[0]
+        reserved = db.execute(
+            "SELECT 1 FROM mining_payout_reservations WHERE reward_id = ? AND day = ?",
+            (reward_id, day),
+        ).fetchone()
+        if not reserved:
+            count = db.execute(
+                "SELECT COUNT(*) FROM mining_payout_reservations WHERE day = ?", (day,)
+            ).fetchone()[0]
+            address_count = db.execute(
+                """SELECT COUNT(*) FROM mining_payout_reservations r
+                   JOIN mining_rewards m ON m.id = r.reward_id
+                   WHERE r.day = ? AND m.cash_address = ?""",
+                (day, address),
+            ).fetchone()[0]
+            if count >= NETCRAFT_DAILY_PAYOUT_LIMIT or address_count >= NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT:
+                db.rollback()
+                return False
+            db.execute(
+                "INSERT INTO mining_payout_reservations (reward_id, day) VALUES (?, ?)",
+                (reward_id, day),
+            )
+        db.commit()
         try:
             result = bch_rpc("sendrawtransaction", [signed_tx])
         except RuntimeError as broadcast_error:

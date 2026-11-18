@@ -16,6 +16,7 @@ const MAX_COORD: i32 = 262_000;
 const CACHE_CHUNKS: usize = 24;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(20);
 const MAX_ANIMALS: usize = 8;
+const MINA_ORE: i32 = 83;
 const ANIMAL_TICK: Duration = Duration::from_secs(1);
 type Blocks = HashMap<(i32, i32, i32), i32>;
 
@@ -107,7 +108,6 @@ impl Animal {
 struct Server {
     state: Mutex<State>,
     terrain: Mutex<Terrain>,
-    reward_categories: HashMap<i32, String>,
     default_reward_category: Option<String>,
     address_prefix: String,
     reward_wake: Option<SyncSender<()>>,
@@ -512,7 +512,8 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
         )
         .optional()?;
     let previous = edited.unwrap_or(default);
-    let allowed = (0..=15).contains(&w) || (17..=23).contains(&w) || (32..=67).contains(&w);
+    let allowed =
+        (0..=15).contains(&w) || (17..=23).contains(&w) || (32..=67).contains(&w) || w == MINA_ORE;
     let distance = ((player.position[0] - x as f64).powi(2)
         + (player.position[1] - y as f64).powi(2)
         + (player.position[2] - z as f64).powi(2))
@@ -559,13 +560,10 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
             "DELETE FROM sign WHERE x=?1 AND y=?2 AND z=?3",
             params![x, y, z],
         )?;
-        if edited.is_none() && default > 0 {
+        if edited.is_none() && default == MINA_ORE {
             if let (Some(address), Some(category)) = (
                 player.reward_address.as_ref(),
-                server
-                    .reward_categories
-                    .get(&default)
-                    .or(server.default_reward_category.as_ref()),
+                server.default_reward_category.as_ref(),
             ) {
                 reward_queued = transaction.execute(
                     "INSERT OR IGNORE INTO mining_rewards (x,y,z,cash_address,category) VALUES (?1,?2,?3,?4,?5)",
@@ -923,7 +921,7 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
     result
 }
 
-fn reward_configuration() -> Result<(Option<String>, HashMap<i32, String>), String> {
+fn reward_configuration() -> Result<Option<String>, String> {
     let valid_category = |s: &str| s.len() == 64 && s.bytes().all(|c| c.is_ascii_hexdigit());
     let default = env::var("BCH_REWARD_CATEGORY")
         .ok()
@@ -931,53 +929,19 @@ fn reward_configuration() -> Result<(Option<String>, HashMap<i32, String>), Stri
     if default.as_ref().is_some_and(|s| !valid_category(s)) {
         return Err("BCH_REWARD_CATEGORY must be 64 hexadecimal characters".into());
     }
-    let mut categories = HashMap::new();
-    let mapping = env::var("NETCRAFT_BLOCK_CATEGORIES").unwrap_or_default();
-    for pair in mapping.split(',').filter(|s| !s.trim().is_empty()) {
-        let Some((item, category)) = pair.trim().split_once('=') else {
-            return Err("NETCRAFT_BLOCK_CATEGORIES entries must be block_id=category".into());
-        };
-        let id: i32 = item.trim().parse().map_err(|_| "invalid block ID")?;
-        if !(1..=255).contains(&id) || !valid_category(category.trim()) {
-            return Err("Invalid block ID or token category in NETCRAFT_BLOCK_CATEGORIES".into());
-        }
-        if categories
-            .insert(id, category.trim().to_ascii_lowercase())
-            .is_some()
-        {
-            return Err("Duplicate block ID in NETCRAFT_BLOCK_CATEGORIES".into());
-        }
-    }
-    for id in 1..=255 {
-        let variable = format!("NETCRAFT_BLOCK_CATEGORY_{id}");
-        if let Ok(value) = env::var(&variable) {
-            if value.is_empty() {
-                continue;
-            }
-            if !valid_category(&value) {
-                return Err(format!("{variable} must be 64 hexadecimal characters"));
-            }
-            if categories.insert(id, value.to_ascii_lowercase()).is_some() {
-                return Err(format!(
-                    "{variable} duplicates an entry in NETCRAFT_BLOCK_CATEGORIES"
-                ));
-            }
-        }
-    }
-    Ok((default.map(|s| s.to_ascii_lowercase()), categories))
+    Ok(default.map(|s| s.to_ascii_lowercase()))
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let address = env::var("NETCRAFT_LISTEN").unwrap_or_else(|_| "0.0.0.0:4080".into());
     let database = env::var("NETCRAFT_DB").unwrap_or_else(|_| "craft.db".into());
-    let (mut default_reward_category, mut reward_categories) = reward_configuration()?;
+    let mut default_reward_category = reward_configuration()?;
     match env::var("NETCRAFT_MINING_REWARDS_ENABLED").as_deref() {
-        Ok("true") => eprintln!(
-            "Warning: mining rewards are enabled without player authentication or a payout cap"
-        ),
+        Ok("true") => {
+            eprintln!("Warning: mining rewards are enabled without player authentication")
+        }
         Ok("false") | Err(env::VarError::NotPresent) => {
             default_reward_category = None;
-            reward_categories.clear();
         }
         _ => return Err("NETCRAFT_MINING_REWARDS_ENABLED must be true or false".into()),
     }
@@ -1000,7 +964,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             animal_tick: 0,
         }),
         terrain: Mutex::new(Terrain::default()),
-        reward_categories,
         default_reward_category,
         address_prefix,
         reward_wake: start_reward_wake()?,
@@ -1047,7 +1010,6 @@ mod tests {
                 animal_tick: 0,
             }),
             terrain: Mutex::new(Terrain::default()),
-            reward_categories: HashMap::from([(6, "a".repeat(64))]),
             default_reward_category: Some("b".repeat(64)),
             address_prefix: "bitcoincash".into(),
             reward_wake: None,
@@ -1090,6 +1052,29 @@ mod tests {
         ));
     }
 
+    fn ore_positions(server: &Server) -> Vec<(i32, i32, i32)> {
+        let chunk = server.terrain.lock().unwrap().chunk(0, 0);
+        let mut positions: Vec<_> = chunk
+            .iter()
+            .filter_map(|(&(x, y, z), &w)| {
+                (w == MINA_ORE && (0..32).contains(&x) && (0..32).contains(&z)).then_some((x, y, z))
+            })
+            .collect();
+        positions.sort_unstable();
+        positions
+    }
+
+    fn move_to(server: &Server, (x, y, z): (i32, i32, i32)) {
+        server
+            .state
+            .lock()
+            .unwrap()
+            .players
+            .get_mut(&1)
+            .unwrap()
+            .position = [x as f64, y as f64, z as f64, 0.0, 0.0];
+    }
+
     #[test]
     fn rewards_require_a_connected_player_with_a_wallet() {
         let (server, _, _) = setup();
@@ -1124,12 +1109,18 @@ mod tests {
     #[test]
     fn wallet_can_be_disconnected_and_reconnected_without_leaving_game() {
         let (server, _, _) = setup();
+        let ores = ore_positions(&server);
+        assert!(ores.len() >= 2);
         let address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz";
         handle_command(&server, 1, &format!("W,{address}")).unwrap();
         handle_command(&server, 1, "W,").unwrap();
-        block_edit(&server, 1, 0, 1, 0, 0).unwrap();
+        let (x, y, z) = ores[0];
+        move_to(&server, ores[0]);
+        block_edit(&server, 1, x, y, z, 0).unwrap();
         handle_command(&server, 1, &format!("W,{address}")).unwrap();
-        block_edit(&server, 1, 1, 1, 0, 0).unwrap();
+        let (x, y, z) = ores[1];
+        move_to(&server, ores[1]);
+        block_edit(&server, 1, x, y, z, 0).unwrap();
         let state = server.state.lock().unwrap();
         let (count, recipient): (i64, String) = state
             .db
@@ -1151,23 +1142,23 @@ mod tests {
         server.reward_wake = Some(wake);
         let address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz";
         handle_command(&server, 1, &format!("W,{address}")).unwrap();
-        assert_eq!(
-            *server
-                .terrain
-                .lock()
-                .unwrap()
-                .chunk(0, 0)
-                .get(&(0, 1, 0))
-                .unwrap(),
-            6
-        );
         block_edit(&server, 1, 0, 1, 0, 0).unwrap();
+        assert!(wakes.try_recv().is_err());
+        second.try_recv().unwrap();
+        let ores = ore_positions(&server);
+        assert!(
+            ores.len() >= 8 && ores.len() < 128,
+            "unexpected ore density: {}",
+            ores.len()
+        );
+        let (x, y, z) = ores[0];
+        move_to(&server, ores[0]);
+        block_edit(&server, 1, x, y, z, 0).unwrap();
         assert!(wakes.try_recv().is_ok());
         let update = String::from_utf8(second.try_recv().unwrap()).unwrap();
-        assert!(update.contains("B,0,0,0,1,0,0\n"));
-        assert!(update.contains("B,-1,-1,0,1,0,0\n"));
-        block_edit(&server, 1, 0, 1, 0, 6).unwrap();
-        block_edit(&server, 1, 0, 1, 0, 0).unwrap();
+        assert!(update.contains(&format!("B,0,0,{x},{y},{z},0\n")));
+        block_edit(&server, 1, x, y, z, MINA_ORE).unwrap();
+        block_edit(&server, 1, x, y, z, 0).unwrap();
         assert!(wakes.try_recv().is_err());
         let state = server.state.lock().unwrap();
         let (count, category, recipient): (i64, String, String) = state
@@ -1179,15 +1170,38 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1);
-        assert_eq!(category, "a".repeat(64));
+        assert_eq!(category, "b".repeat(64));
         assert_eq!(recipient, address);
         drop(state);
         chunk_response(&server, 1, 0, 0, -1).unwrap();
         let output = _first.try_iter().last().unwrap();
         let output = String::from_utf8(output).unwrap();
-        assert!(output.contains("B,0,0,0,1,0,0\n"));
+        assert!(output.contains(&format!("B,0,0,{x},{y},{z},0\n")));
         assert!(output.contains("R,0,0\nC,0,0\n"));
         assert_eq!(chunked(-1), -1);
+    }
+
+    #[test]
+    fn connected_wallet_can_queue_multiple_ore_rewards() {
+        let (server, _, _) = setup();
+        let address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz";
+        handle_command(&server, 1, &format!("W,{address}")).unwrap();
+        let ores = ore_positions(&server);
+        assert!(ores.len() >= 4);
+        for &(x, y, z) in &ores[..4] {
+            move_to(&server, (x, y, z));
+            block_edit(&server, 1, x, y, z, 0).unwrap();
+        }
+        let state = server.state.lock().unwrap();
+        let count: i64 = state
+            .db
+            .query_row(
+                "SELECT count(*) FROM mining_rewards WHERE cash_address = ?1",
+                [address],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 4);
     }
 
     #[test]

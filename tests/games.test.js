@@ -13,7 +13,7 @@ test('game buttons open mounted shells and unload them on close', async (t) => {
       setAttribute(name, value) { this[name] = value; },
       classList: { add() {}, remove() {}, contains() { return false; } },
       focus() { this.focused = true; },
-      showModal() { this.open = true; }, close() { this.open = false; this.listeners.close(); },
+      show() { this.open = true; }, close() { this.open = false; this.listeners.close(); },
       removeAttribute(name) { delete this[name]; },
     });
 
@@ -27,6 +27,7 @@ test('game buttons open mounted shells and unload them on close', async (t) => {
   const documentListeners = {};
   globalThis.document = {
     fullscreenElement: null,
+    querySelector() { return { after() {} }; },
     addEventListener(type, fn) { documentListeners[type] = fn; },
     async exitFullscreen() { this.fullscreenElement = null; documentListeners.fullscreenchange(); },
   };
@@ -100,13 +101,13 @@ test('NetCraft receives the connected token address when launched', async (t) =>
   const originalFetch = globalThis.fetch;
   const originalDocument = globalThis.document;
   t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; });
-  globalThis.document = { addEventListener() {} };
+  globalThis.document = { addEventListener() {}, querySelector() { return { after() {} }; } };
   const elements = new Map();
   const $ = (id) => {
     if (!elements.has(id)) elements.set(id, {
       listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; },
-      setAttribute() {}, classList: { add() {}, remove() {}, contains() { return false; } },
-      showModal() { this.open = true; },
+      setAttribute() {}, focus() {}, classList: { add() {}, remove() {}, contains() { return false; } },
+      show() { this.open = true; },
     });
     return elements.get(id);
   };
@@ -145,14 +146,14 @@ test('fullscreen game regains keyboard focus without stealing focus from other d
         addEventListener(type, fn) { this.listeners[type] = fn; },
         setAttribute() {},
         classList: { add: (value) => classes.add(value), remove: (value) => classes.delete(value), contains: (value) => classes.has(value) },
-        showModal() { this.open = true; document.activeElement = $('game-close'); },
+        show() { this.open = true; document.activeElement = $('game-close'); },
         focus() { document.activeElement = this; },
       });
     }
     return elements.get(id);
   };
   globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
-  globalThis.document = { body: {}, fullscreenElement: null, activeElement: null, addEventListener() {} };
+  globalThis.document = { body: {}, fullscreenElement: null, activeElement: null, addEventListener() {}, querySelector() { return { after() {} }; } };
   globalThis.requestAnimationFrame = (fn) => callbacks.push(fn);
   setupGames($, { claimBeer() {}, translate: (text) => text });
   $('game-dialog').classList.add('game-auto-open');

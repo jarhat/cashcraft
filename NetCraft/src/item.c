@@ -317,7 +317,7 @@ void init_blocks() {
             1.0, 0);
     register_block("Command Block",       RC( 4, 8), RC( 4, 8), RC( 4, 8), RC( 4, 8), RC( 4, 8), RC( 4, 8),
             1.0, 0);
-    register_block("Emerald Ore",         RC( 5,11), RC( 5,11), RC( 5,11), RC( 5,11), RC( 5,11), RC( 5,11),
+    register_block("MINA Ore",            RC( 5,11), RC( 5,11), RC( 5,11), RC( 5,11), RC( 5,11), RC( 5,11),
             7.0, 0);
     register_block("Soul Sand",           RC( 9, 8), RC( 9, 8), RC( 9, 8), RC( 9, 8), RC( 9, 8), RC( 9, 8),
             1.0, 0);
@@ -418,7 +418,7 @@ void init_blocks() {
     hotbar_items[hotbar_item_count++] = block_id_by_name("Gold Ore");
     hotbar_items[hotbar_item_count++] = block_id_by_name("Iron Ore");
     hotbar_items[hotbar_item_count++] = block_id_by_name("Coal Ore");
-    hotbar_items[hotbar_item_count++] = block_id_by_name("Emerald Ore");
+    hotbar_items[hotbar_item_count++] = block_id_by_name("MINA Ore");
     hotbar_items[hotbar_item_count++] = block_id_by_name("Lapis Lazuli Ore");
     hotbar_items[hotbar_item_count++] = block_id_by_name("Diamond Ore");
     hotbar_items[hotbar_item_count++] = block_id_by_name("Redstone Ore");

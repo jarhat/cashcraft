@@ -8,6 +8,7 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
+  document.querySelector('.topbar').after(dialog);
   stage.addEventListener('contextmenu', (event) => event.preventDefault());
   let generation = 0;
   let activeGame = null;
@@ -18,7 +19,6 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
   };
   const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog'];
   const canFocusGame = () => dialog.open && activeGame &&
-    (document.fullscreenElement === stage || dialog.classList.contains('game-auto-open')) &&
     !overlayDialogs.some((id) => $(id).open);
   frame.addEventListener('load', () => {
     updateRewardAddress(getRewardAddress());
@@ -72,7 +72,7 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
         for (const key of Object.keys(games)) {
           $(`switch-${key}`).setAttribute('aria-pressed', String(key === id));
         }
-        if (!dialog.open) dialog.showModal();
+        if (!dialog.open) dialog.show();
       } catch (error) {
         if (request === generation) status.textContent = error.message;
       }
@@ -80,7 +80,6 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
     $(`game-${id}`).addEventListener('click', open);
     $(`switch-${id}`).addEventListener('click', open);
     if (id === 'netcraft' && autoOpen) {
-      dialog.classList.add('game-auto-open');
       void open();
     }
   }
@@ -113,7 +112,6 @@ export function setupGames($, { claimBeer, translate, getRewardAddress = () => n
     }
     generation++;
     activeGame = null;
-    dialog.classList.remove('game-auto-open');
     frame.removeAttribute('src');
     $('game-dialog-status').textContent = '';
     for (const key of Object.keys(games)) $(`switch-${key}`).setAttribute('aria-pressed', 'false');

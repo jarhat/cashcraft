@@ -309,7 +309,6 @@ void client_connect(char *hostname, int port) {
             }
             const host = getString($0);
             const port = $1;
-            console.log('websocket inputs, host='+host+', port='+port);
             const ws = 'ws:' + String.fromCharCode(47) + String.fromCharCode(47); // to avoid //
             const wss = 'wss:' + String.fromCharCode(47) + String.fromCharCode(47);
             if (host === '-' || host.length === 0) {
@@ -325,7 +324,6 @@ void client_connect(char *hostname, int port) {
                 // hostname
                 Module['websocket']['url'] = (document.location.protocol === 'https:' ? wss : ws) + host + ':' + port + '/craftws';
             }
-            console.log('websocket url:', Module['websocket']['url']);
         }, hostname, port);
 #pragma clang diagnostic pop
 #endif

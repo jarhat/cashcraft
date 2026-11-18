@@ -3562,14 +3562,14 @@ void parse_buffer(char *buffer, int len) {
         unsigned int animal_id;
         float ax, ay, az;
         int heading;
-        if (sscanf(line, "M,%u,%f,%f,%f,%d", &animal_id, &ax, &ay, &az, &heading) == 5) {
+        if (line[0] == 'M' && sscanf(line, "M,%u,%f,%f,%f,%d", &animal_id, &ax, &ay, &az, &heading) == 5) {
             animals_update(animal_id, ax, ay, az, heading);
         }
-        if (sscanf(line, "MD,%u", &animal_id) == 1) {
+        if (line[0] == 'M' && sscanf(line, "MD,%u", &animal_id) == 1) {
             animals_remove(animal_id);
         }
         float ux, uy, uz, urx, ury;
-        if (sscanf(line, "U,%d,%f,%f,%f,%f,%f",
+        if (line[0] == 'U' && sscanf(line, "U,%d,%f,%f,%f,%f,%f",
             &pid, &ux, &uy, &uz, &urx, &ury) == 6)
         {
             me->id = pid;
@@ -3587,18 +3587,18 @@ void parse_buffer(char *buffer, int len) {
         }
         int bp, bq, bx, by, bz, bw;
         int mined_item;
-        if (sscanf(line, "I,%d", &mined_item) == 1) {
+        if (line[0] == 'I' && sscanf(line, "I,%d", &mined_item) == 1) {
             Inventory_collect(&g->inventory, mined_item);
         }
         int jx, jy, jz, item, accepted;
-        if (sscanf(line, "J,%d,%d,%d,%d,%d", &jx, &jy, &jz, &item, &accepted) == 5 &&
+        if (line[0] == 'J' && sscanf(line, "J,%d,%d,%d,%d,%d", &jx, &jy, &jz, &item, &accepted) == 5 &&
             pending_placement.active && pending_placement.x == jx &&
             pending_placement.y == jy && pending_placement.z == jz &&
             pending_placement.item == item && (accepted == 0 || accepted == 1)) {
             if (!accepted) Inventory_collect(&g->inventory, item);
             pending_placement.active = false;
         }
-        if (sscanf(line, "B,%d,%d,%d,%d,%d,%d",
+        if (line[0] == 'B' && sscanf(line, "B,%d,%d,%d,%d,%d,%d",
             &bp, &bq, &bx, &by, &bz, &bw) == 6)
         {
             _set_block(bp, bq, bx, by, bz, bw, false);
@@ -3606,19 +3606,19 @@ void parse_buffer(char *buffer, int len) {
                 s->y = highest_block(s->x, s->z) + 2;
             }
         }
-        if (sscanf(line, "b,%d,%d,%d,%d,%d,%d",
+        if (line[0] == 'b' && sscanf(line, "b,%d,%d,%d,%d,%d,%d",
             &sx, &sy, &sz, &ex, &ey, &ez) == 6) {
             printf("multi-block update pending: (%d,%d,%d)-(%d,%d,%d)\n",
                     sx, sy, sz, ex, ey, ez);
             multiblock_pending = true;
         }
-        if (sscanf(line, "L,%d,%d,%d,%d,%d,%d",
+        if (line[0] == 'L' && sscanf(line, "L,%d,%d,%d,%d,%d,%d",
             &bp, &bq, &bx, &by, &bz, &bw) == 6)
         {
             set_light(bp, bq, bx, by, bz, bw);
         }
         float px, py, pz, prx, pry;
-        if (sscanf(line, "P,%d,%f,%f,%f,%f,%f",
+        if (line[0] == 'P' && sscanf(line, "P,%d,%f,%f,%f,%f,%f",
             &pid, &px, &py, &pz, &prx, &pry) == 6)
         {
             Player *player = find_player(pid);
@@ -3636,14 +3636,14 @@ void parse_buffer(char *buffer, int len) {
                 update_player(player, px, py, pz, prx, pry, true);
             }
         }
-        if (sscanf(line, "D,%d", &pid) == 1) {
+        if (line[0] == 'D' && sscanf(line, "D,%d", &pid) == 1) {
             delete_player(pid);
         }
         int kp, kq, kk;
-        if (sscanf(line, "K,%d,%d,%d", &kp, &kq, &kk) == 3) {
+        if (line[0] == 'K' && sscanf(line, "K,%d,%d,%d", &kp, &kq, &kk) == 3) {
             db_set_key(kp, kq, kk);
         }
-        if (sscanf(line, "R,%d,%d", &kp, &kq) == 2) {
+        if (line[0] == 'R' && sscanf(line, "R,%d,%d", &kp, &kq) == 2) {
             Chunk *chunk = find_chunk(kp, kq);
             if (chunk) {
                 dirty_chunk(chunk);
@@ -3651,13 +3651,13 @@ void parse_buffer(char *buffer, int len) {
         }
         double elapsed;
         int day_length;
-        if (sscanf(line, "E,%lf,%d", &elapsed, &day_length) == 2) {
+        if (line[0] == 'E' && sscanf(line, "E,%lf,%d", &elapsed, &day_length) == 2) {
             glfwSetTime(fmod(elapsed, day_length));
             g->day_length = day_length;
             g->time_changed = true;
         }
         int gamemode;
-        if (sscanf(line, "m,%d", &gamemode) == 1) {
+        if (line[0] == 'm' && sscanf(line, "m,%d", &gamemode) == 1) {
             switch (gamemode) {
                 case 0: set_survival_gamemode(); break;
                 case 1: set_creative_gamemode(); break;
@@ -3669,13 +3669,13 @@ void parse_buffer(char *buffer, int len) {
             add_message(text);
         }
         char name[MAX_NAME_LENGTH];
-        if (sscanf(line, "N,%d,%" MAX_NAME_LENGTH_FORMAT "s", &pid, name) == 2) {
+        if (line[0] == 'N' && sscanf(line, "N,%d,%" MAX_NAME_LENGTH_FORMAT "s", &pid, name) == 2) {
             Player *player = find_player(pid);
             if (player) {
                 strncpy(player->name, name, MAX_NAME_LENGTH);
             }
         }
-        if (sscanf(line, "u,%" MAX_NAME_LENGTH_FORMAT "s", name) == 1) {
+        if (line[0] == 'u' && sscanf(line, "u,%" MAX_NAME_LENGTH_FORMAT "s", name) == 1) {
             printf("We are %s\n", name);
             Player *me = g->players;
             if (me) {
@@ -3684,7 +3684,7 @@ void parse_buffer(char *buffer, int len) {
         }
         int face;
         char text[MAX_SIGN_LENGTH] = {0};
-        if (sscanf(line, "S,%d,%d,%d,%d,%d,%d,%" MAX_SIGN_LENGTH_FORMAT "[^\n]",
+        if (line[0] == 'S' && sscanf(line, "S,%d,%d,%d,%d,%d,%d,%" MAX_SIGN_LENGTH_FORMAT "[^\n]",
             &bp, &bq, &bx, &by, &bz, &face, text) >= 6)
         {
             int rotation = 0;
@@ -3698,7 +3698,7 @@ void parse_buffer(char *buffer, int len) {
         }
 #ifdef __EMSCRIPTEN__
         char url[256] = {0};
-        if (sscanf(line, "t,%255[^\n]", url) == 1) {
+        if (line[0] == 't' && sscanf(line, "t,%255[^\n]", url) == 1) {
             printf("server provided texture url: %s\n", url);
             if (strcmp(url, "-") == 0 || strlen(url) == 0) {
 #pragma clang diagnostic push
