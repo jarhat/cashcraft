@@ -2,8 +2,8 @@ NetCraft
 ========
 
 Voxel game for modern web browsers (Chrome, Firefox, Safari) and desktop operating systems (Windows, macOS, Linux).
-Just a few thousand lines of C using modern OpenGL (shaders). Online multiplayer support is included using a Python-based server
-or through [WebSandboxMC](https://github.com/satoshinm/WebSandboxMC/).
+The C client uses OpenGL/WebGL shaders and connects to the included Rust
+multiplayer server through TCP or WebSockets.
 
 **Live demo: https://satoshinm.github.io/NetCraft/**
 
@@ -171,29 +171,174 @@ In the web-based version, you can pass command-line arguments after `#` in the U
 
 #### Server
 
-You can run your own server or connect to mine. The server is written in Python
-but requires a compiled DLL so it can perform the terrain generation just like
-the client.
+Run `cargo run --release --manifest-path server/Cargo.toml` to listen on TCP
+port 4080. `NETCRAFT_LISTEN` and `NETCRAFT_DB` override the listen address and
+SQLite database. The server compiles the same terrain generator as the client.
+Clients generate baseline terrain locally and request persisted edits, so both
+must use matching builds. Python-server worlds created with a custom seed
+cannot be migrated by copying the database alone.
 
-    gcc -std=c99 -O3 -fPIC -shared -o world -I src -I deps/noise deps/noise/noise.c src/world.c
-    python server.py [HOST [PORT]]
+The repository's Compose setup runs the Rust server behind websockify and an
+ACME-enabled HTTPS proxy. Set `NETCRAFT_WS_DOMAIN` to a public DNS name pointing
+at the proxy, configure the other required values in `.env`, build the WASM
+client into `NETCRAFT_BUILD_PATH`, and start Compose. The frontend is built with
+`wss://<NETCRAFT_WS_DOMAIN>/craftws` and connects automatically when NetCraft
+opens. Rebuild the frontend after changing the domain. The local client can
+also use `/online` and a full WebSocket URL. The server sends an idle heartbeat
+to help keep proxy connections open. The browser retries disconnected
+connections with backoff and refreshes loaded chunks after reconnecting.
+Block edits are paused while disconnected; they are not queued.
+Disconnecting a wallet does not close the game; its reward address is cleared
+and can be connected again while playing.
 
-Multiplayer is supported in both the native and web clients. To connect to a server
-from the web client, the server must support WebSockets; the Python server can be bridged
-using [websockify](https://github.com/novnc/websockify) as follows:
+The loading screen remains until the first frame is rendered. Graphics and
+runtime errors are reported separately from the server connection, which can
+remain connected even if rendering fails. Check the browser console for the
+underlying error; a lost WebGL context requires reloading the game. After
+changing the client, rebuild the WASM files in `NETCRAFT_BUILD_PATH`; restarting
+only the server does not update the browser client.
 
-    ./websockify.py 4081 localhost:4080
+The server simulates up to eight passive, sheep-like animals near active
+players. Their movement is shared with all connected clients and follows the
+current terrain and block edits. Animals despawn when no players are nearby;
+they are not persisted across server restarts and have no survival interactions.
 
-Or for an alternative Java-based Bukkit plugin WebSocket server, check out:
+### Preview-inspired world
 
-    https://github.com/satoshinm/WebSandboxMC/
+With the server stopped, run from the repository root:
 
-The web-based client will connect to WebSockets at the path `/craftws` by default. Full
-URLs can be given in place of the hostname to connect at other paths, or to use SSL (wss://).
-`/online localhost` is equivalent to `/online ws://localhost:4081/craftws`. The special
-hostname "-" can be used to connect to the same server the page is served from.
+```sh
+python3 NetCraft/builder.py
+```
+
+This requires Python 3 and a C compiler and creates `data/netcraft.db` for
+Compose. It adds a central sky park, dragon, green coin, four floating gardens,
+bridges, seven gold spheres and static water cascades above the normal generated terrain.
+The pillar is one block wide; double-tap jump to fly to the platform. To add
+the donation QR, set `DONATION_ADDRESS` in `builder.py` to the desired address
+and install Python's `segno` package before building. The QR is omitted when
+the address is blank. Check it with a phone in the actual game before use;
+lighting, camera angle and existing edits can affect scanning. Start
+Compose afterward. The command refuses to overwrite an existing world. To
+create a world at a different path, use
+`python3 NetCraft/builder.py --init-park path/to/new.db`.
+
+To add the park to a world that already exists, stop the server, back up its
+database, and run `python3 NetCraft/builder.py --add-park data/netcraft.db`.
+Existing block, light and sign edits are preserved; park blocks at those
+positions are skipped, so existing edits may leave gaps or obstruct paths.
+Restart the server to load the changes; do not run the builder while it runs.
+
+Compose enables mining rewards by default. A connected token-aware address
+receives one base unit for naturally generated, previously unedited green MINA
+ore. Deposits currently appear on roughly one in 32 terrain columns; placed or
+previously mined blocks do not earn another reward. Offline play and disconnected edits
+cannot create rewards; a connected player must supply a valid token-aware
+wallet address. The interface calls the default reward MINA; the configured
+CashToken category is unchanged by that display name. The game server requests
+an immediate BCHN transaction for each eligible block; wallet transaction
+creation is serialized to avoid spending the same inputs twice. The wallet
+refreshes after the request and shows a receipt once it sees the zero-confirmation
+output. A request can fail or take longer if the node or network is unavailable.
+The red
+wallet notification indicator is shared between the wallet and game; opening notifications
+marks them read. Browsers may require a user gesture before sound can play.
+The HUD counts MINA ore blocks mined during the current game session, including
+placed ore; it is not a token balance or a count of successful payouts. Chat
+messages fade after a few seconds and remain visible while typing.
+MINA ore pays the `BCH_REWARD_CATEGORY` category; fund the BCHN wallet with
+that category and BCH for transaction fees. Set
+`NETCRAFT_MINING_REWARDS_ENABLED=false` to stop new rewards and payouts. Back up the
+world database and BCHN wallet together. Run only one payout worker. Set
+`NETCRAFT_REWARD_WAKE_SECRET` to the same long random ASCII secret for both
+services. Mining edits and payout records are committed together; if dispatch
+or transaction creation fails, the player is notified and the operator must
+investigate the unsent record. Previously queued unsigned records are retained
+but are not automatically paid. Signed transactions are stored before
+broadcast and retried unchanged after an uncertain broadcast.
+The top ticker counts successfully broadcast one-unit payouts for the current
+MINA category recorded in both reward databases, not all on-chain transfers.
+The discontinued bonus is not paid or newly queued. On backend startup,
+unpaid legacy bonus rows are marked cancelled while sent history and signed
+transactions are retained. A previously broadcast transaction cannot be
+reversed by this cancellation.
+
+BCHN RPC is bound to an isolated Compose network accessible only to the backend
+and to localhost in the BCHN container. The backend's `check_balance()` reads
+the payout wallet's BCH balance in satoshis; it is not an HTTP endpoint. An
+operator can also run `bitcoin-cli` inside the BCHN container using the
+configured wallet and RPC credentials. Protect the host, Docker access, `.env`,
+and wallet backups: the backend can sign transactions, and its RPC credentials
+grant wallet access. Keep only limited funds in the payout wallet.
+
+The protocol does not authenticate players or prevent automated mining.
+The backend reserves at most `NETCRAFT_DAILY_PAYOUT_LIMIT` mining broadcasts
+per UTC day (default 1,000), and `NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT` per
+address (default 100). Requests beyond either limit are reported as blocked
+and are not automatically paid later; signed transaction recovery reuses its
+reservation on the same day. These caps do not cover
+welcome rewards and do not guarantee wallet security. A public
+server can still spend configured tokens and BCH available for fees. Standalone server and backend processes default to
+rewards disabled unless `NETCRAFT_MINING_REWARDS_ENABLED=true`.
+Deploy matching rebuilt Rust and WASM clients together when changing terrain
+generation; existing edits remain, but unedited baseline terrain changes.
+In multiplayer, the browser waits for each chunk's server snapshot before
+displaying or editing it; movement pauses at chunks still loading.
+
+### Browser wallet
+
+The wallet dialog offers WizardConnect or a locally encrypted browser wallet.
+Back up the English BIP39 recovery phrase offline before saving it. The
+password encrypts this browser's storage; it is not a BIP39 passphrase, and
+passphrases are not supported. Recovery uses BCH BIP44 paths
+`m/44'/145'/0'/0/<index>` for receive and `m/44'/145'/0'/1/<index>` for
+change on both mainnet and chipnet. Restore the phrase in a compatible wallet
+using these paths if browser storage is lost. Copying a phrase exposes it to
+the clipboard; clear the clipboard after use.
+
+The browser wallet signs fungible CashToken sends locally and needs BCH for
+transaction outputs and fees; NFT-bearing inputs are not used. Verify the
+destination, category, amount and fee before approving. This implementation
+has not had an independent security audit. An attacker controlling the site or
+browser can steal an unlocked wallet, so use secure hosting and small amounts.
+To reconnect after refresh, spend-capable account key material remains
+unencrypted in session storage until disconnect or tab closure. Browser session
+restore can retain it longer. Anyone with access to the tab, browser profile,
+or malicious site scripts can spend its funds.
 
 ### Controls
+
+On touch devices, use the joystick to move, drag the game view to look, and use
+the on-screen buttons to jump, mine, build, and change blocks. The Sound button
+controls block and footstep sounds and the original looping tune after a user
+gesture; the game panel also has a fullscreen button. The `/craft` path and
+`?c` URL parameter open the panel below the top bar; browser fullscreen still
+requires a user gesture.
+On desktop, click the game view to capture the mouse; Escape releases it.
+If the browser or embedding page blocks gamepad access, keyboard, mouse and
+touch controls remain available.
+The invite button shares `/craft` and displays a donation QR for an address
+generated by the payout wallet. Social previews use the static dragon artwork
+with a donation QR when the backend has prepared an address. If the backend
+is unavailable, Caddy serves a static fallback without a QR. BCHN must be
+available to create the address on first use. Rebuild the frontend and backend
+to update preview artwork. Social platforms may cache earlier previews;
+Telegram's @WebpageBot can refresh a shared URL after deployment.
+If a mining payout fails, inspect `docker compose logs auth netcraft bchn`:
+the backend records safe diagnostic reasons and BCHN RPC error codes without
+transaction details. Check node synchronization, payout wallet unlock and funding in both BCH
+and the configured reward category, and the daily limits before taking action.
+Do not manually resend a signed pending transaction; it is retried unchanged.
+Touch devices start with a three-chunk viewing radius and
+desktop browsers with four to limit rendering cost;
+use `/view <radius>` to adjust it. The right-hand block selector shows the
+current block enlarged followed by the next available blocks, with available
+mined counts. Building consumes one matching block; zero-count blocks cannot
+be placed. Inventory resets when the connection is lost or the page reloads.
+`/noclip` is
+disabled by the online client; the server does not yet enforce movement
+collision against modified clients. Closing the wallet or notifications
+returns keyboard focus to the fullscreen game when appropriate.
 
 Mouse:
 
@@ -322,6 +467,14 @@ Textures are based on:
 * [Craft](https://github.com/fogleman/Craft) by Michael Fogleman, MIT
 * Pixeludi Pack by Wojtek Mroczek, Creative Commons CC-BY-SA, 2011, as used in [TrueCraft](https://github.com/SirCmpwn/TrueCraft/).
 * [Piehole Plain](http://piehole.alexvoelk.de) by Alex Voelk, CC-BY-SA 3.0
+
+The wallet's Mina theme uses enlarged grass and plank tiles derived from
+`textures/texture.png`; the source texture credits and licenses above apply.
+The game's grass, dirt, sand, stone, brick, oak, planks and cobblestone tiles
+also include tiles from Craft's MIT-licensed
+[`textures/texture.png`](https://github.com/fogleman/Craft/blob/d6888a6e1e54340358ce25b1220f410541360b6b/textures/texture.png)
+by Michael Fogleman, remapped to this atlas. The remaining NetCraft tiles are
+preserved.
 
 Custom textures can be loaded from the server, or by dragging-and-dropping a .zip file or .png texture atlas
 onto the game. NetCraft uses its own texture format, although there is some interoperability provided.

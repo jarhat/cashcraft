@@ -65,7 +65,8 @@ typedef enum {
     Item_CACTUS,
     Item_VINE,
     Item_SLAB_LOWER_STONEBRICK,
-    Item_max
+    Item_max,
+    Item_MINA_ORE = 83
 } Item;
 
 extern int hotbar_items[];

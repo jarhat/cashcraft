@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.0)
+cmake_minimum_required(VERSION 3.16)
 
 project(craft)
 
@@ -33,7 +33,10 @@ else ()
         deps/tinycthread/tinycthread.c)
 endif ()
 
-add_definitions(-std=gnu23 -Os -g -gdwarf-2 -mavx -msimd128)
+add_definitions(-std=gnu23)
+if (EMSCRIPTEN)
+    add_definitions(-msimd128)
+endif ()
 # add_definitions(-DLODEPNG_NO_COMPILE_ZLIB)
 
 set_property(SOURCE ${SOURCE_FILES} PROPERTY COMPILE_FLAGS "-Wall -Wextra -pedantic -Wno-unused-parameter -Wno-missing-field-initializers -Wno-sign-compare")
@@ -57,23 +60,26 @@ if (EMSCRIPTEN)
     set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS "-s USE_GLFW=3")
 
     # Customize the shell file loader
-    set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " --pre-js ../src/pre.js --shell-file ../src/shell.html")
+    set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " --pre-js ${CMAKE_SOURCE_DIR}/src/pre.js --shell-file ${CMAKE_SOURCE_DIR}/src/shell.html")
+    set_property(TARGET craft APPEND PROPERTY LINK_DEPENDS
+        "${CMAKE_SOURCE_DIR}/src/pre.js" "${CMAKE_SOURCE_DIR}/src/shell.html")
+    file(GLOB_RECURSE CRAFT_ASSETS CONFIGURE_DEPENDS
+        "${CMAKE_SOURCE_DIR}/shaders/*" "${CMAKE_SOURCE_DIR}/textures/*" "${CMAKE_SOURCE_DIR}/sounds/*")
+    set_property(TARGET craft APPEND PROPERTY LINK_DEPENDS ${CRAFT_ASSETS})
 
     # Increase memory limit from 16 MB default
     set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s TOTAL_MEMORY=33554432")
     set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s STACK_SIZE=8388608")
 
-    set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s ALLOW_MEMORY_GROWTH")
+    set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s ALLOW_MEMORY_GROWTH -s MAXIMUM_MEMORY=536870912")
     #set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s AUDIO_WORKLET=1")
     #set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s WASM_WORKERS=1")
     # C functions callable from JavaScript
-    set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s EXPORTED_RUNTIME_METHODS=\"['cwrap','ccall','HEAP8']\"")
+    set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s EXPORTED_RUNTIME_METHODS=\"['cwrap','ccall','HEAP8','FS']\"")
     #set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS "  -s USE_PTHREADS=1")
 
     set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -lwebsocket.js")
     set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -lidbfs.js")
-    set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s GL_ASSERTIONS=1")
-    set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s GL_DEBUG=1")
     set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s USE_WEBGL2=1")
     set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s MIN_WEBGL_VERSION=2")
     set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -s MAX_WEBGL_VERSION=2")
@@ -99,11 +105,11 @@ if (EMSCRIPTEN)
         set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -O3")
 
         # Generate a .data file preloaded with shaders and textures
-        set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " --preload-file ../shaders/ --preload-file ../textures/")
+        set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " --preload-file ${CMAKE_SOURCE_DIR}/shaders@/shaders --preload-file ${CMAKE_SOURCE_DIR}/textures@/textures --preload-file ${CMAKE_SOURCE_DIR}/sounds@/sounds")
     else ()
         message("warning: embedding data files in .js, for a smaller build rerun cmake with -CMAKE_BUILD_TYPE=Release")
         # Embedding data files in the .js is less efficient, but allows running from a local file so is useful for testing
-        set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " --embed-file ../shaders/ --embed-file ../textures/")
+        set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " --embed-file ${CMAKE_SOURCE_DIR}/shaders@/shaders --embed-file ${CMAKE_SOURCE_DIR}/textures@/textures --embed-file ${CMAKE_SOURCE_DIR}/sounds@/sounds")
     endif ()
 
     if (WASM)

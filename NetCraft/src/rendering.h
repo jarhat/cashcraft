@@ -8,6 +8,7 @@
 
 GLuint gen_plant_buffer(float x, float y, float z, float n, int w);
 GLuint gen_player_buffer(float x, float y, float z, float rx, float ry);
+GLuint update_player_buffer(GLuint buffer, float x, float y, float z, float rx, float ry);
 GLuint gen_text_buffer(float x, float y, float n, char *text);
 void draw_triangles_3d_ao(Attrib *attrib, GLuint buffer, int count);
 void draw_triangles_3d_text(Attrib *attrib, GLuint buffer, int count);

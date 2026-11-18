@@ -8,7 +8,7 @@ export function setupSnow(canvas) {
   let layers = [];
   let frame = 0;
   let last = 0;
-  let lastScroll = -Infinity;
+  let scrollTimer = 0;
 
   const makeFlake = () => {
     const depth = Math.random() ** 1.6;
@@ -55,7 +55,7 @@ export function setupSnow(canvas) {
 
   const draw = (time) => {
     const elapsed = time - last;
-    if (elapsed < 1000 / (time - lastScroll < 200 ? 12 : 24)) {
+    if (elapsed < 1000 / 24) {
       frame = requestAnimationFrame(draw);
       return;
     }
@@ -78,7 +78,7 @@ export function setupSnow(canvas) {
   };
 
   const start = () => {
-    if (frame || motion.matches || document.hidden) return;
+    if (frame || scrollTimer || motion.matches || document.hidden) return;
     last = performance.now();
     frame = requestAnimationFrame(draw);
   };
@@ -87,10 +87,15 @@ export function setupSnow(canvas) {
     frame = 0;
   };
   const onVisibility = () => (document.hidden ? stop() : start());
-  const onScroll = () => { lastScroll = performance.now(); };
+  const onScroll = () => {
+    stop();
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => { scrollTimer = 0; start(); }, 180);
+  };
   const onMotionChange = () => {
     if (motion.matches) {
       stop();
+      clearTimeout(scrollTimer);
       render();
     } else {
       start();

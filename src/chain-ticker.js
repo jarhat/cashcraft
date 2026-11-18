@@ -16,21 +16,47 @@ export async function fetchChainStatus() {
   return status;
 }
 
+export async function fetchMinaRewardsSent() {
+  const response = await fetch('/api/mina-rewards-sent', {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error(`MINA payout total request failed (${response.status}).`);
+  const data = await response.json();
+  if (typeof data.sent !== 'string' || !/^(0|[1-9][0-9]*)$/.test(data.sent)) {
+    throw new Error('Invalid MINA payout total.');
+  }
+  return BigInt(data.sent).toLocaleString();
+}
+
 export function setupChainTicker(container, logger = console) {
   let loading = false;
   async function refresh() {
     if (loading || document.hidden) return;
     loading = true;
     try {
-      const status = await fetchChainStatus();
-      const items = [
+      const [chain, rewards] = await Promise.allSettled([fetchChainStatus(), fetchMinaRewardsSent()]);
+      const items = [];
+      if (chain.status === 'fulfilled') {
+        const status = chain.value;
+        items.push(
         ['Network', 'Mainnet'],
         ['Block height', status.blocks.toLocaleString()],
         ['Latest block', `${status.best_block_hash.slice(0, 12)}…`, status.best_block_hash],
         ['Difficulty', status.difficulty.toLocaleString(undefined, { maximumFractionDigits: 2 })],
-        ['Node status', status.syncing ? 'Syncing' : 'Synced'],
-      ];
-      if (status.syncing) items.push(['Headers', status.headers.toLocaleString()]);
+        ['Node status', status.syncing ? 'Syncing' : 'Synced']
+        );
+        if (status.syncing) items.push(['Headers', status.headers.toLocaleString()]);
+      } else {
+        logger.warn('Blockchain status unavailable:', chain.reason);
+        items.push(['Blockchain status', 'Unavailable']);
+      }
+      if (rewards.status === 'fulfilled') {
+        items.push(['MINA rewards sent', rewards.value]);
+      } else {
+        logger.warn('MINA payout total unavailable:', rewards.reason);
+        items.push(['MINA rewards sent', 'Unavailable']);
+      }
       const track = document.createElement('div');
       track.className = 'market-ticker-track';
       for (let copy = 0; copy < 2; copy++) {
@@ -51,9 +77,6 @@ export function setupChainTicker(container, logger = console) {
         track.append(group);
       }
       container.replaceChildren(track);
-    } catch (error) {
-      logger.warn('Blockchain status unavailable:', error);
-      container.textContent = 'Blockchain status unavailable.';
     } finally {
       loading = false;
     }

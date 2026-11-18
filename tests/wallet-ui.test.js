@@ -6,9 +6,24 @@ import { inspectNft } from '../src/nft-inspection.js';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
+test('payment defaults to PUSD only on mainnet and preserves an existing category', async () => {
+  const start = source.indexOf('const mainnet =');
+  const end = source.indexOf('\nsetupMarketTicker', start);
+  const pusd = '2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544';
+  for (const [network, initial, expected] of [['mainnet', '', pusd], ['chipnet', '', ''], ['mainnet', 'existing', 'existing']]) {
+    const field = { value: initial };
+    runInNewContext(source.slice(start, end), { network, document: { getElementById: () => field } });
+    assert.equal(field.value, expected);
+  }
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  assert.ok(html.indexOf('id="earn-section"') < html.indexOf('id="transfer-section"'));
+  assert.match(source, /setTransferTab\('send'\);/);
+  assert.match(html, /href="https:\/\/cauldron\.quest\/"/);
+});
+
 test('theme preferences migrate and select the correct palette', () => {
-  for (const [saved, expected] of [[null, 'aurora'], ['bch', 'aurora'], ['bch-sunrise', 'aurora'], ['green', 'aurora'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'aurora'], ['frost', 'frost'], ['unknown', 'aurora']]) {
-    const buttons = ['frost', 'aurora'].map((themeOption) => ({
+  for (const [saved, expected] of [[null, 'aurora'], ['bch', 'aurora'], ['bch-sunrise', 'aurora'], ['green', 'aurora'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'aurora'], ['frost', 'frost'], ['miami', 'miami'], ['mina', 'aurora'], ['unknown', 'aurora']]) {
+    const buttons = ['frost', 'aurora', 'miami'].map((themeOption) => ({
       dataset: { themeOption },
       setAttribute(name, value) { this[name] = value; },
     }));
@@ -92,13 +107,13 @@ test('wizard highlights and scrolls to each tutorial panel without moving the na
   assert.equal(elements.get('connection-dialog').open, false);
   assert.equal(elements.get('wizard-dialog').parent, 'balance-section');
   elements.get('wizard-next').click();
-  assert.equal(guidePosition, 'transfer-section');
-  elements.get('wizard-next').click();
   assert.equal(guidePosition, 'earn-section');
+  elements.get('wizard-next').click();
+  assert.equal(guidePosition, 'transfer-section');
   elements.get('wizard-prev').click();
-  assert.equal(guidePosition, 'transfer-section');
+  assert.equal(guidePosition, 'earn-section');
   elements.get('wizard-toggle').click();
-  assert.equal(guidePosition, 'transfer-section');
+  assert.equal(guidePosition, 'earn-section');
   assert.equal(elements.get('wizard-dialog').hidden, true);
   assert.equal(highlighted.size, 0);
 });
@@ -172,6 +187,8 @@ test('notification can be dismissed outside and reopened with its request intact
   const end = source.indexOf("\nif (document.readyState", start);
   runInNewContext(source.slice(start, end), {
     $: element, setTransferTab() {}, document: { addEventListener() {} },
+    window: { addEventListener() {} },
+    MutationObserver: class { observe() {} },
   });
   const dialog = element('notifications-dialog');
   const indicator = element('notification-indicator');
@@ -247,7 +264,8 @@ test('connect during relay startup displays a fresh pairing after it is ready', 
   const sendEnd = source.indexOf('\nconst notificationsDialog', sendStart);
   const context = {
     $: (id) => nodes[id], relay: null, manager: null,
-    walletReady: false, pairingInProgress: false, showPairingWhenReady: false,
+    walletReady: false, pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
+    refreshBrowserWalletUI() {},
     clearWalletDisplay() {}, setConnection() {},
     loadWalletDependencies: () => dependencies,
     loadSession: () => ({ walletPublicKey: 'saved' }),
@@ -347,6 +365,27 @@ test('prefetches each token logo during the scan without waiting for other addre
   assert.deepEqual(logoRequests, [category]);
 });
 
+test('a pending scan retains its original wallet addresses when sessions change', async () => {
+  let finish;
+  const original = [{ index: 0 }, { index: 1 }];
+  const start = source.indexOf('async function scanWallet()');
+  const end = source.indexOf('\nfunction renderBalances', start);
+  const context = {
+    scanAddressRecords: original, SCAN_CONCURRENCY: 1, mainnet: false,
+    fetchAddressUtxosWithRetry: (record) => record.index === 0
+      ? new Promise((resolve) => { finish = resolve; })
+      : Promise.resolve([{ address: record.index }]),
+    utxoKey: () => null, normalizeUtxo: (utxo) => utxo,
+  };
+  runInNewContext(source.slice(start, end), context);
+  const scan = context.scanWallet();
+  context.scanAddressRecords = [{ index: 99 }];
+  finish([{ address: 0 }]);
+  const result = await scan;
+  assert.equal(result.addresses, original);
+  assert.deepEqual(Array.from(result.utxos, (utxo) => utxo.address), [0, 1]);
+});
+
 test('late scans restart the manager handshake and attach the listener immediately', async () => {
   let time = 1000;
   let keyExchange;
@@ -360,7 +399,8 @@ test('late scans restart the manager handshake and attach the listener immediate
   const end = source.indexOf('\nasync function fetchBchUsd', start);
   const context = {
     $: element, relay: null, manager: null, walletReady: false,
-    pairingInProgress: false, showPairingWhenReady: false,
+    pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
+    refreshBrowserWalletUI() {},
     Date: { now: () => time }, clearWalletDisplay() {}, setConnection() {},
     logger: { info() {}, warn() {}, error() {} },
     loadWalletDependencies: async () => {}, loadSession: () => null,
@@ -407,8 +447,9 @@ test('stale wallet callbacks cannot disconnect a newer session', async () => {
   const end = source.indexOf('\nasync function fetchBchUsd', start);
   const context = {
     $: element, relay: null, manager: null, walletReady: false,
-    pairingInProgress: false, showPairingWhenReady: false,
-    clearWalletDisplay() {}, setConnection() {}, updateReceiveAddress() {}, resumeBeerReward() {},
+    pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
+    refreshBrowserWalletUI() {},
+    clearWalletDisplay() {}, setConnection() {}, updateReceiveAddress() {},
     addressFor: () => 'recipient', submitCashAddress: async () => { submissions++; },
     refreshBalances: async () => {}, loadWalletDependencies: async () => {},
     loadSession: () => null, DappConnectionManager: Manager,
@@ -449,7 +490,8 @@ test('missing wallet public key reports failure instead of appearing connected',
   const end = source.indexOf('\nasync function fetchBchUsd', start);
   const context = {
     $: element, relay: null, manager: null, walletReady: false,
-    pairingInProgress: false, showPairingWhenReady: false,
+    pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
+    refreshBrowserWalletUI() {},
     clearWalletDisplay() {}, setConnection() {},
     addressFor() { throw new Error('Wallet public key is not available'); },
     loadWalletDependencies: async () => {}, loadSession: () => null,
@@ -484,7 +526,7 @@ test('forgetting a pairing notifies the wallet before tearing down the relay', a
   const end = source.indexOf("\n$('refresh').addEventListener", start);
   const context = {
     $: (id) => nodes[id], window: { confirm: () => true }, translate: (text) => text,
-    walletReady: true,
+    walletReady: true, walletTransitioning: false, refreshBrowserWalletUI() {},
     manager: {
       async sendDisconnect() { calls.push('notify'); },
       clearStoredSession() { calls.push('clear'); },
@@ -521,10 +563,11 @@ test('open in wallet remains available until an address is derived, including re
   const end = source.indexOf('\nasync function fetchBchUsd', start);
   const context = {
     $: element, relay: null, manager: null, walletPairingUri: null,
-    walletReady: false, pairingInProgress: false, showPairingWhenReady: false,
+    walletReady: false, pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
+    refreshBrowserWalletUI() {},
     QRCode: { toCanvas: async () => {} }, clearWalletDisplay() {}, setConnection() {},
     pairingReminder: { start() {} },
-    updateReceiveAddress() {}, resumeBeerReward() {},
+    updateReceiveAddress() {},
     addressFor() {
       if (!keyAvailable) throw new Error('Public key missing');
       return 'token-address';
@@ -594,6 +637,7 @@ test('saved wallet sessions start restoring immediately on page load', async () 
   const start = source.indexOf('const restoreSession =');
   const end = source.indexOf("\nif ('serviceWorker'", start);
   const context = {
+    sessionStorage: { getItem: () => null, removeItem() {} }, network: 'mainnet',
     loadWalletDependencies: async () => events.push('dependencies'),
     loadSession: () => saved,
     pairingInProgress: false, walletReady: false,
@@ -675,6 +719,57 @@ test('token send signs and broadcasts without submitting a payment proof', async
   assert.equal(reported.options.log, false);
 });
 
+test('browser wallet reviews token sends and does not broadcast when cancelled', async () => {
+  const category = 'a'.repeat(64);
+  const input = {
+    txid: 'b'.repeat(64), vout: 0, token: { category, amount: 5n },
+    satoshis: 20_000n, pathName: 'receive', addressIndex: 0, spendAddress: 'source',
+  };
+  const nodes = {
+    category: { value: category }, recipient: { value: 'recipient' }, amount: { value: '3' },
+    status: {}, log: { textContent: '', classList: { remove() {} } },
+  };
+  const broadcasts = [];
+  let approved = false;
+  let prompt;
+  let key;
+  class Builder {
+    addInput() { return this; }
+    addOutput() { return this; }
+    addTokenChangeOutputIfNeeded() { return this; }
+    addBchChangeOutputIfNeeded() { return this; }
+    build() { return 'signed-locally'; }
+    calculateTransactionFee() { return { feeSats: 300n }; }
+  }
+  const start = source.indexOf('async function sendFungibleTokens()');
+  const end = source.indexOf("\n$('connect').addEventListener", start);
+  const context = {
+    $: (id) => nodes[id], sending: false, walletReady: true, mainnet: true,
+    setConnection() {}, validateRecipient: (value) => value, translate: (text) => text,
+    refreshBalances: async () => ({ utxos: [input], addresses: [{}] }),
+    TOKEN_OUTPUT_SATOSHIS: 1000n, FEE_RESERVE_SATOSHIS: 10000n,
+    MAXIMUM_FEE_SATOSHIS: 10000n, TransactionBuilder: Builder,
+    addressFor: (path, index, type) => path === 0 && type === 'p2pkh' ? 'source' : 'change',
+    manager: { isBrowserWallet: true, unlocker() {
+      key = new Uint8Array([5, 6]);
+      return { template: { privateKey: key } };
+    } },
+    window: { confirm(message) { prompt = message; return approved; } },
+    provider: { async sendRawTransaction(hex) { broadcasts.push(hex); return 'txid'; } },
+    rememberSentTransaction() {}, refreshAfterApproval: async () => {},
+    report(error) { throw error; },
+  };
+  runInNewContext(source.slice(start, end), context);
+  await context.sendFungibleTokens();
+  assert.deepEqual(broadcasts, []);
+  assert.match(prompt, /300 satoshis/);
+  assert.deepEqual([...key], [0, 0]);
+  approved = true;
+  await context.sendFungibleTokens();
+  assert.deepEqual(broadcasts, ['signed-locally']);
+  assert.deepEqual([...key], [0, 0]);
+});
+
 test('portfolio abbreviates category IDs but copies the full ID', async () => {
   class Element {
     constructor() {
@@ -699,7 +794,7 @@ test('portfolio abbreviates category IDs but copies the full ID', async () => {
   const start = source.indexOf('function renderBalances(');
   const end = source.indexOf('\nasync function refreshBalances', start);
   runInNewContext(`${source.slice(start, end)}\nrenderBalances(utxos);`, {
-    $: element, walletReady: true, bchUsd: null, portfolioVersion: 0, mainnet: true, network: 'mainnet', SATOSHIS_PER_BCH: 100_000_000n,
+    $: element, walletReady: true, bchUsd: null, rewardCategory: null, portfolioVersion: 0, mainnet: true, network: 'mainnet', SATOSHIS_PER_BCH: 100_000_000n,
     tokenBalances: new Map(), portfolioPage: 0, updateAmountHelp() {},
     loadTokenLogo: () => new Promise(() => {}),
     fetchTokenMetadata: () => new Promise(() => {}), fetchCauldronSpot: () => new Promise(() => {}),
@@ -750,7 +845,7 @@ test('portfolio paginates fungible tokens and optionally includes each NFT', asy
   const end = source.indexOf('\nasync function refreshBalances', start);
   let copied;
   const context = {
-    $, walletReady: true, bchUsd: null, portfolioVersion: 0, portfolioPage: 0,
+    $, walletReady: true, bchUsd: null, rewardCategory: null, portfolioVersion: 0, portfolioPage: 0,
     mainnet: false, network: 'chipnet', SATOSHIS_PER_BCH: 100_000_000n,
     tokenBalances: new Map(), updateAmountHelp() {}, formatBch: () => '0',
     Option: class { constructor(text, value) { this.text = text; this.value = value; } },
@@ -818,13 +913,18 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   const end = source.indexOf('\nfunction clearWalletDisplay', start);
   const context = {
     $, document: { querySelectorAll: () => panels, body: { classList: { toggle() {} } } }, sending: false,
-    pairingInProgress: false, transferInteracted: false, tutorialStep: 2,
+    pairingInProgress: false, transferInteracted: false, tutorialStep: 2, manager: null,
+    refreshBrowserWalletUI() {},
     pairingReminder: { cancel() {} },
+    addressFor: () => 'token-address',
+    updateGameRewardAddress: (address) => { context.rewardAddress = address; },
     translate: (text) => text,
+    closeTutorial() { $('wizard-dialog').hidden = true; },
     showTutorialStep() { context.tutorialUpdated = true; },
   };
   runInNewContext(source.slice(start, end), context);
   context.setConnection(true);
+  assert.equal(context.rewardAddress, 'token-address');
   assert.ok(panels.every((panel) => !panel.hidden));
   assert.equal($('network-wallet-status').textContent, 'Wallet connected');
   assert.equal($('wizard-guide').hidden, false);
@@ -832,16 +932,19 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   $('wizard-dialog').hidden = false;
   $('wizard-next').disabled = true;
   context.setConnection(true);
-  assert.equal($('wizard-dialog').hidden, false);
-  assert.equal($('wizard-next').disabled, false);
+  assert.equal($('wizard-dialog').hidden, true);
+  assert.equal($('wizard-toggle').hidden, true);
   assert.equal(context.tutorialUpdated, undefined);
   $('game-dialog').open = true;
   $('game-dialog').close = () => { $('game-dialog').open = false; };
+  $('wizard-dialog').hidden = false;
   context.setConnection(false);
-  assert.equal($('game-dialog').open, false);
+  assert.equal($('game-dialog').open, true);
+  assert.equal(context.rewardAddress, null);
   assert.ok(panels.every((panel) => panel.hidden));
   assert.equal($('network-wallet-status').textContent, 'Not connected');
   assert.equal($('wizard-guide').hidden, false);
+  assert.equal($('wizard-toggle').hidden, false);
   assert.equal($('advanced-settings').hidden, true);
   assert.equal(context.tutorialStep, 0);
   assert.equal(context.tutorialUpdated, true);
@@ -879,7 +982,7 @@ test('priced metadata updates balances, token choices and allocation', async () 
   const helpers = source.slice(source.indexOf('function formatTokenAmount('), source.indexOf('\nasync function fetchAddressUtxosWithRetry'));
   const render = source.slice(source.indexOf('function renderBalances('), source.indexOf('\nasync function refreshBalances'));
   const context = {
-    $: element, walletReady: true, bchUsd: 200, balanceSatoshis: 100_000_000n,
+    $: element, walletReady: true, bchUsd: 200, rewardCategory: category, balanceSatoshis: 100_000_000n,
     portfolioVersion: 0, tokenBalances: new Map(), portfolioPage: 0, mainnet: true, network: 'mainnet',
     SATOSHIS_PER_BCH: 100_000_000n, formatBch: () => '1.00000000',
     Option: class { constructor(text, value) { this.text = text; this.value = value; } },
@@ -893,6 +996,8 @@ test('priced metadata updates balances, token choices and allocation', async () 
   context.renderBalances([{ satoshis: 100_000_000n, token: { category, amount: 125n } }]);
   assert.equal(element('portfolio-chart').hidden, true);
   await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(element('tokens-usd').textContent, '≈ $2.50');
+  assert.equal(element('mina-balance').textContent, '125');
   assert.equal(element('portfolio-chart').hidden, false);
   assert.match(element('tokens').children[0].children[0].children[2].children[0].children[0].textContent, /1\.25 EX/);
   const supply = element('tokens').children[0].children[0].children[2].children[1];
@@ -916,10 +1021,11 @@ test('priced metadata updates balances, token choices and allocation', async () 
 test('payment QR draws the loaded token logo and ignores a stale result', async () => {
   const nodes = new Map();
   const canvasDraws = [];
-  let handler;
+  let handler, focused;
   const element = (id) => {
     if (!nodes.has(id)) nodes.set(id, {
       value: '', textContent: '',
+      focus() { focused = id; },
       classList: {
         hidden: false,
         add() { this.hidden = true; },
@@ -941,7 +1047,7 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
   const start = source.indexOf("$('generate-payment').addEventListener('click'");
   const end = source.indexOf("\nfor (const id of ['receive-address'", start);
   const helpers = source.slice(source.indexOf('function paymentQrImage()'), source.indexOf("\n$('download-payment-qr')"));
-  runInNewContext(`${source.slice(start, end)}\n${helpers}`, {
+  const context = {
     $: element, walletReady: false, mainnet: true, loadWalletDependencies: async () => {},
     validateRecipient: (address) => address,
     network: 'mainnet', paymentGeneration: 0, paymentPriceSnapshot: null,
@@ -950,8 +1056,21 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
     QRCode: { toCanvas: async () => {} },
     loadTokenLogo: () => new Promise((resolve, reject) => { resolveLogo = resolve; rejectLogo = reject; }),
     fetchCauldronSpot: async () => { if (failPrice) throw new Error('offline'); return 0.001; },
+    fetchTokenMetadata: async () => ({ decimals: 2, symbol: 'PUSD' }),
+    PUSD_CATEGORY: '2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544', bchUsd: 300,
     translate: (text) => text, logger: { warn() {} }, report(error) { throw error; },
-  });
+  };
+  runInNewContext(`${source.slice(start, end)}\n${helpers}`, context);
+  element('receive-category').value = '';
+  await handler();
+  assert.equal(focused, 'receive-category');
+  assert.match(element('payment-input-status').textContent, /category/i);
+  element('receive-category').value = category;
+  element('receive-amount').value = '0';
+  await handler();
+  assert.equal(focused, 'receive-amount');
+  assert.match(element('payment-input-status').textContent, /base units/i);
+  element('receive-amount').value = '2';
   await handler();
   assert.equal(element('download-payment-qr').disabled, false);
   resolveLogo(logo);
@@ -960,6 +1079,23 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
   assert.ok(element('payment-token-icon').child);
   assert.equal(element('download-payment-qr').disabled, false);
   assert.match(element('payment-price').textContent, /0\.001000 BCH \/ base unit · \d{4}-\d\d-\d\dT/);
+  assert.match(element('payment-price').textContent, /\$30\.00 USD \/ 1 PUSD/);
+
+  context.bchUsd = null;
+  await handler();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(element('payment-price').textContent, /USD price per token unavailable/);
+  context.bchUsd = 300;
+
+  context.fetchTokenMetadata = async () => { throw new Error('offline'); };
+  await handler();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(element('payment-price').textContent, /USD price per token unavailable/);
+  element('receive-category').value = context.PUSD_CATEGORY;
+  await handler();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(element('payment-price').textContent, /\$30\.00 USD \/ 1 PUSD/);
+  element('receive-category').value = category;
 
   await handler();
   element('payment-result').classList.add('hidden');
@@ -1027,14 +1163,14 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   assert.equal(guidePosition, 'balance-section');
   assert.equal(element('wizard-dialog').parent, 'balance-section');
   element('wizard-next').listeners.click();
-  assert.deepEqual([...highlighted], ['transfer-section']);
-  assert.equal(guidePosition, 'transfer-section');
-  element('wizard-next').listeners.click();
   assert.deepEqual([...highlighted], ['earn-section']);
   assert.equal(guidePosition, 'earn-section');
   element('wizard-next').listeners.click();
+  assert.deepEqual([...highlighted], ['transfer-section']);
+  assert.equal(guidePosition, 'transfer-section');
+  element('wizard-next').listeners.click();
   assert.equal(element('wizard-dialog').hidden, true);
   assert.equal(highlighted.size, 0);
-  assert.equal(guidePosition, 'earn-section');
+  assert.equal(guidePosition, 'transfer-section');
   assert.equal(walking, false);
 });

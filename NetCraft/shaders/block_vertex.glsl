@@ -1,5 +1,5 @@
 #ifdef GL_ES
-precision mediump float;
+precision highp float;
 precision mediump int;
 #endif
 
@@ -34,7 +34,8 @@ void main() {
     }
     else {
         float camera_distance = distance(camera, vec3(position));
-        fog_factor = pow(clamp(camera_distance / fog_distance, 0.0, 1.0), 4.0);
+        float fog = clamp(camera_distance / fog_distance, 0.0, 1.0);
+        fog_factor = fog * fog * fog * fog;
         float dy = position.y - camera.y;
         float dx = distance(position.xz, camera.xz);
         fog_height = (atan(dy, dx) + pi / 2.0) / pi;
