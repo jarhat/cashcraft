@@ -22,7 +22,7 @@ test('requests and renders the top 20 coins twice for a continuous ticker', asyn
     const container = new Element();
     setupMarketTicker(container, (text) => text);
     await new Promise((resolve) => setImmediate(resolve));
-    assert.match(url, /order=market_cap_desc&per_page=20/);
+    assert.equal(url, '/api/market/coins');
     assert.equal(interval, 300_000);
     const [first, duplicate] = container.children[0].children;
     assert.equal(first.children.length, 20);

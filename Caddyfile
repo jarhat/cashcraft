@@ -12,7 +12,7 @@
   }
   @unfurler {
     header_regexp ua User-Agent (?i)(telegrambot|twitterbot|facebookexternalhit|whatsapp|discordbot|slackbot|linkedinbot|skypeuripreview)
-    expression `{path}.startsWith("/s/") || {query}.contains("addr=")`
+    expression `{path} == "/" || {path}.startsWith("/s/")`
   }
   handle @unfurler {
     rewrite * /api/preview

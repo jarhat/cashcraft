@@ -461,7 +461,7 @@ async function showPairingUri(uri) {
   await QRCode.toCanvas($('qr'), uri, {
     width: 190,
     margin: 0,
-    errorCorrectionLevel: 'M',
+    errorCorrectionLevel: 'H',
     color: { dark: '#07111b', light: '#ffffff' },
   });
   if (!walletReady && walletPairingUri === uri) pairingReminder.start();
@@ -739,7 +739,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
 async function fetchBchUsd() {
   try {
     const response = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin-cash&vs_currencies=usd',
+      '/api/market/bch',
     );
 
     if (!response.ok) {
@@ -1898,7 +1898,7 @@ $('funding-connect').addEventListener('click', () => {
 
 
 const notificationsDialog = $('notifications-dialog');
-for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notifications-dialog', 'game-dialog']) {
+for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notifications-dialog', 'game-dialog', 'donate-dialog']) {
   const dialog = $(id);
   dialog.addEventListener('click', (event) => {
     if (event.target !== dialog) return;
@@ -1907,6 +1907,39 @@ for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notific
         event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
   });
 }
+$('donate-open').addEventListener('click', async () => {
+  const dialog = $('donate-dialog');
+  if (!dialog.open) dialog.showModal();
+  $('donate-details').hidden = true;
+  $('donate-status').textContent = translate('Loading donation address…');
+  try {
+    const response = await fetch('/api/donation', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+    if (!response.ok) throw new Error(`Donation service returned HTTP ${response.status}`);
+    const { address } = await response.json();
+    if (!address) {
+      $('donate-status').textContent = translate('Donations are not configured.');
+      return;
+    }
+    await loadWalletDependencies();
+    await QRCode.toCanvas($('donate-qr'), address, { width: 190, margin: 2 });
+    $('donate-address').textContent = address;
+    $('donate-details').hidden = false;
+    $('donate-status').textContent = '';
+  } catch (error) {
+    logger.warn('Donation information unavailable:', error);
+    $('donate-status').textContent = translate('Donation information unavailable.');
+  }
+});
+$('donate-close').addEventListener('click', () => $('donate-dialog').close());
+$('donate-copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('donate-address').textContent);
+    $('donate-status').textContent = translate('Copied');
+  } catch (error) {
+    logger.warn('Could not copy donation address:', error);
+    $('donate-status').textContent = translate('Could not copy address.');
+  }
+});
 function markNotificationsRead() {
   $('notification-indicator').hidden = true;
 }
@@ -2108,6 +2141,13 @@ $('top-receive').addEventListener('click', () => {
   setTransferTab('receive');
   $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
+for (const field of ['address', 'category']) {
+  $(`edit-receive-${field}`).addEventListener('click', () => {
+    const input = $(`receive-${field}`);
+    input.readOnly = false;
+    input.focus();
+  });
+}
 $('generate-payment').addEventListener('click', async () => {
   const generation = ++paymentGeneration;
   try {

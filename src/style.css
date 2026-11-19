@@ -3029,6 +3029,13 @@ body::before { content: none; display: none; }
 .game-dialog { width: min(1000px, calc(100% - 24px)); max-height: calc(100dvh - 24px); }
 .game-switcher { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .game-switcher [aria-pressed="true"] { border-color: var(--ice); color: var(--ice); }
+.game-switcher button { font-size: 1.7rem; line-height: 1; }
+.game-restore { position: fixed; right: 16px; bottom: 16px; z-index: 20; }
+.game-restore[hidden] { display: none; }
+.edit-field { flex: none; font-size: 1.2rem; }
+.pairing-qr { position: relative; display: inline-block; line-height: 0; }
+.pairing-hat { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: white; border-radius: 4px; padding: 3px; font-size: 22px; line-height: 1; }
+.pixel-heart { color: #ff5279; }
 .game-stage { overflow: hidden; border: 1px solid var(--glass-border); border-radius: 12px; background: #080e17; }
 .game-dialog iframe { display: block; width: 100%; height: min(65vh, 640px); border: 0; background: #080e17; }
 .game-dialog[open] { animation: game-panel-enter .24s ease-out both; }

@@ -33,6 +33,13 @@ test('game buttons open mounted shells and unload them on close', async (t) => {
   assert.equal($('game-frame').src, '/games/netcraft/craftw.html');
   assert.equal($('switch-netcraft')['aria-pressed'], 'true');
   assert.equal($('switch-pk2')['aria-pressed'], 'false');
+  $('game-minimize').listeners.click();
+  assert.equal($('game-dialog').open, false);
+  assert.equal($('game-frame').src, '/games/netcraft/craftw.html');
+  assert.equal($('game-restore').hidden, false);
+  $('game-restore').listeners.click();
+  assert.equal($('game-dialog').open, true);
+  assert.equal($('game-frame').src, '/games/netcraft/craftw.html');
   globalThis.fetch = async () => ({ ok: false, headers: { get: () => '' } });
   await $('switch-pk2').listeners.click();
   assert.equal($('game-frame').src, '/games/netcraft/craftw.html');

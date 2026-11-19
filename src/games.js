@@ -8,11 +8,18 @@ export function setupGames($, { claimBeer, translate }) {
   const frame = $('game-frame');
   let generation = 0;
   let activeGame = null;
+  let minimized = false;
+  const restore = () => {
+    minimized = false;
+    $('game-restore').hidden = true;
+    if (!dialog.open) dialog.showModal();
+  };
   for (const [id, game] of Object.entries(games)) {
     const open = async () => {
-      if (dialog.open && activeGame === id) {
+      if ((dialog.open || minimized) && activeGame === id) {
         generation++;
         $('game-dialog-status').textContent = '';
+        if (minimized) restore();
         return;
       }
       const request = ++generation;
@@ -38,7 +45,7 @@ export function setupGames($, { claimBeer, translate }) {
         for (const key of Object.keys(games)) {
           $(`switch-${key}`).setAttribute('aria-pressed', String(key === id));
         }
-        if (!dialog.open) dialog.showModal();
+        if (!dialog.open) restore();
       } catch (error) {
         if (request === generation) status.textContent = error.message;
       }
@@ -46,8 +53,15 @@ export function setupGames($, { claimBeer, translate }) {
     $(`game-${id}`).addEventListener('click', open);
     $(`switch-${id}`).addEventListener('click', open);
   }
+  $('game-minimize').addEventListener('click', () => {
+    minimized = true;
+    $('game-restore').hidden = false;
+    dialog.close();
+  });
+  $('game-restore').addEventListener('click', restore);
   $('game-close').addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => {
+    if (minimized) return;
     generation++;
     activeGame = null;
     frame.removeAttribute('src');

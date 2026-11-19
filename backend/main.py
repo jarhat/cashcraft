@@ -44,6 +44,12 @@ BCH_RPC_PASSWORD = os.getenv("BCH_RPC_PASSWORD")
 BCH_ALLOWED_SENDER = os.getenv("BCH_ALLOWED_SENDER", "").strip().lower()
 BCH_WALLET = os.getenv("BCH_WALLET", "token-sender").strip()
 BCH_REWARD_CATEGORY = os.getenv("BCH_REWARD_CATEGORY", "").strip().lower()
+BCH_DONATION_ADDRESS = os.getenv("BCH_DONATION_ADDRESS", "").strip()
+PREVIEW_TITLE = os.getenv("PREVIEW_TITLE", "CTF Cash | Bitcoin Cash CashTokens")
+PREVIEW_DESCRIPTION = os.getenv(
+    "PREVIEW_DESCRIPTION",
+    "Send and receive CashTokens, create payment links and QR codes, and track token balances with your Bitcoin Cash wallet.",
+)
 
 CATEGORY_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 TXID_RE = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -425,6 +431,47 @@ def health() -> dict[str, str]:
 def token_reward() -> dict[str, str]:
     return {"category": BCH_REWARD_CATEGORY}
 
+_market_lock = threading.Lock()
+_market_cache: dict[str, tuple[float, object]] = {}
+_market_urls = {
+    "coins": "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=20&page=1&sparkline=false",
+    "bch": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin-cash&vs_currencies=usd",
+}
+
+
+@app.get("/api/market/{kind}")
+def market_data(kind: Literal["coins", "bch"]):
+    with _market_lock:
+        cached = _market_cache.get(kind)
+        if cached and time.monotonic() - cached[0] < 300:
+            return cached[1]
+        try:
+            response = httpx.get(_market_urls[kind], timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            if not isinstance(data, list if kind == "coins" else dict):
+                raise ValueError("Invalid market response")
+            _market_cache[kind] = (time.monotonic(), data)
+            return data
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("Market data unavailable: %s", type(exc).__name__)
+            raise HTTPException(status_code=503, detail="Market data unavailable.") from exc
+
+
+@app.get("/api/donation")
+def donation_info() -> dict:
+    try:
+        balance = bch_rpc("getbalance", [], wallet=True)
+        if type(balance) not in (int, float) or not math.isfinite(balance) or balance < 0:
+            raise ValueError("Invalid wallet balance")
+        address = ""
+        if BCH_DONATION_ADDRESS:
+            address, _, _ = validate_token_aware_cashaddr(BCH_DONATION_ADDRESS)
+        return {"balance_bch": balance, "address": address}
+    except (RuntimeError, ValueError) as exc:
+        logger.warning("Donation information unavailable: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Donation information unavailable.") from exc
+
 
 _chain_status_lock = threading.Lock()
 _chain_status_cache: dict | None = None
@@ -615,8 +662,8 @@ def link_preview(request: Request) -> Response:
         description = f"Send {payment[2]} token base units to {payment[0]} (category {payment[1][:12]}…)."
         image = f"{origin}/api/qr.png?{image_query}"
     else:
-        title = "CTF Cash | Bitcoin Cash CashTokens"
-        description = "Send and receive CashTokens, create payment links and QR codes, and track token balances with your Bitcoin Cash wallet."
+        title = PREVIEW_TITLE
+        description = PREVIEW_DESCRIPTION
         image = f"{origin}/social-preview.png" if origin else ""
     url = f"{origin}{original}"
     e = html.escape

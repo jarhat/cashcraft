@@ -92,6 +92,9 @@
 
       <span class="network"><i aria-hidden="true"></i><span id="network">CHIPNET</span><span id="network-wallet-status" class="visually-hidden">Not connected</span></span>
       <div class="topbar-tools topbar-tools-right">
+        <button id="donate-open" class="theme-toggle" type="button" aria-label="Donate" title="Donate" aria-haspopup="dialog" aria-controls="donate-dialog">
+          <svg class="theme-icon pixel-heart" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" stroke="none" d="M2 2h4v1h1v1h2V3h1V2h4v1h1v5h-1v2h-1v1h-1v1h-1v1h-1v1H6v-1H5v-1H4v-1H3v-1H2V8H1V3h1z"/></svg>
+        </button>
         <button id="game-netcraft" class="theme-toggle game-button" data-wallet-panel hidden type="button" aria-label="Play Netcraft"><span aria-hidden="true">⛏️</span></button>
         <button id="game-pk2" class="theme-toggle game-button" data-wallet-panel hidden type="button" aria-label="Play Pekka Kana 2"><span aria-hidden="true">🐔</span></button>
         <button id="game-beer" class="theme-toggle game-button" data-wallet-panel hidden type="button" aria-label="Claim beer bonus (one per address)"><span aria-hidden="true">🍺</span></button>
@@ -269,7 +272,8 @@
         <label class="receive-address-label">
           Your receive address
           <div class="address-line">
-            <input id="receive-address" placeholder="bitcoincash:z…" autocomplete="off" spellcheck="false">
+            <button id="edit-receive-address" class="small-button edit-field" type="button" aria-label="Edit receive address" title="Edit receive address">✎</button>
+            <input id="receive-address" placeholder="bitcoincash:z…" autocomplete="off" spellcheck="false" readonly>
             <button id="copy-receive-address" class="small-button" type="button" disabled>
               Copy
             </button>
@@ -279,12 +283,16 @@
         <div class="form receive-form">
           <label>
             Token category ID
+            <div class="address-line">
+            <button id="edit-receive-category" class="small-button edit-field" type="button" aria-label="Edit token category" title="Edit token category">✎</button>
             <input
               id="receive-category"
               placeholder="64-character category ID"
               autocomplete="off"
               spellcheck="false"
+              readonly
             >
+            </div>
           </label>
 
           <label>
@@ -296,6 +304,7 @@
               name="receive-token-units"
               placeholder="Whole token units"
               autocomplete="off"
+              value="1"
             >
           </label>
           <label class="full">
@@ -413,7 +422,7 @@
       <div id="connection-loading" class="connection-loading" role="status" hidden><span class="connection-spinner" aria-hidden="true"></span><span>Finishing wallet setup…</span></div>
 
       <div id="pairing" class="pairing hidden">
-        <canvas id="qr"></canvas>
+        <div class="pairing-qr"><canvas id="qr"></canvas><span class="pairing-hat" aria-hidden="true">🧙</span></div>
         <p class="pair-title">Connect your wallet</p>
         <p class="muted">
           On another device, scan this code with your wallet’s WizardConnect scanner.
@@ -493,16 +502,28 @@
   <dialog id="game-dialog" class="notifications-dialog game-dialog" aria-labelledby="game-title">
     <div class="notifications-heading">
       <h2 id="game-title">Game</h2>
+      <button id="game-minimize" class="small-button" type="button" aria-label="Minimize game" title="Minimize game">⌄</button>
       <button id="game-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
     </div>
     <nav class="game-switcher" aria-label="Choose a game">
-      <button id="switch-netcraft" class="small-button" type="button" aria-pressed="false">⛏️ Netcraft</button>
-      <button id="switch-pk2" class="small-button" type="button" aria-pressed="false">🐔 Pekka Kana 2</button>
+      <button id="switch-netcraft" class="small-button" type="button" aria-label="Play Netcraft" title="Netcraft" aria-pressed="false">⛏️</button>
+      <button id="switch-pk2" class="small-button" type="button" aria-label="Play Pekka Kana 2" title="Pekka Kana 2" aria-pressed="false">🐔</button>
     </nav>
     <p class="fine">Switching games ends the current session.</p>
     <p id="game-dialog-status" class="fine" role="status"></p>
     <div class="game-stage">
       <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen; gamepad" allowfullscreen></iframe>
+    </div>
+  </dialog>
+  <button id="game-restore" class="button secondary game-restore" type="button" hidden>⌃ Restore game</button>
+
+  <dialog id="donate-dialog" class="notifications-dialog" aria-labelledby="donate-title">
+    <div class="notifications-heading"><h2 id="donate-title">Support the server</h2><button id="donate-close" class="small-button close-notifications" type="button" aria-label="Close">×</button></div>
+    <p>Donate BCH to help keep the server running.</p>
+    <p id="donate-status" class="fine" role="status">Loading donation address…</p>
+    <div id="donate-details" hidden>
+      <div class="qr-frame"><canvas id="donate-qr" aria-label="Donation address QR code"></canvas></div>
+      <div class="payment-url-line"><code id="donate-address"></code><button id="donate-copy" class="small-button" type="button">Copy</button></div>
     </div>
   </dialog>
 
