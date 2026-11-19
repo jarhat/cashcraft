@@ -179,7 +179,7 @@ class RewardTests(unittest.TestCase):
                 backend.process_one_mining_reward(1)
             build.assert_not_called()
 
-    def test_immediate_payout_reports_limit_without_creating_a_transaction(self):
+    def test_immediate_payout_ignores_daily_limits_for_requested_reward_id(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
         with sqlite3.connect(path) as db:
@@ -193,14 +193,14 @@ class RewardTests(unittest.TestCase):
              patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
              patch.object(backend, "NETCRAFT_REWARD_WAKE_SECRET", "test-secret"), \
              patch.object(backend, "NETCRAFT_DAILY_PAYOUT_LIMIT", 1), \
+             patch.object(backend, "NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT", 1), \
              patch.object(backend, "build_reward_transaction", return_value=("abcd", "c" * 64)) as build, \
              patch.object(backend, "bch_rpc", return_value="c" * 64):
             client = TestClient(backend.app)
             headers = {"Authorization": "Bearer test-secret"}
             self.assertEqual(client.post("/api/internal/netcraft-mining-reward/1", headers=headers).status_code, 204)
-            self.assertEqual(client.post("/api/internal/netcraft-mining-reward/2", headers=headers).status_code, 202)
-            build.assert_called_once()
-            self.assertFalse(backend.process_one_mining_reward())
+            self.assertEqual(client.post("/api/internal/netcraft-mining-reward/2", headers=headers).status_code, 204)
+            self.assertEqual(build.call_count, 2)
 
     def test_mining_rewards_disabled_do_not_open_database(self):
         with patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "false"), \

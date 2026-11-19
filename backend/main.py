@@ -906,65 +906,71 @@ def process_one_mining_reward(reward_id: int | None = None) -> bool:
     if NETCRAFT_MINING_REWARDS_ENABLED != "true" or not NETCRAFT_DB_PATH:
         return False
     with open_netcraft_db(timeout=10) as db:
-        if reward_id is not None:
+        requested_reward_id = reward_id
+        if requested_reward_id is not None:
             existing = db.execute(
-                "SELECT sent_at FROM mining_rewards WHERE id = ?", (reward_id,)
+                "SELECT sent_at FROM mining_rewards WHERE id = ?", (requested_reward_id,)
             ).fetchone()
             if not existing:
                 raise RuntimeError("Mining reward not found.")
             if existing[0] is not None:
                 return True
-        row = db.execute(
-            """WITH daily_address_counts AS (
-                   SELECT m.cash_address, COUNT(*) AS count
-                   FROM mining_payout_reservations r
-                   JOIN mining_rewards m ON m.id = r.reward_id
-                   WHERE r.day = date('now') GROUP BY m.cash_address
-               )
-               SELECT id, cash_address, category, signed_tx, txid FROM mining_rewards m
-               WHERE sent_at IS NULL
-               AND (? IS NULL OR id = ?)
-               AND (
-                   EXISTS (SELECT 1 FROM mining_payout_reservations r
-                           WHERE r.reward_id = m.id AND r.day = date('now'))
-                   OR (
-                       (SELECT COUNT(*) FROM mining_payout_reservations WHERE day = date('now')) < ?
-                       AND COALESCE((SELECT count FROM daily_address_counts c
-                                     WHERE c.cash_address = m.cash_address), 0) < ?
+            row = db.execute(
+                "SELECT id, cash_address, category, signed_tx, txid FROM mining_rewards WHERE id = ? AND sent_at IS NULL",
+                (requested_reward_id,),
+            ).fetchone()
+        else:
+            row = db.execute(
+                """WITH daily_address_counts AS (
+                       SELECT m.cash_address, COUNT(*) AS count
+                       FROM mining_payout_reservations r
+                       JOIN mining_rewards m ON m.id = r.reward_id
+                       WHERE r.day = date('now') GROUP BY m.cash_address
                    )
-               ) ORDER BY signed_tx IS NULL, id LIMIT 1""",
-            (reward_id, reward_id, NETCRAFT_DAILY_PAYOUT_LIMIT, NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT),
-        ).fetchone()
+                   SELECT id, cash_address, category, signed_tx, txid FROM mining_rewards m
+                   WHERE sent_at IS NULL
+                   AND (
+                       EXISTS (SELECT 1 FROM mining_payout_reservations r
+                               WHERE r.reward_id = m.id AND r.day = date('now'))
+                       OR (
+                           (SELECT COUNT(*) FROM mining_payout_reservations WHERE day = date('now')) < ?
+                           AND COALESCE((SELECT count FROM daily_address_counts c
+                                         WHERE c.cash_address = m.cash_address), 0) < ?
+                       )
+                   ) ORDER BY signed_tx IS NULL, id LIMIT 1""",
+                (NETCRAFT_DAILY_PAYOUT_LIMIT, NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT),
+            ).fetchone()
         if not row:
             return False
         reward_id, address, category, signed_tx, txid = row
         validate_token_aware_cashaddr(address)
         if not CATEGORY_RE.fullmatch(category):
             raise RuntimeError("Invalid mining reward category.")
-        db.execute("BEGIN IMMEDIATE")
-        day = db.execute("SELECT date('now')").fetchone()[0]
-        reserved = db.execute(
-            "SELECT 1 FROM mining_payout_reservations WHERE reward_id = ? AND day = ?",
-            (reward_id, day),
-        ).fetchone()
-        if not reserved:
-            count = db.execute(
-                "SELECT COUNT(*) FROM mining_payout_reservations WHERE day = ?", (day,)
-            ).fetchone()[0]
-            address_count = db.execute(
-                """SELECT COUNT(*) FROM mining_payout_reservations r
-                   JOIN mining_rewards m ON m.id = r.reward_id
-                   WHERE r.day = ? AND m.cash_address = ?""",
-                (day, address),
-            ).fetchone()[0]
-            if count >= NETCRAFT_DAILY_PAYOUT_LIMIT or address_count >= NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT:
-                db.rollback()
-                return False
-            db.execute(
-                "INSERT INTO mining_payout_reservations (reward_id, day) VALUES (?, ?)",
+        if requested_reward_id is None:
+            db.execute("BEGIN IMMEDIATE")
+            day = db.execute("SELECT date('now')").fetchone()[0]
+            reserved = db.execute(
+                "SELECT 1 FROM mining_payout_reservations WHERE reward_id = ? AND day = ?",
                 (reward_id, day),
-            )
-        db.commit()
+            ).fetchone()
+            if not reserved:
+                count = db.execute(
+                    "SELECT COUNT(*) FROM mining_payout_reservations WHERE day = ?", (day,)
+                ).fetchone()[0]
+                address_count = db.execute(
+                    """SELECT COUNT(*) FROM mining_payout_reservations r
+                       JOIN mining_rewards m ON m.id = r.reward_id
+                       WHERE r.day = ? AND m.cash_address = ?""",
+                    (day, address),
+                ).fetchone()[0]
+                if count >= NETCRAFT_DAILY_PAYOUT_LIMIT or address_count >= NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT:
+                    db.rollback()
+                    return False
+                db.execute(
+                    "INSERT INTO mining_payout_reservations (reward_id, day) VALUES (?, ?)",
+                    (reward_id, day),
+                )
+            db.commit()
         if not signed_tx:
             ensure_no_pending_signed_payout()
             signed_tx, txid = build_reward_transaction(address, category)
