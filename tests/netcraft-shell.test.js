@@ -165,6 +165,39 @@ test('touch controls recover from unavailable pointer capture and release outsid
       setPointerCapture() { throw Object.assign(new Error('inactive pointer'), { name: 'InvalidStateError' }); },
       getBoundingClientRect() { return { left: 0, top: 0, width: 100 }; },
     });
+
+    test('touch fallback tracks the initiating finger and releases held mining', () => {
+      const elements = new Map();
+      const $ = (id) => {
+        if (!elements.has(id)) elements.set(id, {
+          style: {}, value: '', listeners: {}, classList: { add() {} },
+          addEventListener(type, fn) { this.listeners[type] = fn; },
+          setAttribute() {}, getBoundingClientRect() { return { left: 10, top: 20, width: 100, height: 200 }; },
+        });
+        return elements.get(id);
+      };
+      const window = { addEventListener() {} };
+      const document = { getElementById: $, querySelector: () => $('controls'), addEventListener() {} };
+      const context = { document, window, Date, Math, console };
+      runInNewContext(script, context);
+      const calls = [];
+      context.Module._touch_set_move = context.Module._touch_set_mine = true;
+      context.Module.ccall = (name, _result, _types, args) => calls.push([name, Array.from(args)]);
+      const event = (id, x, y) => ({
+        cancelable: true, preventDefault() {},
+        changedTouches: [{ identifier: id, clientX: x, clientY: y }],
+      });
+      $('mobile-stick').listeners.touchstart(event(1, 60, 120));
+      $('mobile-stick').listeners.touchmove(event(2, 60, 20));
+      $('mobile-stick').listeners.touchmove(event(1, 60, 20));
+      assert.deepEqual(calls.at(-1), ['touch_set_move', [0, -1]]);
+      $('mobile-mine').listeners.touchstart(event(3, 0, 0));
+      $('mobile-mine').listeners.touchend(event(4, 0, 0));
+      $('mobile-mine').listeners.touchend(event(3, 0, 0));
+      assert.deepEqual(calls.slice(-2), [['touch_set_mine', [1]], ['touch_set_mine', [0]]]);
+      $('mobile-stick').listeners.touchcancel(event(1, 60, 20));
+      assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);
+    });
     return elements.get(id);
   };
   const document = { getElementById: $, querySelector: () => $('controls'), addEventListener() {} };

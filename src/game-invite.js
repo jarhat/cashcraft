@@ -1,10 +1,13 @@
 export function setupGameInvite($, network, loadDependencies) {
   const dialog = $('invite-dialog');
-  const url = new URL('/craft', window.location.origin).href;
+  let url = new URL('/craft', window.location.origin).href;
   $('invite-url').textContent = url;
   const status = (message) => { $('invite-status').textContent = message; };
 
   $('game-invite').addEventListener('click', async () => {
+    const isPk2 = $('game-frame').src?.includes('/games/pk2/');
+    url = new URL(isPk2 ? '/?game=pk2' : '/craft', window.location.origin).href;
+    $('invite-url').textContent = url;
     if (!dialog.open) dialog.showModal();
     status('Loading donation address…');
     $('donation-qr').hidden = true;
@@ -44,7 +47,9 @@ export function setupGameInvite($, network, loadDependencies) {
   $('invite-share').addEventListener('click', async () => {
     try {
       if (!navigator.share) throw new Error('Sharing is unavailable. Use Copy invite link.');
-      await navigator.share({ title: 'CashCraft', text: 'Come explore CashCraft with me!', url });
+      const isPk2 = $('game-frame').src?.includes('/games/pk2/');
+      await navigator.share({ title: isPk2 ? 'Pekka Kana 2' : 'CashCraft',
+        text: isPk2 ? 'Play Pekka Kana 2 with me!' : 'Come explore CashCraft with me!', url });
     } catch (error) {
       if (error.name !== 'AbortError') status(error.message || 'Could not share the invite link.');
     }

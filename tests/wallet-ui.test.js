@@ -38,7 +38,7 @@ test('theme preferences migrate and select the correct palette', () => {
       setItem(key, value) { this[key] = value; },
     };
     const start = source.indexOf('const savedTheme =');
-    const end = source.indexOf("\nfor (const name of ['theme', 'language'])", start);
+    const end = source.indexOf("\nfor (const name of ['theme', 'language', 'games'])", start);
     runInNewContext(source.slice(start, end), { document, localStorage });
     assert.equal(document.documentElement.dataset.theme, expected);
     assert.equal(localStorage['ctf-theme'], expected);

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <math.h>
 #include "joy.h"
 #include "config.h"
 #include "mining.h"
@@ -32,6 +33,8 @@ bool is_gamepad_connected() {
 #include <emscripten/html5.h>
 static EM_BOOL on_gamepadconnected(int eventType, const EmscriptenGamepadEvent *gamepadEvent, void *userData) {
     gamepad_connected = 1;
+    gamepad_state.scale_moveH = gamepad_state.scale_moveV = GAMEPAD_MOVE_SENSITIVITY;
+    gamepad_state.scale_lookH = gamepad_state.scale_lookV = GAMEPAD_LOOK_SENSITIVITY;
     // TODO: track individual gamepad identifiers?
     printf("gamepad connected\n");
 
@@ -40,6 +43,8 @@ static EM_BOOL on_gamepadconnected(int eventType, const EmscriptenGamepadEvent *
 
 static EM_BOOL on_gamepaddisconnected(int eventType, const EmscriptenGamepadEvent *gamepadEvent, void *userData) {
     gamepad_connected = -1;
+    mining_stop();
+    building_stop();
     printf("gamepad disconnected\n");
 
     return EM_TRUE;
@@ -65,13 +70,13 @@ void handle_gamepad_input() {
     if (!gamepad_state.axis) gamepad_state.axis = _axis;
     if (!gamepad_state.digitalButton) gamepad_state.digitalButton = _digitalButton;
 
-    gamepad_state.axis_count = gp.numAxes;
-    for (int i = 0; i < gp.numAxes; ++i) {
+    gamepad_state.axis_count = gp.numAxes < 16 ? gp.numAxes : 16;
+    for (int i = 0; i < gamepad_state.axis_count; ++i) {
         _axis[i] = gp.axis[i];
     }
 
-    gamepad_state.digitalButton_count = gp.numButtons;
-    for (int i = 0; i < gp.numButtons; ++i) {
+    gamepad_state.digitalButton_count = gp.numButtons < 16 ? gp.numButtons : 16;
+    for (int i = 0; i < gamepad_state.digitalButton_count; ++i) {
         _digitalButton[i] = gp.digitalButton[i];
     }
 #else
@@ -112,13 +117,13 @@ void handle_gamepad_input() {
     }
 
 
-    last_gamepad_state.axis_count =  gamepad_state.axis_count;
-    for (int i = 0; i < gamepad_state.axis_count; ++i) {
+    last_gamepad_state.axis_count =  gamepad_state.axis_count < 16 ? gamepad_state.axis_count : 16;
+    for (int i = 0; i < last_gamepad_state.axis_count; ++i) {
         last_gamepad_state.axis[i] = gamepad_state.axis[i];
     }
 
-    last_gamepad_state.digitalButton_count =  gamepad_state.digitalButton_count;
-    for (int i = 0; i < gamepad_state.digitalButton_count; ++i) {
+    last_gamepad_state.digitalButton_count =  gamepad_state.digitalButton_count < 16 ? gamepad_state.digitalButton_count : 16;
+    for (int i = 0; i < last_gamepad_state.digitalButton_count; ++i) {
         last_gamepad_state.digitalButton[i] = gamepad_state.digitalButton[i];
     }
 }
@@ -132,10 +137,8 @@ void init_joystick(int joy) {
     gamepad_state.scale_moveH = GAMEPAD_MOVE_SENSITIVITY;
     gamepad_state.scale_moveV = GAMEPAD_MOVE_SENSITIVITY;
 
-    if (strstr(name, "STANDARD GAMEPAD")) {
-        // Invert axes, for some reason these seem to be backwards TODO: configurable
+    if (name && strstr(name, "STANDARD GAMEPAD")) {
         gamepad_state.scale_lookV *= -1;
-        gamepad_state.scale_moveV *= -1;
     }
 
     gamepad_connected = joy;
@@ -146,9 +149,11 @@ void init_joystick(int joy) {
 void on_joystick_connection(int joy, int event) {
     if (event == GLFW_CONNECTED) {
         init_joystick(joy);
-    } else if (event == GLFW_DISCONNECTED) {
+    } else if (event == GLFW_DISCONNECTED && joy == gamepad_connected) {
         printf("Joystick disconnected: %d\n", joy);
         gamepad_connected = -1;
+        mining_stop();
+        building_stop();
     }
 }
 
@@ -174,6 +179,12 @@ void init_joystick_callbacks() {
     emscripten_set_gamepaddisconnected_callback(NULL, EM_FALSE, on_gamepaddisconnected);
 #else
     glfwSetJoystickCallback(on_joystick_connection);
+    for (int joy = GLFW_JOYSTICK_1; joy <= GLFW_JOYSTICK_LAST; joy++) {
+        if (glfwJoystickPresent(joy)) {
+            init_joystick(joy);
+            break;
+        }
+    }
 #endif
 }
 
@@ -186,10 +197,19 @@ void joystick_apply_move(double *sx, double *sz) {
     if (gamepad_state.digitalButton_count > GAMEPAD_DPAD_RIGHT &&
         gamepad_state.digitalButton[GAMEPAD_DPAD_RIGHT]) (*sx)++;
 
-    if (gamepad_state.axis_count > GAMEPAD_RIGHT_STICK_HORIZONTAL &&
-        gamepad_state.axis_count > GAMEPAD_RIGHT_STICK_VERTICAL) {
-        *sx += gamepad_state.axis[GAMEPAD_LEFT_STICK_HORIZONTAL] * gamepad_state.scale_moveH;
-        *sz -= gamepad_state.axis[GAMEPAD_LEFT_STICK_VERTICAL] * gamepad_state.scale_moveV;
+    if (gamepad_state.digitalButton_count > GAMEPAD_DPAD_UP &&
+        gamepad_state.digitalButton[GAMEPAD_DPAD_UP]) (*sz)--;
+    if (gamepad_state.digitalButton_count > GAMEPAD_DPAD_DOWN &&
+        gamepad_state.digitalButton[GAMEPAD_DPAD_DOWN]) (*sz)++;
+
+    if (gamepad_state.axis_count > GAMEPAD_LEFT_STICK_HORIZONTAL &&
+        gamepad_state.axis_count > GAMEPAD_LEFT_STICK_VERTICAL) {
+        float x = gamepad_state.axis[GAMEPAD_LEFT_STICK_HORIZONTAL];
+        float z = gamepad_state.axis[GAMEPAD_LEFT_STICK_VERTICAL];
+        if (hypotf(x, z) >= 0.18f) {
+            *sx += x * gamepad_state.scale_moveH;
+            *sz += z * gamepad_state.scale_moveV;
+        }
     }
 }
 
@@ -198,8 +218,12 @@ void joystick_apply_look(double *mx, double *my, double px, double py) {
 
     if (gamepad_state.axis_count > GAMEPAD_RIGHT_STICK_HORIZONTAL &&
         gamepad_state.axis_count > GAMEPAD_RIGHT_STICK_VERTICAL) {
-        *mx = px + gamepad_state.axis[GAMEPAD_RIGHT_STICK_HORIZONTAL] * gamepad_state.scale_lookH;
-        *my = py + gamepad_state.axis[GAMEPAD_RIGHT_STICK_VERTICAL] * gamepad_state.scale_lookV;
+        float x = gamepad_state.axis[GAMEPAD_RIGHT_STICK_HORIZONTAL];
+        float y = gamepad_state.axis[GAMEPAD_RIGHT_STICK_VERTICAL];
+        if (hypotf(x, y) >= 0.18f) {
+            *mx = px + x * gamepad_state.scale_lookH;
+            *my = py + y * gamepad_state.scale_lookV;
+        }
     }
 }
 
@@ -209,11 +233,8 @@ void joystick_apply_buttons(bool *jumping, bool *crouching) {
     if (gamepad_state.digitalButton_count > GAMEPAD_A &&
         gamepad_state.digitalButton[GAMEPAD_A]) *jumping = true;
 
-    if (gamepad_state.digitalButton_count > GAMEPAD_DPAD_UP &&
-        gamepad_state.digitalButton[GAMEPAD_DPAD_UP]) *jumping = true;
-
-    if (gamepad_state.digitalButton_count > GAMEPAD_DPAD_DOWN &&
-        gamepad_state.digitalButton[GAMEPAD_DPAD_DOWN]) *crouching = true;
+    if (gamepad_state.digitalButton_count > GAMEPAD_B &&
+        gamepad_state.digitalButton[GAMEPAD_B]) *crouching = true;
 }
 
 

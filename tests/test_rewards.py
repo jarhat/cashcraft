@@ -2,6 +2,7 @@ import importlib.util
 import io
 import os
 import sqlite3
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,13 +11,12 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from PIL import Image
 
+sys.path.insert(0, str(Path(__file__).parents[1] / "backend"))
 os.environ.update({
     "BCH_NETWORK": "mainnet",
     "BCH_RPC_USER": "test",
     "BCH_RPC_PASSWORD": "test",
-    "BCH_ALLOWED_TOKEN_CATEGORIES": "a" * 64,
     "BCH_REWARD_CATEGORY": "b" * 64,
-    "BCH_REQUIRED_CONFIRMATIONS": "0",
 })
 spec = importlib.util.spec_from_file_location("cashcraft_backend", Path(__file__).parents[1] / "backend/main.py")
 backend = importlib.util.module_from_spec(spec)
@@ -92,6 +92,27 @@ class RewardTests(unittest.TestCase):
                 rpc.assert_called_once_with("sendrawtransaction", ["abcd"])
             self.assertFalse(backend.process_one_mining_reward())
             build.assert_called_once_with(address, "a" * 64)
+
+    def test_worker_retries_unsigned_mining_reward_for_saved_address(self):
+        path = Path(self.tmp.name) / "netcraft.sqlite3"
+        address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
+        backend.save_cash_address(address, "bitcoincash", 2)
+        with sqlite3.connect(path) as db:
+            db.execute("""CREATE TABLE mining_rewards (
+                id INTEGER PRIMARY KEY, cash_address TEXT, category TEXT,
+                signed_tx TEXT, txid TEXT, sent_at TEXT
+            )""")
+            db.execute("INSERT INTO mining_rewards (cash_address, category) VALUES (?, ?)", (address, "b" * 64))
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path)), \
+             patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
+             patch.object(backend, "build_reward_transaction", side_effect=[RuntimeError("offline"), ("abcd", "c" * 64)]), \
+             patch.object(backend, "bch_rpc", return_value="c" * 64):
+            with self.assertRaisesRegex(RuntimeError, "offline"):
+                backend.process_one_mining_reward(1)
+            self.assertTrue(backend.process_one_mining_reward())
+            self.assertFalse(backend.process_one_mining_reward())
+        with sqlite3.connect(path) as db:
+            self.assertIsNotNone(db.execute("SELECT sent_at FROM mining_rewards").fetchone()[0])
 
     def test_mining_payout_is_built_and_broadcast_in_one_request(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
@@ -177,7 +198,7 @@ class RewardTests(unittest.TestCase):
             client = TestClient(backend.app)
             headers = {"Authorization": "Bearer test-secret"}
             self.assertEqual(client.post("/api/internal/netcraft-mining-reward/1", headers=headers).status_code, 204)
-            self.assertEqual(client.post("/api/internal/netcraft-mining-reward/2", headers=headers).status_code, 429)
+            self.assertEqual(client.post("/api/internal/netcraft-mining-reward/2", headers=headers).status_code, 202)
             build.assert_called_once()
             self.assertFalse(backend.process_one_mining_reward())
 
@@ -241,7 +262,7 @@ class RewardTests(unittest.TestCase):
     def test_mina_total_counts_only_sent_rewards_in_current_category(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
         with sqlite3.connect(backend.DB_PATH) as db:
-            for table in ("token_rewards", "legacy_bonus_rewards"):
+            for table in ("token_rewards",):
                 db.execute(f"INSERT INTO {table} (cash_address, category, sent_at) VALUES (?, ?, ?)", (table, "b" * 64, "now"))
                 db.execute(f"INSERT INTO {table} (cash_address, category) VALUES (?, ?)", (table + "-pending", "b" * 64))
                 db.execute(f"INSERT INTO {table} (cash_address, category, sent_at) VALUES (?, ?, ?)", (table + "-other", "a" * 64, "now"))
@@ -252,7 +273,7 @@ class RewardTests(unittest.TestCase):
             ])
         client = TestClient(backend.app)
         with patch.object(backend, "NETCRAFT_DB_PATH", str(path)):
-            self.assertEqual(client.get("/api/mina-rewards-sent").json(), {"sent": "3"})
+            self.assertEqual(client.get("/api/mina-rewards-sent").json(), {"sent": "2"})
         with patch.object(backend, "NETCRAFT_DB_PATH", str(path) + "-missing"):
             self.assertEqual(client.get("/api/mina-rewards-sent").status_code, 503)
 
@@ -289,19 +310,15 @@ class RewardTests(unittest.TestCase):
              patch.object(backend, "bch_rpc", return_value={"chain": "main"}):
             self.assertEqual(client.get("/api/chain-status").status_code, 503)
 
-    def test_only_new_addresses_are_queued_and_proof_rollback_is_atomic(self):
+    def test_only_new_addresses_are_queued_once(self):
         with sqlite3.connect(backend.DB_PATH) as db:
             db.execute("INSERT INTO cash_addresses (cash_address, network, prefix, address_type) VALUES ('old', 'mainnet', 'bitcoincash', 2)")
         backend.save_cash_address("old", "bitcoincash", 2)
         backend.save_cash_address("new", "bitcoincash", 2)
         backend.save_cash_address("new", "bitcoincash", 2)
-        backend.save_cash_address_with_proof("proof", "bitcoincash", 2, "f" * 64)
-        with self.assertRaises(sqlite3.IntegrityError):
-            backend.save_cash_address_with_proof("failed", "bitcoincash", 2, "f" * 64)
         with sqlite3.connect(backend.DB_PATH) as db:
             rows = db.execute("SELECT cash_address, category FROM token_rewards ORDER BY cash_address").fetchall()
-            self.assertEqual(rows, [("new", "b" * 64), ("proof", "b" * 64)])
-            self.assertIsNone(db.execute("SELECT 1 FROM cash_addresses WHERE cash_address = 'failed'").fetchone())
+            self.assertEqual(rows, [("new", "b" * 64)])
 
     def test_short_links_one_time_persistent_and_expiry(self):
         client = TestClient(backend.app)
@@ -357,34 +374,14 @@ class RewardTests(unittest.TestCase):
                 [(address, "b" * 64)],
             )
 
-    def test_discontinued_bonus_cancels_pending_and_preserves_history(self):
-        address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
-        client = TestClient(backend.app)
-        body = {"cash_address": address}
-        client.post("/api/cash-address", json=body)
-        self.assertEqual(client.post("/api/beer-reward", json=body).status_code, 409)
+    def test_discontinued_bonus_records_are_left_untouched(self):
         with sqlite3.connect(backend.DB_PATH) as db:
-            db.execute("UPDATE token_rewards SET sent_at = CURRENT_TIMESTAMP WHERE cash_address = ?", (address,))
-            db.execute("INSERT INTO legacy_bonus_rewards (cash_address, category, signed_tx, txid) VALUES (?, ?, ?, ?)",
-                       (address, "b" * 64, "abcd", "c" * 64))
-        backend.init_db()
-        with patch.object(backend, "bch_rpc") as rpc, patch.object(backend, "build_reward_transaction") as build:
-            self.assertFalse(backend.process_one_reward())
-            rpc.assert_not_called()
-            build.assert_not_called()
-        with sqlite3.connect(backend.DB_PATH) as db:
-            row = db.execute("SELECT signed_tx, txid, sent_at, cancelled_at FROM legacy_bonus_rewards").fetchone()
-            self.assertEqual(row[:3], ("abcd", "c" * 64, None))
-            self.assertIsNotNone(row[3])
-
-    def test_old_bonus_table_is_migrated_without_losing_sent_history(self):
-        with sqlite3.connect(backend.DB_PATH) as db:
-            db.execute("ALTER TABLE legacy_bonus_rewards RENAME TO beer_rewards")
-            db.execute("INSERT INTO beer_rewards (cash_address, category, sent_at) VALUES ('old', ?, '2020-01-01')", ("b" * 64,))
+            db.execute("CREATE TABLE beer_rewards (cash_address TEXT, signed_tx TEXT)")
+            db.execute("INSERT INTO beer_rewards VALUES ('old', 'abcd')")
         backend.init_db()
         with sqlite3.connect(backend.DB_PATH) as db:
-            self.assertEqual(db.execute("SELECT cash_address, sent_at, cancelled_at FROM legacy_bonus_rewards").fetchone(),
-                             ("old", "2020-01-01", None))
+            self.assertEqual(db.execute("SELECT * FROM beer_rewards").fetchone(), ("old", "abcd"))
+        self.assertEqual(TestClient(backend.app).post("/api/beer-reward", json={}).status_code, 404)
 
     def test_existing_database_is_migrated_without_queueing_old_addresses(self):
         with sqlite3.connect(backend.DB_PATH) as db:
@@ -525,32 +522,6 @@ class RewardTests(unittest.TestCase):
                 self.assertEqual(rpc.call_args_list[0].args, ("sendrawtransaction", ["abcd"]))
             self.assertFalse(backend.process_one_reward())
             build.assert_called_once()
-
-    def test_unconfirmed_proof_compares_locking_script(self):
-        txid = "f" * 64
-        tx = {
-            "txid": txid, "confirmations": 0,
-            "vin": [{"scriptPubKey": {"hex": "76abcd"}}],
-            "vout": [{"tokenData": {"category": "a" * 64, "amount": "1"}}],
-        }
-        with patch.object(backend, "BCH_ALLOWED_SENDER", "bitcoincash:sender"), \
-             patch.object(backend, "bch_rpc", side_effect=[{"isvalid": True, "scriptPubKey": "76abcd"}, tx]):
-            self.assertEqual(backend.verify_confirmed_payment(txid)["confirmations"], 0)
-
-    def test_proof_configuration_is_not_required_for_address_rewards(self):
-        backend.save_cash_address("no-proof", "bitcoincash", 2)
-        with sqlite3.connect(backend.DB_PATH) as db:
-            self.assertEqual(
-                db.execute(
-                    "SELECT category FROM token_rewards WHERE cash_address = 'no-proof'"
-                ).fetchone(),
-                ("b" * 64,),
-            )
-        with patch.object(backend, "BCH_ALLOWED_SENDER", ""), \
-             patch.object(backend, "bch_rpc") as rpc:
-            with self.assertRaisesRegex(RuntimeError, "BCH_ALLOWED_SENDER"):
-                backend.verify_confirmed_payment("f" * 64)
-            rpc.assert_not_called()
 
     def test_unconfirmed_wallet_transaction_must_still_be_in_mempool(self):
         backend.save_cash_address("recipient", "bitcoincash", 2)

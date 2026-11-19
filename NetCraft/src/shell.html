@@ -1252,7 +1252,7 @@
     </button>
     <div class="mobile-controls" aria-label="Touch controls">
       <div id="mobile-stick" class="mobile-stick" aria-label="Move"><div id="mobile-stick-knob" class="mobile-stick-knob"></div></div>
-      <button id="mobile-mine" type="button" aria-label="Mine" title="Hold to mine"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 2v6m0 8v6M2 12h6m8 0h6"/></svg></button>
+      <button id="mobile-mine" type="button" aria-label="Mine" title="Hold to mine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 17 7m-5-4c3-1 7 0 9 4l-3 1-3-3-3-2ZM3 19l2 2"/></svg></button>
       <button id="mobile-build" type="button" aria-label="Build" title="Build"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4v10l-8 4-8-4V7zM4 7l8 4 8-4m-8 4v10"/></svg></button>
       <button id="mobile-jump" type="button" aria-label="Jump" title="Jump"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6M5 21h14"/></svg></button>
       <button id="mobile-next" type="button" aria-label="Next block" title="Next block"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-5-5 5 5-5 5M4 5h4v4H4zM4 15h4v4H4z"/></svg></button>
@@ -1481,14 +1481,17 @@
           window.addEventListener('pointerdown', function(event) {
             if (event.pointerType === 'touch') controls.classList.add('touch-enabled');
           });
+          if (!window.PointerEvent) {
+            window.addEventListener('touchstart', function() { controls.classList.add('touch-enabled'); }, { passive: true });
+          }
           function call(name, args) {
             if (Module['_' + name]) Module.ccall(name, null, args.map(function() { return 'number'; }), args);
           }
           function move(event) {
             var rect = stick.getBoundingClientRect();
             var radius = rect.width / 2;
-            var x = (event.clientX - rect.left - radius) / radius;
-            var z = (event.clientY - rect.top - radius) / radius;
+            var x = (event.clientX - rect.left - rect.width / 2) / (rect.width / 2);
+            var z = (event.clientY - rect.top - (rect.height || rect.width) / 2) / ((rect.height || rect.width) / 2);
             var length = Math.hypot(x, z);
             if (length > 1) { x /= length; z /= length; }
             knob.style.transform = 'translate(' + (x * radius * .55) + 'px,' + (z * radius * .55) + 'px)';
@@ -1508,13 +1511,20 @@
               console.warn('Pointer capture unavailable; using window release events.', error.name);
             }
           }
-          stick.addEventListener('pointerdown', function(event) {
+          function startStick(event) {
             if (stickPointer !== null) return;
+            if (event.cancelable) event.preventDefault();
             stickPointer = event.pointerId;
-            capturePointer(stick, event.pointerId);
+            if (!event.touchFallback) capturePointer(stick, event.pointerId);
             move(event);
-          });
-          window.addEventListener('pointermove', function(event) { if (event.pointerId === stickPointer) move(event); });
+          }
+          stick.addEventListener('pointerdown', startStick);
+          window.addEventListener('pointermove', function(event) {
+            if (event.pointerId === stickPointer) {
+              if (event.cancelable) event.preventDefault();
+              move(event);
+            }
+          }, { passive: false });
           ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(type) {
             stick.addEventListener(type, function(event) { if (event.pointerId === stickPointer) releaseStick(); });
           });
@@ -1524,12 +1534,14 @@
           function hold(id, name) {
             var button = document.getElementById(id);
             var pointer = null;
-            button.addEventListener('pointerdown', function(event) {
+            function start(event) {
               if (pointer !== null) return;
+              if (event.cancelable) event.preventDefault();
               pointer = event.pointerId;
-              capturePointer(button, pointer);
+              if (!event.touchFallback) capturePointer(button, pointer);
               call(name, [1]);
-            });
+            }
+            button.addEventListener('pointerdown', start);
             function release(event) {
               if (event.pointerId !== pointer) return;
               pointer = null;
@@ -1540,6 +1552,26 @@
             });
             ['pointerup', 'pointercancel'].forEach(function(type) { window.addEventListener(type, release); });
             window.addEventListener('blur', function() { if (pointer !== null) release({ pointerId: pointer }); });
+            if (!window.PointerEvent) touchFallback(button, start, null, release);
+          }
+          function touchFallback(element, start, drag, end) {
+            [['touchstart', start], ['touchmove', drag], ['touchend', end], ['touchcancel', end]]
+              .forEach(function(binding) {
+                if (!binding[1]) return;
+                element.addEventListener(binding[0], function(event) {
+                  if (event.cancelable) event.preventDefault();
+                  for (var i = 0; i < event.changedTouches.length; i++) {
+                    var touch = event.changedTouches[i];
+                    binding[1]({ pointerId: touch.identifier, clientX: touch.clientX,
+                      clientY: touch.clientY, touchFallback: true });
+                  }
+                }, { passive: false });
+              });
+          }
+          if (!window.PointerEvent) {
+            touchFallback(stick, startStick,
+              function(event) { if (event.pointerId === stickPointer) move(event); },
+              function(event) { if (event.pointerId === stickPointer) releaseStick(); });
           }
           hold('mobile-mine', 'touch_set_mine');
           hold('mobile-jump', 'touch_set_jump');

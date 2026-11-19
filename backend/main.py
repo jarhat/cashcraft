@@ -21,6 +21,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from urllib.parse import parse_qs, urlsplit
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from reward_broadcast import broadcast_reward
 
 NETWORK = os.getenv("BCH_NETWORK", "chipnet").strip().lower()
 
@@ -42,29 +43,11 @@ if NETWORK != "mainnet":
 BCH_RPC_URL = os.getenv("BCH_RPC_URL", "http://bchn:8332/")
 BCH_RPC_USER = os.getenv("BCH_RPC_USER")
 BCH_RPC_PASSWORD = os.getenv("BCH_RPC_PASSWORD")
-BCH_ALLOWED_SENDER = os.getenv("BCH_ALLOWED_SENDER", "").strip().lower()
 BCH_WALLET = os.getenv("BCH_WALLET", "token-sender").strip()
 BCH_REWARD_CATEGORY = os.getenv("BCH_REWARD_CATEGORY", "").strip().lower()
 
 CATEGORY_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 TXID_RE = re.compile(r"^[0-9a-fA-F]{64}$")
-
-try:
-    BCH_REQUIRED_CONFIRMATIONS = int(
-        os.getenv("BCH_REQUIRED_CONFIRMATIONS", "0")
-    )
-except ValueError as exc:
-    raise RuntimeError("BCH_REQUIRED_CONFIRMATIONS must be an integer.") from exc
-
-if BCH_REQUIRED_CONFIRMATIONS < 0:
-    raise RuntimeError("BCH_REQUIRED_CONFIRMATIONS must be at least 0.")
-
-_raw_categories = os.getenv("BCH_ALLOWED_TOKEN_CATEGORIES", "")
-BCH_ALLOWED_TOKEN_CATEGORIES = {
-    item.strip().lower()
-    for item in _raw_categories.split(",")
-    if item.strip()
-}
 
 if not BCH_RPC_USER or not BCH_RPC_PASSWORD:
     raise RuntimeError("Set BCH_RPC_USER and BCH_RPC_PASSWORD.")
@@ -74,11 +57,6 @@ if not BCH_WALLET:
 
 if not CATEGORY_RE.fullmatch(BCH_REWARD_CATEGORY):
     raise RuntimeError("Set BCH_REWARD_CATEGORY to a 64-character category ID.")
-
-if any(not CATEGORY_RE.fullmatch(c) for c in BCH_ALLOWED_TOKEN_CATEGORIES):
-    raise RuntimeError(
-        "Each BCH_ALLOWED_TOKEN_CATEGORIES entry must be 64 hex characters."
-    )
 
 
 DB_PATH = Path(os.getenv("CASHADDR_DB_PATH", "/data/cash-addresses.sqlite3"))
@@ -129,11 +107,6 @@ app.add_middleware(
 )
 
 
-class CashAddressProofRequest(BaseModel):
-    cash_address: str = Field(min_length=1, max_length=120)
-    txid: str = Field(min_length=64, max_length=64)
-
-
 SHORT_LINK_TTL_SECONDS = {"1d": 86400, "1w": 7 * 86400, "1m": 30 * 86400}
 SHORT_LINK_ID_RE = re.compile(r"[A-Za-z0-9_-]{8,32}")
 SHORT_LINK_MAX_ROWS = 50000
@@ -178,25 +151,6 @@ def init_db() -> None:
                 FOREIGN KEY (cash_address) REFERENCES cash_addresses(cash_address)
             )
         """)
-        if db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'beer_rewards'").fetchone():
-            db.execute("ALTER TABLE beer_rewards RENAME TO legacy_bonus_rewards")
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS legacy_bonus_rewards (
-                cash_address TEXT PRIMARY KEY,
-                category TEXT NOT NULL,
-                signed_tx TEXT,
-                txid TEXT,
-                sent_at TEXT,
-                FOREIGN KEY (cash_address) REFERENCES token_rewards(cash_address)
-            )
-        """)
-        columns = {row[1] for row in db.execute("PRAGMA table_info(legacy_bonus_rewards)")}
-        if "cancelled_at" not in columns:
-            db.execute("ALTER TABLE legacy_bonus_rewards ADD COLUMN cancelled_at TEXT")
-        db.execute(
-            "UPDATE legacy_bonus_rewards SET cancelled_at = CURRENT_TIMESTAMP "
-            "WHERE sent_at IS NULL AND cancelled_at IS NULL"
-        )
         db.execute("""
             CREATE TABLE IF NOT EXISTS short_links (
                 id TEXT PRIMARY KEY,
@@ -301,40 +255,6 @@ def _insert_cash_address(
 def save_cash_address(address: str, prefix: str, address_type: int) -> None:
     with open_db(timeout=10) as db:
         _insert_cash_address(db, address, prefix, address_type)
-
-
-def save_cash_address_with_proof(
-    address: str,
-    prefix: str,
-    address_type: int,
-    txid: str,
-) -> None:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-    with open_db(timeout=10) as db:
-        db.execute("BEGIN IMMEDIATE")
-
-        _insert_cash_address(db, address, prefix, address_type)
-
-        db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS cash_address_proofs (
-                txid TEXT PRIMARY KEY,
-                cash_address TEXT NOT NULL UNIQUE,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (cash_address)
-                    REFERENCES cash_addresses(cash_address)
-            )
-            """
-        )
-
-        db.execute(
-            """
-            INSERT INTO cash_address_proofs (txid, cash_address)
-            VALUES (?, ?)
-            """,
-            (txid.lower(), address),
-        )
 
 
 def _prefix_expand(prefix: str) -> list[int]:
@@ -777,62 +697,6 @@ def receive_cash_address(
     }
 
 
-@app.post("/api/beer-reward")
-def discontinued_bonus_reward(request: CashAddressRequest) -> dict:
-    raise HTTPException(status_code=409, detail="The bonus reward has been discontinued.")
-
-@app.post("/api/tx-proof")
-def receive_cash_address_with_proof(
-    request: CashAddressProofRequest,
-) -> dict:
-    txid = request.txid.strip().lower()
-
-    if not TXID_RE.fullmatch(txid):
-        raise HTTPException(status_code=422, detail="Invalid transaction ID.")
-
-    try:
-        address, prefix, address_type = validate_token_aware_cashaddr(
-            request.cash_address
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    try:
-        payment_proof = verify_confirmed_payment(txid)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    try:
-        save_cash_address_with_proof(
-            address=address,
-            prefix=prefix,
-            address_type=address_type,
-            txid=txid,
-        )
-    except RewardDatabaseError as exc:
-        logger.exception("Could not save cash address and proof.")
-        raise HTTPException(status_code=503, detail="Address database unavailable.") from exc
-    except sqlite3.IntegrityError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail="This transaction ID or cash address has already been used.",
-        ) from exc
-    except sqlite3.Error as exc:
-        raise HTTPException(
-            status_code=500,
-            detail="Could not save the cash address and proof.",
-        ) from exc
-
-    return {
-        "network": NETWORK,
-        "cash_address": address,
-        "prefix": prefix,
-        "token_aware": True,
-        "proof": payment_proof,
-    }
-
 def bch_rpc(method: str, params: list, *, wallet: bool = False):
     url = BCH_RPC_URL
     if wallet:
@@ -843,7 +707,7 @@ def bch_rpc(method: str, params: list, *, wallet: bool = False):
             auth=(BCH_RPC_USER, BCH_RPC_PASSWORD),
             json={
                 "jsonrpc": "1.0",
-                "id": "cash-address-proof",
+                "id": "cashcraft",
                 "method": method,
                 "params": params,
             },
@@ -1011,23 +875,7 @@ def process_one_reward() -> bool:
             # accidentally create a second payment after an ambiguous RPC failure.
             db.commit()
             return True
-        try:
-            result = bch_rpc("sendrawtransaction", [signed_tx])
-        except RuntimeError as broadcast_error:
-            try:
-                known = bch_rpc("gettransaction", [txid], wallet=True)
-            except RuntimeError:
-                raise broadcast_error
-            if not isinstance(known, dict) or known.get("confirmations", 0) < 0:
-                raise broadcast_error
-            if known.get("confirmations", 0) == 0:
-                try:
-                    bch_rpc("getmempoolentry", [txid])
-                except RuntimeError:
-                    raise broadcast_error
-        else:
-            if not isinstance(result, str) or result.lower() != txid:
-                raise RuntimeError("BCHN returned a mismatched broadcast transaction ID.")
+        broadcast_reward(bch_rpc, signed_tx, txid)
         db.execute(
             f"UPDATE {table} SET sent_at = CURRENT_TIMESTAMP WHERE cash_address = ?",
             (address,),
@@ -1064,7 +912,7 @@ def process_one_mining_reward(reward_id: int | None = None) -> bool:
                )
                SELECT id, cash_address, category, signed_tx, txid FROM mining_rewards m
                WHERE sent_at IS NULL
-               AND ((? IS NULL AND signed_tx IS NOT NULL) OR id = ?)
+               AND (? IS NULL OR id = ?)
                AND (
                    EXISTS (SELECT 1 FROM mining_payout_reservations r
                            WHERE r.reward_id = m.id AND r.day = date('now'))
@@ -1115,23 +963,7 @@ def process_one_mining_reward(reward_id: int | None = None) -> bool:
                 (signed_tx, txid, reward_id),
             )
             db.commit()
-        try:
-            result = bch_rpc("sendrawtransaction", [signed_tx])
-        except RuntimeError as broadcast_error:
-            try:
-                known = bch_rpc("gettransaction", [txid], wallet=True)
-            except RuntimeError:
-                raise broadcast_error
-            if not isinstance(known, dict) or known.get("confirmations", 0) < 0:
-                raise broadcast_error
-            if known.get("confirmations", 0) == 0:
-                try:
-                    bch_rpc("getmempoolentry", [txid])
-                except RuntimeError:
-                    raise broadcast_error
-        else:
-            if not isinstance(result, str) or result.lower() != txid:
-                raise RuntimeError("BCHN returned a mismatched broadcast transaction ID.")
+        broadcast_reward(bch_rpc, signed_tx, txid)
         db.execute(
             "UPDATE mining_rewards SET sent_at = CURRENT_TIMESTAMP WHERE id = ?",
             (reward_id,),
@@ -1183,7 +1015,8 @@ def pay_mining_reward(reward_id: int, request: Request) -> Response:
         with reward_payout_lock:
             paid = process_one_mining_reward(reward_id)
         if not paid:
-            raise HTTPException(status_code=429, detail="Mining payout limit reached.")
+            reward_wake.set()
+            return Response(status_code=202)
     except (RuntimeError, sqlite3.Error, ValueError, KeyError, TypeError) as exc:
         logger.error("Could not pay mining reward %s (%s).", reward_id, payout_failure_reason(exc))
         reward_wake.set()
@@ -1195,13 +1028,10 @@ def pay_mining_reward(reward_id: int, request: Request) -> Response:
 def mina_rewards_sent() -> dict:
     try:
         with open_db(timeout=5) as db:
-            total = sum(
-                db.execute(
-                    f"SELECT COUNT(*) FROM {table} WHERE category = ? AND sent_at IS NOT NULL",
-                    (BCH_REWARD_CATEGORY,),
-                ).fetchone()[0]
-                for table in ("token_rewards", "legacy_bonus_rewards")
-            )
+            total = db.execute(
+                "SELECT COUNT(*) FROM token_rewards WHERE category = ? AND sent_at IS NOT NULL",
+                (BCH_REWARD_CATEGORY,),
+            ).fetchone()[0]
         if NETCRAFT_DB_PATH:
             with sqlite3.connect(
                 Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro", uri=True, timeout=5
@@ -1214,97 +1044,4 @@ def mina_rewards_sent() -> dict:
         logger.error("Could not read MINA payout total: %s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Payout total unavailable") from exc
     return {"sent": str(total)}
-
-
-def verify_confirmed_payment(txid: str) -> dict:
-    """
-    Verify that:
-      * BCHN knows the transaction and it has enough confirmations;
-      * each input spends an output whose decoded address is the configured sender;
-      * every configured category appears in an output with a positive fungible amount.
-
-    Requires BCHN getrawtransaction verbosity=2, which returns input scripts
-    and CashToken data. Pruning may make old confirmed transactions unavailable.
-    """
-    if not BCH_ALLOWED_SENDER:
-        raise RuntimeError("BCH_ALLOWED_SENDER is not configured.")
-    sender_info = bch_rpc("validateaddress", [BCH_ALLOWED_SENDER])
-    sender_script = sender_info.get("scriptPubKey") if isinstance(sender_info, dict) else None
-    if not isinstance(sender_info, dict) or not sender_info.get("isvalid") or not sender_script:
-        raise RuntimeError("BCH_ALLOWED_SENDER is not a valid address.")
-    if not BCH_ALLOWED_TOKEN_CATEGORIES:
-        raise RuntimeError("BCH_ALLOWED_TOKEN_CATEGORIES is not configured.")
-
-    try:
-        tx = bch_rpc("getrawtransaction", [txid, 2])
-    except RuntimeError as exc:
-        raise ValueError(
-            "BCHN could not retrieve this transaction. It may be unknown, "
-            "or its block may have been pruned."
-        ) from exc
-
-    if not isinstance(tx, dict) or tx.get("txid", "").lower() != txid.lower():
-        raise ValueError("BCHN returned a mismatched transaction.")
-
-    confirmations = tx.get("confirmations", 0)
-    if not isinstance(confirmations, int) or confirmations < BCH_REQUIRED_CONFIRMATIONS:
-        raise ValueError(
-            f"Transaction needs at least {BCH_REQUIRED_CONFIRMATIONS} confirmation(s)."
-        )
-
-    inputs = tx.get("vin", [])
-    if not inputs or any("coinbase" in vin for vin in inputs):
-        raise ValueError("Transaction must have ordinary, non-coinbase inputs.")
-
-    # Strict policy: every input must spend an output controlled by this address.
-    for vin in inputs:
-        prevout = vin.get("prevout")
-        script = prevout.get("scriptPubKey", {}) if isinstance(prevout, dict) else vin.get("scriptPubKey", {})
-        if not isinstance(script, dict):
-            raise ValueError("Could not identify an input's previous-output script.")
-        if not isinstance(script.get("hex"), str):
-            raise ValueError("Could not identify an input's previous-output script.")
-        if script["hex"].lower() != sender_script.lower():
-            raise ValueError("Every transaction input must come from BCH_ALLOWED_SENDER.")
-
-    # Count token amounts in outputs only. This verifies fungible token output,
-    # not NFTs; NFTs do not satisfy the positive-amount requirement.
-    output_amounts = {category: 0 for category in BCH_ALLOWED_TOKEN_CATEGORIES}
-
-    for vout in tx.get("vout", []):
-        token_data = vout.get("tokenData")
-        if not isinstance(token_data, dict):
-            continue
-
-        category = str(token_data.get("category", "")).lower()
-        if category not in output_amounts:
-            continue
-
-        try:
-            amount = int(token_data.get("amount", "0"))
-        except (TypeError, ValueError):
-            raise ValueError("BCHN returned an invalid CashToken amount.")
-
-        if amount > 0:
-            output_amounts[category] += amount
-
-    missing = [
-        category
-        for category, amount in output_amounts.items()
-        if amount <= 0
-    ]
-    if missing:
-        raise ValueError(
-            "Transaction does not contain positive fungible output amounts "
-            "for every configured token category."
-        )
-
-    return {
-        "txid": tx["txid"],
-        "confirmations": confirmations,
-        "token_amounts": {
-            category: str(amount)
-            for category, amount in output_amounts.items()
-        },
-    }
 

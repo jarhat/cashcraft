@@ -64,8 +64,6 @@ static EM_BOOL on_touchmove(int eventType, const EmscriptenTouchEvent *touchEven
         }
     }
 
-    if (!button_mining) mining_stop();
-
     return EM_TRUE;
 }
 
@@ -106,7 +104,7 @@ EMSCRIPTEN_KEEPALIVE void touch_set_jump(int active) {
 
 EMSCRIPTEN_KEEPALIVE void touch_set_mine(int active) {
     button_mining = active != 0;
-    if (active) mining_start(); else mining_stop();
+    if (active) mining_start(); else if (!touch_active) mining_stop();
 }
 
 EMSCRIPTEN_KEEPALIVE void touch_build(void) {

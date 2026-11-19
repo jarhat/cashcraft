@@ -42,6 +42,12 @@ test('game buttons minimize and restore without unloading the active game', asyn
   $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); documentListeners.fullscreenchange(); };
   await $('game-fullscreen').listeners.click();
   assert.equal(document.fullscreenElement, $('game-stage'));
+  const parent = { insertBefore(child) { child.parentNode = this; } };
+  $('invite-dialog').parentNode = parent;
+  $('game-invite').listeners.click();
+  assert.equal($('invite-dialog').parentNode, $('game-stage'));
+  $('invite-dialog').listeners.close();
+  assert.equal($('invite-dialog').parentNode, parent);
   assert.equal($('game-frame').focused, true);
   assert.equal($('game-fullscreen')['aria-label'], 'Exit fullscreen');
   assert.equal($('game-fullscreen')['aria-pressed'], 'true');
@@ -53,7 +59,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   await $('game-fullscreen').listeners.click();
   assert.match($('game-dialog-status').textContent, /unavailable/);
   await $('game-netcraft').listeners.click();
-  assert.equal($('game-netcraft').hidden, true);
+  assert.equal($('games-menu').hidden, true);
   assert.equal($('top-send').parentNode, $('game-wallet-actions'));
   assert.equal(url, '/games/netcraft/craftw.html');
   assert.equal($('game-frame').src, url);
@@ -65,7 +71,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   assert.equal($('game-frame').src, url);
   assert.equal($('game-dialog').hidden, true);
   assert.equal($('game-minimized-controls').hidden, false);
-  assert.equal($('game-netcraft').hidden, true);
+  assert.equal($('games-menu').hidden, true);
   assert.equal($('top-send').parentNode, $('minimized-wallet-actions'));
   $('game-restore').listeners.click();
   assert.equal($('game-dialog').hidden, false);

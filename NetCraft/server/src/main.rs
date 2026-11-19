@@ -136,10 +136,8 @@ fn start_reward_wake() -> Result<Option<SyncSender<(i64, Player)>>, String> {
                 write!(stream, "POST /api/internal/netcraft-mining-reward/{reward_id} HTTP/1.1\r\nHost: {target}\r\nAuthorization: Bearer {secret}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")?;
                 let mut response = String::new();
                 BufReader::new(stream).read_line(&mut response)?;
-                if response.starts_with("HTTP/1.1 429 ") || response.starts_with("HTTP/1.0 429 ") {
-                    return Err(io::Error::other("daily mining payout limit reached"));
-                }
                 if !response.starts_with("HTTP/1.1 204 ") && !response.starts_with("HTTP/1.0 204 ")
+                    && !response.starts_with("HTTP/1.1 202 ") && !response.starts_with("HTTP/1.0 202 ")
                 {
                     let status = response.split_whitespace().nth(1).unwrap_or("invalid");
                     return Err(io::Error::other(format!("mining payout API returned HTTP {status}")));
