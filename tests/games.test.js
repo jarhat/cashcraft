@@ -136,7 +136,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   assert.equal($('game-dialog').open, false);
 });
 
-test('NetCraft waits for wallet registration before starting and resumes with its address', async (t) => {
+test('NetCraft starts online without a wallet and accepts a registered address later', async (t) => {
   const originalFetch = globalThis.fetch;
   const originalDocument = globalThis.document;
   t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; });
@@ -150,34 +150,20 @@ test('NetCraft waits for wallet registration before starting and resumes with it
     });
     return elements.get(id);
   };
-  let fetches = 0;
-  globalThis.fetch = async () => {
-    fetches++;
-    return { ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' };
-  };
+  globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
   let address = null;
-  let prompts = 0;
-  let cancelPrompt;
+  const messages = [];
+  $('game-frame').contentWindow = { postMessage: (message) => messages.push(message) };
   const update = setupGames($, {
     translate: (text) => text, getRewardAddress: () => address,
-    onWalletNeeded: (cancel) => { prompts++; cancelPrompt = cancel; },
   });
   await $('game-netcraft').listeners.click();
-  assert.equal(prompts, 1);
-  assert.equal(fetches, 0);
-  assert.equal($('game-frame').src, undefined);
-  cancelPrompt();
+  assert.equal($('game-frame').src, '/games/netcraft/craftw.html#-+4080');
+  assert.equal($('game-wallet-prompt').hidden, false);
   address = 'bitcoincash:ztest';
   update(address);
-  await new Promise(setImmediate);
-  assert.equal(fetches, 0);
-  address = null;
-  await $('game-netcraft').listeners.click();
-  address = 'bitcoincash:ztest';
-  update(address);
-  await new Promise(setImmediate);
-  assert.equal(fetches, 1);
-  assert.equal($('game-frame').src, '/games/netcraft/craftw.html#-+4080+bitcoincash%3Aztest');
+  assert.deepEqual(messages.at(-1), { type: 'netcraft-reward-address', address });
+  assert.equal($('game-wallet-prompt').hidden, true);
 });
 
 test('NetCraft receives the connected token address when launched', async (t) => {

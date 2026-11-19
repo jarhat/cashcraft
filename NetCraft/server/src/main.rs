@@ -1273,9 +1273,9 @@ mod tests {
     }
 
     #[test]
-    fn connected_wallet_can_queue_multiple_ore_rewards() {
+    fn browser_wallet_can_queue_multiple_ore_rewards() {
         let (server, _, _) = setup();
-        let address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz";
+        let address = "bitcoincash:zqyx49mu0kkn9ftfj6hje6g2wfer34yfnqnpwfwhlf";
         handle_command(&server, 1, &format!("W,{address}")).unwrap();
         let ores = ore_positions(&server);
         assert!(ores.len() >= 4);

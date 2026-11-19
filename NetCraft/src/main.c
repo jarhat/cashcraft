@@ -2953,7 +2953,10 @@ void on_mine() {
             if (hw == Item_MINA_ORE && g->mina_mined < UINT32_MAX) g->mina_mined++;
         }
 #ifdef __EMSCRIPTEN__
-        if (g->mode != MODE_ONLINE) EM_ASM(if (Module.playBlockSound) Module.playBlockSound(0););
+        if (g->mode != MODE_ONLINE) EM_ASM({
+            if (Module.playBlockSound) Module.playBlockSound(0);
+            parent.postMessage({ type: 'netcraft-block-mined' }, '*');
+        });
 #endif
 
         //struct ItemStack stack = { .type = hw, .count = 1 };
@@ -3655,7 +3658,10 @@ void parse_buffer(char *buffer, int len) {
             Inventory_collect(&g->inventory, mined_item);
             if (mined_item == Item_MINA_ORE && g->mina_mined < UINT32_MAX) g->mina_mined++;
 #ifdef __EMSCRIPTEN__
-            EM_ASM(if (Module.playBlockSound) Module.playBlockSound(0););
+            EM_ASM({
+                if (Module.playBlockSound) Module.playBlockSound(0);
+                parent.postMessage({ type: 'netcraft-block-mined' }, '*');
+            });
 #endif
         }
         char mined_reward_address[121];

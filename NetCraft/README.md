@@ -190,10 +190,13 @@ connections with backoff and refreshes loaded chunks after reconnecting.
 Block edits are paused while disconnected; they are not queued.
 Disconnecting a wallet does not close the game; its reward address is cleared
 and can be connected again while playing.
-Starting NetCraft requires a connected wallet whose token-aware address has been
-registered. The MINA setup prompt opens the wallet wizard, where players can
-choose WizardConnect or create or restore a browser wallet. Browser wallet
-creation requires a password and confirmation of the recovery phrase backup.
+Players can start NetCraft without a wallet, but only mining while a registered
+token-aware wallet is connected earns rewards; earlier mining is not paid
+retroactively. On the first mined block, a gemstone appears for WizardConnect
+players or players without a wallet. Its wallet button opens the setup wizard.
+Browser wallet creation requires a password and confirmation of the recovery
+phrase backup. The wallet scans receive and change addresses, rescans after
+registration, and refreshes periodically while connected.
 
 The loading screen shows available download progress and fades after the first
 frame is rendered. Its background is served by the frontend as
@@ -259,8 +262,7 @@ world database and BCHN wallet together. Run only one payout worker. Set
 services. Mining edits and payout records are committed together. Unsent
 records are retried automatically.
 Newly registered addresses have a one-unit welcome reward queued before mining
-rewards for that address. The welcome notification distinguishes queued rewards
-from transactions sent; delivery depends on the funded payout wallet and node.
+rewards for that address. Delivery depends on the funded payout wallet and node.
 Welcome transaction records are in the cash-address database and mining
 transaction records are in the world database, including signed transaction data,
 transaction IDs and sent timestamps.

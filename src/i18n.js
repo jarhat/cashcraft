@@ -616,6 +616,7 @@ const german = {
 };
 
 Object.assign(spanish, {
+  'MINA gemstone': 'Gema MINA',
   'Welcome to MINA': 'Bienvenido a MINA',
   'Connect or create a wallet to receive a MINA welcome reward and mining rewards.': 'Conecta o crea una cartera para recibir una recompensa de bienvenida MINA y recompensas por minar.',
   'Your one-unit MINA welcome reward has been sent.': 'Se ha enviado tu recompensa de bienvenida de una unidad MINA.',
@@ -668,6 +669,7 @@ Object.assign(spanish, {
   'Loading market prices…': 'Cargando precios…',
 });
 Object.assign(french, {
+  'MINA gemstone': 'Gemme MINA',
   'Welcome to MINA': 'Bienvenue dans MINA',
   'Connect or create a wallet to receive a MINA welcome reward and mining rewards.': 'Connectez ou créez un portefeuille pour recevoir une récompense de bienvenue MINA et des récompenses de minage.',
   'Your one-unit MINA welcome reward has been sent.': 'Votre récompense de bienvenue d’une unité MINA a été envoyée.',
@@ -720,6 +722,7 @@ Object.assign(french, {
   'Loading market prices…': 'Chargement des cours…',
 });
 Object.assign(german, {
+  'MINA gemstone': 'MINA-Edelstein',
   'Welcome to MINA': 'Willkommen bei MINA',
   'Connect or create a wallet to receive a MINA welcome reward and mining rewards.': 'Verbinde oder erstelle eine Wallet, um eine MINA-Willkommensbelohnung und Mining-Belohnungen zu erhalten.',
   'Your one-unit MINA welcome reward has been sent.': 'Deine Willkommensbelohnung von einer MINA-Einheit wurde gesendet.',

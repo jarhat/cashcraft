@@ -4,7 +4,7 @@ const games = {
 };
 const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 
-export function setupGames($, { translate, getRewardAddress = () => null, onWalletNeeded = () => {}, autoOpen = false, autoOpenGame = 'netcraft' }) {
+export function setupGames($, { translate, getRewardAddress = () => null, autoOpen = false, autoOpenGame = 'netcraft' }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
@@ -24,8 +24,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, onWall
   stage.addEventListener('contextmenu', (event) => event.preventDefault());
   let generation = 0;
   let activeGame = null;
-  let pendingNetcraft = false;
-  const cancelPendingNetcraft = () => { pendingNetcraft = false; generation++; };
   const updateRewardAddress = (address) => {
     const connected = Boolean(address);
     $('game-notifications').setAttribute('aria-label', translate(connected ? 'Wallet and notifications' : 'Connect wallet'));
@@ -41,10 +39,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, onWall
     }
     if (activeGame === 'netcraft') {
       frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '' }, '*');
-    }
-    if (connected && pendingNetcraft) {
-      pendingNetcraft = false;
-      void openGame('netcraft');
     }
   };
   const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'mina-welcome-dialog'];
@@ -69,13 +63,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, onWall
       const game = games[id];
       $('games-menu').hidden = true;
       $('games-toggle').setAttribute('aria-expanded', 'false');
-      if (id === 'netcraft' && !getRewardAddress()) {
-        generation++;
-        pendingNetcraft = true;
-        onWalletNeeded(cancelPendingNetcraft);
-        return;
-      }
-      pendingNetcraft = false;
       if (dialog.open && activeGame === id) {
         generation++;
         $('game-dialog-status').textContent = '';
@@ -95,18 +82,12 @@ export function setupGames($, { translate, getRewardAddress = () => null, onWall
           throw new Error(translate('Game build unavailable. Check the server mount.'));
         }
         if (request !== generation) return;
-        if (id === 'netcraft' && !getRewardAddress()) {
-          pendingNetcraft = true;
-          status.textContent = '';
-          onWalletNeeded(cancelPendingNetcraft);
-          return;
-        }
         status.textContent = '';
         frame.title = game.title;
         frame.classList.remove('game-shift-in');
         void frame.offsetWidth;
         const address = id === 'netcraft' ? getRewardAddress() : null;
-        if (id === 'netcraft' && (address || netcraftServer !== '-')) {
+        if (id === 'netcraft') {
           const args = [netcraftServer, '4080'];
           if (address) args.push(address);
           frame.src = `${game.url}#${args.map(encodeURIComponent).join('+')}`;
@@ -217,7 +198,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, onWall
       });
     }
     generation++;
-    pendingNetcraft = false;
     activeGame = null;
     setPlayingUi();
     frame.removeAttribute('src');
