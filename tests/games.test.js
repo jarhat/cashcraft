@@ -37,12 +37,13 @@ test('game buttons minimize and restore without unloading the active game', asyn
     addEventListener(type, fn) { documentListeners[type] = fn; },
     async exitFullscreen() { this.fullscreenElement = null; documentListeners.fullscreenchange(); },
   };
-  let address = null;
+  let address = 'bitcoincash:ztest';
   setupGames($, { translate: (text) => text, getRewardAddress: () => address });
   let wallet = 0;
   $('connection-open').click = () => { wallet++; };
+  $('notifications-toggle').click = () => {};
   await $('game-notifications').listeners.click();
-  assert.equal(wallet, 1);
+  assert.equal(wallet, 0);
   $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); documentListeners.fullscreenchange(); };
   await $('game-fullscreen').listeners.click();
   assert.equal(document.fullscreenElement, $('game-stage'));
@@ -66,18 +67,22 @@ test('game buttons minimize and restore without unloading the active game', asyn
   assert.equal($('games-menu').hidden, true);
   assert.equal($('top-send').parentNode, $('game-wallet-actions'));
   assert.equal(url, '/games/netcraft/craftw.html');
-  assert.equal($('game-frame').src, url);
+  const gameUrl = '/games/netcraft/craftw.html#-+4080+bitcoincash%3Aztest';
+  assert.equal($('game-frame').src, gameUrl);
   assert.equal($('game-frame').title, 'CashCraft');
-  assert.equal($('game-wallet-prompt').hidden, false);
+  assert.equal($('game-wallet-prompt').hidden, true);
+  address = null;
+  $('game-frame').listeners.load();
   $('game-notifications').click = $('game-notifications').listeners.click;
   $('game-wallet-prompt-connect').listeners.click();
   assert.equal($('browser-wallet-section').open, true);
-  assert.equal(wallet, 2);
+  assert.equal(wallet, 1);
+  address = 'bitcoincash:ztest';
   $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); };
   await $('game-fullscreen').listeners.click();
   await $('game-close').listeners.click();
   assert.equal(document.fullscreenElement, null);
-  assert.equal($('game-frame').src, url);
+  assert.equal($('game-frame').src, gameUrl);
   assert.equal($('game-dialog').hidden, true);
   assert.equal($('game-minimized-controls').hidden, false);
   assert.equal($('games-menu').hidden, true);
@@ -85,7 +90,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   $('game-restore').listeners.click();
   assert.equal($('game-dialog').hidden, false);
   assert.equal($('top-send').parentNode, $('game-wallet-actions'));
-  assert.equal($('game-frame').src, url);
+  assert.equal($('game-frame').src, gameUrl);
   address = 'bitcoincash:ztest';
   $('game-frame').listeners.load();
   assert.equal($('game-wallet-prompt').hidden, true);
@@ -94,19 +99,19 @@ test('game buttons minimize and restore without unloading the active game', asyn
   await $('game-notifications').listeners.click();
   assert.equal($('game-dialog').hidden, false);
   assert.equal(notifications, 1);
-  assert.equal($('game-frame').src, url);
-  address = null;
+  assert.equal($('game-frame').src, gameUrl);
+  address = 'bitcoincash:ztest';
   $('game-restore').listeners.click();
   await $('game-pk2').listeners.click();
   assert.equal(url, '/games/pk2/index.html');
   assert.equal($('game-wallet-prompt').hidden, true);
   await $('switch-netcraft').listeners.click();
-  assert.equal($('game-frame').src, '/games/netcraft/craftw.html');
+  assert.equal($('game-frame').src, gameUrl);
   assert.equal($('switch-netcraft')['aria-pressed'], 'true');
   assert.equal($('switch-pk2')['aria-pressed'], 'false');
   globalThis.fetch = async () => ({ ok: false, headers: { get: () => '' } });
   await $('switch-pk2').listeners.click();
-  assert.equal($('game-frame').src, '/games/netcraft/craftw.html');
+  assert.equal($('game-frame').src, gameUrl);
   assert.match($('game-dialog-status').textContent, /unavailable/);
   let resolveSwitch;
   globalThis.fetch = () => new Promise((resolve) => { resolveSwitch = resolve; });
@@ -114,7 +119,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   await $('switch-netcraft').listeners.click();
   resolveSwitch({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html>game</html>' });
   await pendingSwitch;
-  assert.equal($('game-frame').src, '/games/netcraft/craftw.html');
+  assert.equal($('game-frame').src, gameUrl);
   assert.equal($('game-dialog-status').textContent, '');
   $('game-dialog').close();
   globalThis.fetch = async () => ({ ok: false, headers: { get: () => '' } });
@@ -129,6 +134,50 @@ test('game buttons minimize and restore without unloading the active game', asyn
   await $('game-netcraft').listeners.click();
   assert.match($('game-status').textContent, /unavailable/);
   assert.equal($('game-dialog').open, false);
+});
+
+test('NetCraft waits for wallet registration before starting and resumes with its address', async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalDocument = globalThis.document;
+  t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; });
+  globalThis.document = { body: { classList: { toggle() {} } }, addEventListener() {}, querySelector() { return { after() {} }; } };
+  const elements = new Map();
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; },
+      setAttribute() {}, appendChild() {}, classList: { add() {}, remove() {} },
+      show() { this.open = true; },
+    });
+    return elements.get(id);
+  };
+  let fetches = 0;
+  globalThis.fetch = async () => {
+    fetches++;
+    return { ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' };
+  };
+  let address = null;
+  let prompts = 0;
+  let cancelPrompt;
+  const update = setupGames($, {
+    translate: (text) => text, getRewardAddress: () => address,
+    onWalletNeeded: (cancel) => { prompts++; cancelPrompt = cancel; },
+  });
+  await $('game-netcraft').listeners.click();
+  assert.equal(prompts, 1);
+  assert.equal(fetches, 0);
+  assert.equal($('game-frame').src, undefined);
+  cancelPrompt();
+  address = 'bitcoincash:ztest';
+  update(address);
+  await new Promise(setImmediate);
+  assert.equal(fetches, 0);
+  address = null;
+  await $('game-netcraft').listeners.click();
+  address = 'bitcoincash:ztest';
+  update(address);
+  await new Promise(setImmediate);
+  assert.equal(fetches, 1);
+  assert.equal($('game-frame').src, '/games/netcraft/craftw.html#-+4080+bitcoincash%3Aztest');
 });
 
 test('NetCraft receives the connected token address when launched', async (t) => {
@@ -204,7 +253,7 @@ test('fullscreen game regains keyboard focus without stealing focus from other d
   globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
   globalThis.document = { body: { classList: { toggle() {} } }, fullscreenElement: null, activeElement: null, addEventListener() {}, querySelector() { return { after() {} }; } };
   globalThis.requestAnimationFrame = (fn) => callbacks.push(fn);
-  setupGames($, { translate: (text) => text });
+  setupGames($, { translate: (text) => text, getRewardAddress: () => 'bitcoincash:ztest' });
   $('game-dialog').classList.add('game-auto-open');
   await $('game-netcraft').listeners.click();
   assert.equal(document.activeElement, $('game-close'));

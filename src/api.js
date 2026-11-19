@@ -31,7 +31,10 @@ export async function submitCashAddress(cashAddress) {
       result.cash_address.toLowerCase() !== cashAddress.trim().toLowerCase()) {
     throw new Error('Address API did not confirm the submitted address.');
   }
-  return result.cash_address;
+  if (!['pending', 'sent', 'none'].includes(result.reward_status)) {
+    throw new Error('Address API returned an invalid reward status.');
+  }
+  return result;
 }
 
 async function shortLinkRequest(path, body) {

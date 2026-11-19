@@ -616,6 +616,15 @@ const german = {
 };
 
 Object.assign(spanish, {
+  'Welcome to MINA': 'Bienvenido a MINA',
+  'Connect or create a wallet to receive a MINA welcome reward and mining rewards.': 'Conecta o crea una cartera para recibir una recompensa de bienvenida MINA y recompensas por minar.',
+  'Your one-unit MINA welcome reward has been sent.': 'Se ha enviado tu recompensa de bienvenida de una unidad MINA.',
+  'Your one-unit MINA welcome reward is queued. Delivery depends on the payout wallet and network.': 'Tu recompensa de bienvenida de una unidad MINA está en cola. La entrega depende de la cartera de pagos y de la red.',
+  'MINA is a CashToken reward. Mine natural MINA ore in CashCraft to request more rewards.': 'MINA es una recompensa CashToken. Mina mineral MINA natural en CashCraft para solicitar más recompensas.',
+  'Back up your wallet recovery phrase offline. Never share it; anyone with the phrase can spend your funds. For a browser wallet, use “Show recovery phrase” in the wallet connection dialog. For other wallets, follow their backup instructions.': 'Guarda tu frase de recuperación sin conexión. Nunca la compartas; cualquiera que la tenga puede gastar tus fondos. Para una cartera del navegador, usa «Mostrar frase de recuperación» en el diálogo de conexión. Para otras carteras, sigue sus instrucciones de copia de seguridad.',
+  'Set up or connect a wallet': 'Configurar o conectar una cartera',
+  'Not now': 'Ahora no',
+  'Got it': 'Entendido',
   'Wallet and notifications': 'Cartera y notificaciones',
   'MINA mining payout could not be confirmed. Contact the operator.': 'No se pudo confirmar el pago de minería MINA. Contacta con el operador.',
   'A payout was requested. The wallet will report the MINA token at zero confirmations once it is sent.': 'Se ha solicitado un pago. La cartera mostrará el token MINA con cero confirmaciones cuando se envíe.',
@@ -659,6 +668,15 @@ Object.assign(spanish, {
   'Loading market prices…': 'Cargando precios…',
 });
 Object.assign(french, {
+  'Welcome to MINA': 'Bienvenue dans MINA',
+  'Connect or create a wallet to receive a MINA welcome reward and mining rewards.': 'Connectez ou créez un portefeuille pour recevoir une récompense de bienvenue MINA et des récompenses de minage.',
+  'Your one-unit MINA welcome reward has been sent.': 'Votre récompense de bienvenue d’une unité MINA a été envoyée.',
+  'Your one-unit MINA welcome reward is queued. Delivery depends on the payout wallet and network.': 'Votre récompense de bienvenue d’une unité MINA est en attente. Sa livraison dépend du portefeuille de paiement et du réseau.',
+  'MINA is a CashToken reward. Mine natural MINA ore in CashCraft to request more rewards.': 'MINA est une récompense CashToken. Minez du minerai MINA naturel dans CashCraft pour demander d’autres récompenses.',
+  'Back up your wallet recovery phrase offline. Never share it; anyone with the phrase can spend your funds. For a browser wallet, use “Show recovery phrase” in the wallet connection dialog. For other wallets, follow their backup instructions.': 'Sauvegardez votre phrase de récupération hors ligne. Ne la partagez jamais : toute personne qui la possède peut dépenser vos fonds. Pour un portefeuille de navigateur, utilisez « Afficher la phrase de récupération » dans la fenêtre de connexion. Pour les autres portefeuilles, suivez leurs instructions de sauvegarde.',
+  'Set up or connect a wallet': 'Configurer ou connecter un portefeuille',
+  'Not now': 'Pas maintenant',
+  'Got it': 'Compris',
   'Wallet and notifications': 'Portefeuille et notifications',
   'MINA mining payout could not be confirmed. Contact the operator.': 'Le paiement de minage MINA n’a pas pu être confirmé. Contactez l’opérateur.',
   'A payout was requested. The wallet will report the MINA token at zero confirmations once it is sent.': 'Un paiement a été demandé. Le portefeuille affichera le jeton MINA avec zéro confirmation après son envoi.',
@@ -702,6 +720,15 @@ Object.assign(french, {
   'Loading market prices…': 'Chargement des cours…',
 });
 Object.assign(german, {
+  'Welcome to MINA': 'Willkommen bei MINA',
+  'Connect or create a wallet to receive a MINA welcome reward and mining rewards.': 'Verbinde oder erstelle eine Wallet, um eine MINA-Willkommensbelohnung und Mining-Belohnungen zu erhalten.',
+  'Your one-unit MINA welcome reward has been sent.': 'Deine Willkommensbelohnung von einer MINA-Einheit wurde gesendet.',
+  'Your one-unit MINA welcome reward is queued. Delivery depends on the payout wallet and network.': 'Deine Willkommensbelohnung von einer MINA-Einheit wartet auf Auszahlung. Die Zustellung hängt von der Auszahlungs-Wallet und dem Netzwerk ab.',
+  'MINA is a CashToken reward. Mine natural MINA ore in CashCraft to request more rewards.': 'MINA ist eine CashToken-Belohnung. Baue natürliches MINA-Erz in CashCraft ab, um weitere Belohnungen anzufordern.',
+  'Back up your wallet recovery phrase offline. Never share it; anyone with the phrase can spend your funds. For a browser wallet, use “Show recovery phrase” in the wallet connection dialog. For other wallets, follow their backup instructions.': 'Sichere deine Wiederherstellungsphrase offline. Teile sie niemals; jeder mit der Phrase kann dein Guthaben ausgeben. Nutze bei einer Browser-Wallet „Wiederherstellungsphrase anzeigen“ im Verbindungsdialog. Folge bei anderen Wallets deren Sicherungsanleitung.',
+  'Set up or connect a wallet': 'Wallet einrichten oder verbinden',
+  'Not now': 'Jetzt nicht',
+  'Got it': 'Verstanden',
   'Wallet and notifications': 'Wallet und Benachrichtigungen',
   'MINA mining payout could not be confirmed. Contact the operator.': 'Die MINA-Mining-Auszahlung konnte nicht bestätigt werden. Kontaktiere den Betreiber.',
   'A payout was requested. The wallet will report the MINA token at zero confirmations once it is sent.': 'Eine Auszahlung wurde angefordert. Nach dem Versand zeigt die Wallet den MINA-Token mit null Bestätigungen an.',
