@@ -26,16 +26,6 @@
     header Access-Control-Allow-Origin *
     file_server
   }
-  @craft_unfurler {
-    path /craft /craft/
-    header_regexp craftua User-Agent (?i)(telegrambot|twitterbot|facebookexternalhit|whatsapp|discordbot|slackbot|linkedinbot|skypeuripreview|applebot|pinterest|cardyb|mastodon)
-  }
-  handle @craft_unfurler {
-    root * /srv
-    rewrite * /craft-preview.html
-    templates
-    file_server
-  }
   @unfurler {
     header_regexp ua User-Agent (?i)(telegrambot|twitterbot|facebookexternalhit|whatsapp|discordbot|slackbot|linkedinbot|skypeuripreview)
     expression `{path}.startsWith("/s/") || {query}.contains("addr=")`

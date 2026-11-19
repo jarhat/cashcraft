@@ -678,11 +678,29 @@ test('saved wallet sessions start restoring immediately on page load', async () 
     loadSession: () => saved,
     pairingInProgress: false, walletReady: false,
     startConnection: async (options) => events.push(options.restoring ? 'restore' : 'new'),
-    logger: { warn() {} }, URLSearchParams, window: { location: { search: '' } }, craftRoute: false,
+    logger: { warn() {} }, URLSearchParams, window: { location: { search: '' } },
   };
   runInNewContext(source.slice(start, end), context);
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(events, ['dependencies', 'restore']);
+});
+
+test('game query links automatically open the selected game', async () => {
+  const start = source.indexOf('const restoreSession =');
+  const end = source.indexOf("\nif ('serviceWorker'", start);
+  for (const [search, expected] of [['?game=pk2', 'game-pk2'], ['?game=cashcraft', 'game-netcraft']]) {
+    const opened = [];
+    const context = {
+      sessionStorage: { getItem: () => null, removeItem() {} }, network: 'mainnet',
+      loadWalletDependencies: async () => {}, loadSession: () => null,
+      pairingInProgress: false, walletReady: false, startConnection: async () => {},
+      logger: { warn() {} }, URLSearchParams, window: { location: { search } },
+      $: (id) => ({ click: () => opened.push(id) }),
+    };
+    runInNewContext(source.slice(start, end), context);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(opened, [expected]);
+  }
 });
 
 test('open in wallet works when a connected session needs relay reconnection', () => {

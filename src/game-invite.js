@@ -1,12 +1,12 @@
 export function setupGameInvite($, network, loadDependencies) {
   const dialog = $('invite-dialog');
-  let url = new URL('/craft', window.location.origin).href;
+  let url = new URL('/?game=cashcraft', window.location.origin).href;
   $('invite-url').textContent = url;
   const status = (message) => { $('invite-status').textContent = message; };
 
   $('game-invite').addEventListener('click', async () => {
     const isPk2 = $('game-frame').src?.includes('/games/pk2/');
-    url = new URL(isPk2 ? '/?game=pk2' : '/craft', window.location.origin).href;
+    url = new URL(isPk2 ? '/?game=pk2' : '/?game=cashcraft', window.location.origin).href;
     $('invite-url').textContent = url;
     if (!dialog.open) dialog.showModal();
     status('Loading donation address…');

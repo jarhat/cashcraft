@@ -16,7 +16,7 @@ from urllib.parse import quote
 
 import httpx
 import segno
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageOps
 from fastapi import FastAPI, HTTPException, Request, Response
 from urllib.parse import parse_qs, urlsplit
 from fastapi.middleware.cors import CORSMiddleware
@@ -234,7 +234,6 @@ def startup() -> None:
     reward_wake.clear()
     reward_thread = threading.Thread(target=reward_worker, daemon=True)
     reward_thread.start()
-    threading.Thread(target=prepare_donation_address, daemon=True).start()
 
 
 @app.on_event("shutdown")
@@ -419,60 +418,21 @@ def donation_address() -> dict[str, str]:
         raise HTTPException(status_code=503, detail="Donation address unavailable.") from exc
 
 
-def prepare_donation_address() -> None:
-    while not reward_stop.is_set():
-        try:
-            donation_address()
-            return
-        except HTTPException as exc:
-            logger.warning("Could not prepare donation address (%s); the preview will omit the QR code.", exc.status_code)
-            reward_stop.wait(60)
-
-
 @app.get("/api/craft-preview.png")
 def craft_preview_image() -> Response:
-    address = None
-    try:
-        with open_db(timeout=1) as db:
-            row = db.execute("SELECT address FROM donation_addresses WHERE network = ?", (NETWORK,)).fetchone()
-            if row:
-                address = row[0]
-    except (RewardDatabaseError, sqlite3.Error) as exc:
-        logger.warning("Could not read the donation address for the preview (%s)", type(exc).__name__)
     path = Path(os.getenv(
         "CRAFT_PREVIEW_IMAGE", str(Path(__file__).resolve().parent.parent / "public" / "craft-preview.png")
     ))
     try:
         with Image.open(path) as source:
             image = ImageOps.fit(source.convert("RGB"), (1200, 675), method=Image.Resampling.LANCZOS)
-        if address:
-            draw = ImageDraw.Draw(image)
-            width, height = image.size
-            qr = segno.make(address, error="h")
-            modules = list(qr.matrix)
-            scale = max(1, min(width, height) // (3 * (len(modules) + 8)))
-            qr_size = (len(modules) + 8) * scale
-            left, top = width - qr_size - 28, height - qr_size - 74
-            if left < 8 or top < 45:
-                raise ValueError("Preview image is too small")
-            draw.rounded_rectangle((left - 12, top - 42, width - 16, height - 18), radius=14, fill="white")
-            font = ImageFont.load_default(size=max(12, scale * 3))
-            draw.text((left + 27, top - 32), "DONATE BCH", fill="#183c28", font=font)
-            draw.ellipse((left, top - 31, left + 10, top - 21), fill="#d62647")
-            draw.ellipse((left + 8, top - 31, left + 18, top - 21), fill="#d62647")
-            draw.polygon(((left, top - 25), (left + 18, top - 25), (left + 9, top - 15)), fill="#d62647")
-            for y, row in enumerate(modules):
-                for x, dark in enumerate(row):
-                    if dark:
-                        x0, y0 = left + (x + 4) * scale, top + (y + 4) * scale
-                        draw.rectangle((x0, y0, x0 + scale - 1, y0 + scale - 1), fill="black")
         output = io.BytesIO()
         image.save(output, format="PNG", optimize=True)
     except (OSError, ValueError) as exc:
         logger.error("Could not generate craft preview (%s)", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Craft preview unavailable.") from exc
     return Response(content=output.getvalue(), media_type="image/png",
-                    headers={"Cache-Control": f"public, max-age={300 if address else 30}"})
+                    headers={"Cache-Control": "public, max-age=300"})
 
 
 _chain_status_lock = threading.Lock()

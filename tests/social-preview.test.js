@@ -13,10 +13,11 @@ test('game restore and favicon share one icon, with appropriately sized PNG fall
   }
 });
 
-test('root social metadata points to the QR-enabled CashCraft preview without client-side rendering', async () => {
+test('root social metadata points to the CashCraft gemstone and block preview without client-side rendering', async () => {
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /property="og:image" content='[^']+\/api\/craft-preview\.png\?v=4'/);
-  assert.match(html, /name="twitter:image" content='[^']+\/api\/craft-preview\.png\?v=4'/);
+  assert.match(html, /property="og:image" content='[^']+\/api\/craft-preview\.png\?v=5'/);
+  assert.match(html, /name="twitter:image" content='[^']+\/api\/craft-preview\.png\?v=5'/);
+  assert.match(html, /green MINA gemstones and textured blocks/);
   assert.match(html, /http\.request\.header\.X-Forwarded-Proto/);
   assert.match(html, /property="og:image:width" content="1200"/);
   assert.match(html, /property="og:image:height" content="675"/);
@@ -24,17 +25,15 @@ test('root social metadata points to the QR-enabled CashCraft preview without cl
   assert.doesNotMatch(html, /floating Bitcoin Cash island|dragon/i);
 });
 
-test('craft unfurlers use the same QR-enabled artwork and dimensions', async () => {
-  const html = await readFile(new URL('../public/craft-preview.html', import.meta.url), 'utf8');
+test('game query links use the root preview and no dedicated craft route', async () => {
+  const invite = await readFile(new URL('../src/game-invite.js', import.meta.url), 'utf8');
+  const main = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
   const caddy = await readFile(new URL('../Caddyfile', import.meta.url), 'utf8');
-  assert.match(html, /property="og:title" content="CashCraft \| Multiplayer MINA mining"/);
-  assert.match(html, /property="og:image" content='[^']+\/api\/craft-preview\.png\?v=4'/);
-  assert.match(html, /name="twitter:image" content='[^']+\/api\/craft-preview\.png\?v=4'/);
-  assert.match(html, /http\.request\.header\.X-Forwarded-Proto/);
-  assert.match(caddy, /telegrambot.*applebot.*pinterest.*cardyb/);
-  assert.match(html, /property="og:image:width" content="1200"/);
-  assert.match(html, /property="og:image:height" content="675"/);
-  assert.doesNotMatch(html, /floating Bitcoin Cash island|dragon/i);
+  assert.match(invite, /\/\?game=cashcraft/);
+  assert.match(invite, /\/\?game=pk2/);
+  assert.match(main, /game === 'pk2' \|\| game === 'cashcraft'/);
+  assert.doesNotMatch(main, /craftRoute/);
+  assert.doesNotMatch(caddy, /path \/craft/);
 });
 
 test('crawler image has a correctly sized local fallback for backend errors', async () => {

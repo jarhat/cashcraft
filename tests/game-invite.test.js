@@ -33,7 +33,7 @@ test('invite shares the CashCraft link and shows the donation address', async (t
   assert.equal(qrAddress, 'bitcoincash:test');
   assert.equal($('donation-qr').hidden, false);
   assert.deepEqual(shared, {
-    title: 'CashCraft', text: 'Come explore CashCraft with me!', url: 'https://example.test/craft',
+    title: 'CashCraft', text: 'Come explore CashCraft with me!', url: 'https://example.test/?game=cashcraft',
   });
   $('invite-dialog').open = false;
   $('game-frame').src = 'https://example.test/games/pk2/index.html';

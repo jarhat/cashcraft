@@ -34,13 +34,8 @@ setupScrollEffects();
 setupSnow(document.getElementById('snow-canvas'));
 setupMesh(document.querySelector('.mesh-terrain'));
 
-const craftRoute = window.location.pathname.replace(/\/+$/, '') === '/craft';
-if (craftRoute) {
-  document.title = 'CashCraft | Bitcoin Cash voxel world';
-  document.querySelector('meta[property="og:title"]').content = document.title;
-}
 for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
-  document.querySelector(selector).content = new URL('/api/craft-preview.png?v=4', window.location.origin).href;
+  document.querySelector(selector).content = new URL('/api/craft-preview.png?v=5', window.location.origin).href;
 }
 
 if (!['mainnet', 'chipnet'].includes(network)) {
@@ -2766,8 +2761,9 @@ const restoreSession = async () => {
 };
 void restoreSession().finally(() => {
   const params = new URLSearchParams(window.location.search);
-  if (craftRoute || params.has('c') || params.get('game') === 'pk2') {
-    $(params.get('game') === 'pk2' ? 'game-pk2' : 'game-netcraft').click();
+  const game = params.get('game');
+  if (params.has('c') || game === 'pk2' || game === 'cashcraft') {
+    $(game === 'pk2' ? 'game-pk2' : 'game-netcraft').click();
   }
 });
 
