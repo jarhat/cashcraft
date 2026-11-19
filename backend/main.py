@@ -1035,9 +1035,9 @@ def pay_mining_reward(reward_id: int, request: Request) -> Response:
             reward_wake.set()
             return Response(status_code=202)
     except (RuntimeError, sqlite3.Error, ValueError, KeyError, TypeError) as exc:
-        logger.error("Could not pay mining reward %s (%s).", reward_id, payout_failure_reason(exc))
+        logger.error("Could not pay mining reward %s (%s); queued for retry.", reward_id, payout_failure_reason(exc))
         reward_wake.set()
-        raise HTTPException(status_code=503, detail="Mining payout failed; contact the operator.") from exc
+        return Response(status_code=202)
     return Response(status_code=204)
 
 

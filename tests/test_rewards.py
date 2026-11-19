@@ -443,7 +443,7 @@ class RewardTests(unittest.TestCase):
         self.assertIn("RuntimeError", captured.output[0])
         self.assertNotIn(tx_detail, "\n".join(captured.output))
 
-    def test_payout_logs_actionable_safe_reason_without_transaction_details(self):
+    def test_payout_logs_actionable_safe_reason_and_queues_retry(self):
         client = TestClient(backend.app)
         with patch.object(backend, "NETCRAFT_REWARD_WAKE_SECRET", "test-secret"), \
              patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
@@ -453,7 +453,7 @@ class RewardTests(unittest.TestCase):
              )), self.assertLogs(backend.logger, level="ERROR") as captured:
             response = client.post("/api/internal/netcraft-mining-reward/7",
                                    headers={"Authorization": "Bearer test-secret"})
-        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.status_code, 202)
         self.assertIn("No spendable fungible reward tokens are available.", captured.output[0])
 
     def test_bchn_rpc_logs_error_code_without_transaction_details(self):
