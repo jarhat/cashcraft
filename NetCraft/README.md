@@ -191,8 +191,10 @@ Block edits are paused while disconnected; they are not queued.
 Disconnecting a wallet does not close the game; its reward address is cleared
 and can be connected again while playing.
 
-The loading screen remains until the first frame is rendered. Graphics and
-runtime errors are reported separately from the server connection, which can
+The loading screen shows available download progress and fades after the first
+frame is rendered. Its background is served by the frontend as
+`/craft-loading.webp`; deploy the updated frontend alongside the rebuilt client.
+Graphics and runtime errors are reported separately from the server connection, which can
 remain connected even if rendering fails. Check the browser console for the
 underlying error; a lost WebGL context requires reloading the game. After
 changing the client, rebuild the WASM files in `NETCRAFT_BUILD_PATH`; restarting
@@ -240,7 +242,7 @@ an immediate BCHN transaction for each eligible block; wallet transaction
 creation is serialized to avoid spending the same inputs twice. The wallet
 refreshes after the request and shows a receipt once it sees the zero-confirmation
 output. A request can fail or take longer if the node or network is unavailable.
-The game wallet button turns green for an unread wallet notification; opening notifications
+The green game wallet button opens wallet notifications; opening notifications
 marks them read. Browsers may require a user gesture before sound can play.
 The HUD counts MINA ore blocks mined during the current game session, including
 placed ore; it is not a token balance or a count of successful payouts. Chat
@@ -251,10 +253,12 @@ that category and BCH for transaction fees. Set
 world database and BCHN wallet together. Run only one payout worker. Set
 `NETCRAFT_REWARD_WAKE_SECRET` to the same long random ASCII secret for both
 services. Mining edits and payout records are committed together. Unsent
-records are retried automatically, including after daily limits defer payment.
+records are retried automatically.
 Investigate persistent errors. Signed transactions are stored before broadcast
 and retried unchanged after an uncertain broadcast. The wallet can be drained by
 transaction fees and output amounts, so fund and monitor it accordingly.
+Each mining output carries the minimum standard BCH dust amount for the recipient
+script (651 satoshis for P2PKH); zero-satoshi token outputs are not normally relayed.
 The top ticker counts successfully broadcast one-unit payouts for the current
 MINA category recorded in both reward databases, not all on-chain transfers.
 Discontinued bonus records are left untouched and are not processed or counted.
@@ -268,13 +272,8 @@ and wallet backups: the backend can sign transactions, and its RPC credentials
 grant wallet access. Keep only limited funds in the payout wallet.
 
 The protocol does not authenticate players or prevent automated mining.
-The backend reserves at most `NETCRAFT_DAILY_PAYOUT_LIMIT` mining broadcasts
-per UTC day (default 1,000), and `NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT` per
-address (default 100). Requests beyond either limit are reported as blocked
-and are not automatically paid later; signed transaction recovery reuses its
-reservation on the same day. These caps do not cover
-welcome rewards and do not guarantee wallet security. A public
-server can still spend configured tokens and BCH available for fees. Standalone server and backend processes default to
+Mining payouts have no daily caps; a public server can spend all configured
+tokens and BCH available for output values and fees. Standalone server and backend processes default to
 rewards disabled unless `NETCRAFT_MINING_REWARDS_ENABLED=true`.
 Deploy matching rebuilt Rust and WASM clients together when changing terrain
 generation; existing edits remain, but unedited baseline terrain changes.

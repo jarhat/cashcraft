@@ -29,6 +29,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, autoOp
     $('game-notifications').setAttribute('aria-label', translate(connected ? 'Wallet and notifications' : 'Connect wallet'));
     $('game-notifications').setAttribute('title', translate(connected ? 'Wallet and notifications' : 'Connect wallet'));
     $('game-notifications').setAttribute('aria-controls', connected ? 'notifications-dialog' : 'connection-dialog');
+    $('game-wallet-prompt').hidden = activeGame !== 'netcraft' || connected;
     if (activeGame) {
       const title = games[activeGame].title;
       $('game-restore').setAttribute('aria-label', `Resume ${title}`);
@@ -73,7 +74,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, autoOp
       const status = dialog.open ? $('game-dialog-status') : $('game-status');
       status.textContent = translate('Loading game…');
       try {
-        const response = await fetch(game.url, { cache: 'no-store' });
+        const response = await fetch(game.url, { cache: 'no-cache' });
         if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) {
           throw new Error(translate('Game build unavailable. Check the server mount.'));
         }
@@ -94,6 +95,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, autoOp
           frame.src = game.url;
         }
         activeGame = id;
+        updateRewardAddress(getRewardAddress());
         dialog.hidden = false;
         frame.classList.add('game-shift-in');
         for (const key of Object.keys(games)) {
@@ -153,6 +155,10 @@ export function setupGames($, { translate, getRewardAddress = () => null, autoOp
       overlay.addEventListener('close', () => parent.insertBefore(overlay, next), { once: true });
     }
     $(connected ? 'notifications-toggle' : 'connection-open').click();
+  });
+  $('game-wallet-prompt-connect').addEventListener('click', () => {
+    $('browser-wallet-section').open = true;
+    $('game-notifications').click();
   });
   $('game-invite').addEventListener('click', () => {
     const overlay = $('invite-dialog');
