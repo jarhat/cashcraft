@@ -219,6 +219,15 @@ class RewardTests(unittest.TestCase):
                     "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'mining_rewards'"
                 ).fetchone()
             )
+            db.execute(
+                "INSERT INTO mining_rewards (x, y, z, cash_address, category) VALUES (?, ?, ?, ?, ?)",
+                (1, 2, 3, "address", "a" * 64),
+            )
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute(
+                    "INSERT INTO mining_rewards (x, y, z, cash_address, category) VALUES (?, ?, ?, ?, ?)",
+                    (1, 2, 3, "another", "a" * 64),
+                )
 
     def test_daily_mining_limit_persists_across_retries_and_defers_next_payout(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"

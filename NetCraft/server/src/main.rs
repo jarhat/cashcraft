@@ -325,6 +325,25 @@ fn open_database(path: &str) -> rusqlite::Result<Connection> {
            UNIQUE(x,y,z)
          );",
     )?;
+    let columns = {
+        let mut statement = db.prepare("PRAGMA table_info(mining_rewards)")?;
+        let names = statement
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        names
+    };
+    for column in ["x", "y", "z"] {
+        if !columns.iter().any(|name| name == column) {
+            db.execute(
+                &format!("ALTER TABLE mining_rewards ADD COLUMN {column} INTEGER"),
+                [],
+            )?;
+        }
+    }
+    db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS mining_rewards_xyz_idx ON mining_rewards (x,y,z)",
+        [],
+    )?;
     Ok(db)
 }
 
@@ -1067,6 +1086,58 @@ mod tests {
             "bitcoincash:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqfnhks603",
             "bitcoincash"
         ));
+    }
+
+    #[test]
+    fn upgrades_backend_created_reward_table_without_losing_pending_payouts() {
+        let path = env::temp_dir().join(format!(
+            "netcraft-reward-migration-{}-{}.sqlite3",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        {
+            let db = Connection::open(&path).unwrap();
+            db.execute_batch(
+                "CREATE TABLE mining_rewards (
+                    id INTEGER PRIMARY KEY, cash_address TEXT, category TEXT,
+                    signed_tx TEXT, txid TEXT, sent_at TEXT
+                 );
+                 INSERT INTO mining_rewards (cash_address, category, signed_tx, txid)
+                 VALUES ('old', 'category', 'signed', 'txid');",
+            )
+            .unwrap();
+        }
+        {
+            let db = open_database(path.to_str().unwrap()).unwrap();
+            let old: (String, String, String, String) = db
+                .query_row(
+                    "SELECT cash_address, category, signed_tx, txid FROM mining_rewards WHERE id=1",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+                .unwrap();
+            assert_eq!(
+                old,
+                (
+                    "old".into(),
+                    "category".into(),
+                    "signed".into(),
+                    "txid".into()
+                )
+            );
+            db.execute(
+                "INSERT INTO mining_rewards (x,y,z,cash_address,category) VALUES (1,2,3,'new','category')",
+                [],
+            ).unwrap();
+            assert!(db.execute(
+                "INSERT INTO mining_rewards (x,y,z,cash_address,category) VALUES (1,2,3,'other','category')",
+                [],
+            ).is_err());
+        }
+        std::fs::remove_file(path).unwrap();
     }
 
     fn ore_positions(server: &Server) -> Vec<(i32, i32, i32)> {
