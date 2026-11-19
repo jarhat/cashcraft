@@ -3068,3 +3068,58 @@ body:not(.wallet-connected) .dashboard { padding-bottom: 0; }
   background: color-mix(in srgb, var(--page-base) 90%, white);
 }
 .topbar .wizard-toggle::after { content: none; }
+
+html[data-theme="miami"] {
+  --ice: #81f4f2;
+  --mint: #72f5cd;
+  --muted: #b6a8c8;
+  --glow-color: #ff65b7;
+  --page-base: #140c24;
+  --page-halo: rgb(236 55 154 / 28%);
+  --page-halo-secondary: rgb(32 204 215 / 20%);
+  --glass-tint: rgb(29 17 45 / 96%);
+  --glass-border: rgb(255 122 199 / 32%);
+  --glass-glow: rgb(255 91 183 / 14%);
+  --mesh-color: #68e9eb;
+  --sun-color: #ff78b9;
+  --miami-pink: rgb(255 93 183 / 14%);
+  --miami-blue: rgb(50 227 221 / 10%);
+}
+html[data-theme="miami"] .mesh-sun { background: linear-gradient(#ffe383, #ff77a9 55%, #c845b7); }
+html[data-theme="miami"] .market-strip { background: #1d102b; }
+.topbar .mesh-sun { width: min(58px, calc(var(--topbar-height, 66px) - 8px)); top: 50%; transform: translateY(-50%); }
+.donate-top { flex: none; width: 30px; height: 30px; padding: 5px; }
+.donate-top .theme-icon { width: 18px; height: 18px; }
+.topbar #games-menu { left: auto; right: 0; }
+.receive-token-logo { flex: none; width: 28px; height: 28px; margin-right: 6px; font-size: .5rem; font-weight: 700; }
+.receive-form .address-line input { min-width: 0; flex: 1; }
+.panel-maximize { margin-left: auto; font-size: 1.1rem; }
+.dashboard .panel.panel-maximized {
+  position: fixed;
+  z-index: 100;
+  inset: 12px;
+  overflow: auto;
+  margin: 0;
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 75%);
+}
+@media (min-width: 901px) {
+  body.wallet-connected .dashboard {
+    align-items: stretch;
+    grid-template-areas: "balance transfer" "portfolio transfer";
+  }
+  body.wallet-connected #balance-section { grid-area: balance; }
+  body.wallet-connected #transfer-section { grid-area: transfer; }
+  body.wallet-connected #earn-section { grid-area: portfolio; grid-column: auto; }
+}
+.game-dialog { width: min(1400px, calc(100% - 16px)); max-width: none; max-height: calc(100dvh - 16px); }
+.game-dialog iframe { height: min(76dvh, 900px); }
+.game-dialog.game-maximized { width: calc(100% - 8px); height: calc(100dvh - 8px); max-height: none; }
+.game-dialog.game-maximized .game-stage { height: calc(100% - 115px); }
+.game-dialog.game-maximized iframe { height: 100%; }
+.game-stage { position: relative; overflow: auto; }
+.game-loading {
+  position: absolute; inset: 0; display: grid; place-content: center; justify-items: center;
+  gap: 16px; background: rgb(8 14 23 / 85%); color: var(--ice); pointer-events: none;
+}
+.game-loading[hidden] { display: none; }
+.game-loading .voxel-sphere { position: static; width: 160px; height: 160px; opacity: 1; }

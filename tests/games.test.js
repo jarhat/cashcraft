@@ -10,7 +10,11 @@ test('game buttons open mounted shells and unload them on close', async (t) => {
     if (!elements.has(id)) elements.set(id, {
       listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute(name, value) { this[name] = value; },
-      classList: { add() {}, remove() {} },
+      classList: {
+        values: new Set(), add(value) { this.values.add(value); },
+        remove(value) { this.values.delete(value); },
+        toggle(value) { if (this.values.has(value)) { this.values.delete(value); return false; } this.values.add(value); return true; },
+      },
       showModal() { this.open = true; }, close() { this.open = false; this.listeners.close(); },
       removeAttribute(name) { delete this[name]; },
     });
@@ -29,6 +33,12 @@ test('game buttons open mounted shells and unload them on close', async (t) => {
   assert.equal($('game-frame').src, undefined);
   await $('game-pk2').listeners.click();
   assert.equal(url, '/games/pk2/index.html');
+  $('game-maximize').listeners.click();
+  assert.equal($('game-maximize')['aria-pressed'], 'true');
+  $('game-minimize').listeners.click();
+  $('game-restore').listeners.click();
+  assert.equal($('game-frame').src, '/games/pk2/index.html');
+  assert.equal($('game-maximize')['aria-pressed'], 'true');
   await $('switch-netcraft').listeners.click();
   assert.equal($('game-frame').src, '/games/netcraft/craft.html');
   assert.equal($('switch-netcraft')['aria-pressed'], 'true');

@@ -283,7 +283,7 @@ function setTheme(theme) {
   });
 }
 const migratedTheme = { dark: 'frost', blue: 'frost', green: 'aurora', bch: 'aurora', 'bch-sunrise': 'aurora' }[savedTheme] || savedTheme;
-setTheme(['frost', 'aurora'].includes(migratedTheme) ? migratedTheme : 'aurora');
+setTheme(['miami', 'frost', 'aurora'].includes(migratedTheme) ? migratedTheme : 'miami');
 
 for (const name of ['theme', 'language']) {
   const toggle = $(`${name}-toggle`);
@@ -322,6 +322,49 @@ for (const name of ['theme', 'language']) {
     }
   });
 }
+
+const gamesMenu = $('games-menu');
+const gamesToggle = $('games-toggle');
+function closeGamesMenu() {
+  gamesMenu.hidden = true;
+  gamesToggle.setAttribute('aria-expanded', 'false');
+}
+gamesToggle.addEventListener('click', () => {
+  const opening = gamesMenu.hidden;
+  document.querySelectorAll('.tool-dropdown').forEach((menu) => { menu.hidden = true; });
+  document.querySelectorAll('.tool-menu > button').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+  gamesMenu.hidden = !opening;
+  gamesToggle.setAttribute('aria-expanded', String(opening));
+});
+gamesMenu.addEventListener('click', closeGamesMenu);
+document.addEventListener('click', (event) => {
+  if (!gamesToggle.parentElement.contains(event.target)) closeGamesMenu();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !gamesMenu.hidden) {
+    closeGamesMenu();
+    gamesToggle.focus();
+  }
+});
+
+for (const button of document.querySelectorAll('.panel-maximize')) {
+  const panel = button.closest('.panel');
+  const label = button.getAttribute('aria-label');
+  button.addEventListener('click', () => {
+    const expanded = panel.classList.toggle('panel-maximized');
+    button.setAttribute('aria-pressed', String(expanded));
+    button.setAttribute('aria-label', expanded ? translate('Restore panel size') : label);
+  });
+}
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  document.querySelectorAll('.panel-maximized').forEach((panel) => {
+    panel.classList.remove('panel-maximized');
+    const button = panel.querySelector('.panel-maximize');
+    button.setAttribute('aria-pressed', 'false');
+    button.setAttribute('aria-label', translate('Maximize panel'));
+  });
+});
 
 function setConnection(connected) {
   pairingReminder.cancel();
@@ -2141,6 +2184,28 @@ $('top-receive').addEventListener('click', () => {
   setTransferTab('receive');
   $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
+const PARYON_USD_CATEGORY = '2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544';
+let receiveLogoGeneration = 0;
+function updateReceiveTokenLogo() {
+  const generation = ++receiveLogoGeneration;
+  const category = $('receive-category').value.trim().toLowerCase();
+  const target = $('receive-token-logo');
+  target.textContent = category === PARYON_USD_CATEGORY && mainnet ? 'PUSD' : '◆';
+  target.title = '';
+  if (!mainnet || !/^[0-9a-f]{64}$/.test(category)) return;
+  target.title = translate('Loading token logo…');
+  loadTokenLogo(category).then((logo) => {
+    if (generation !== receiveLogoGeneration) return;
+    logo.alt = '';
+    target.replaceChildren(logo);
+    target.title = category === PARYON_USD_CATEGORY ? 'ParyonUSD (PUSD)' : translate('Token logo');
+  }).catch((error) => {
+    logger.warn(`Token logo unavailable for ${category}:`, error);
+    if (generation === receiveLogoGeneration) target.title = translate('Token logo unavailable.');
+  });
+}
+if (mainnet && !$('receive-category').value.trim()) $('receive-category').value = PARYON_USD_CATEGORY;
+updateReceiveTokenLogo();
 for (const field of ['address', 'category']) {
   $(`edit-receive-${field}`).addEventListener('click', () => {
     const input = $(`receive-${field}`);
@@ -2350,6 +2415,7 @@ for (const id of ['receive-address', 'receive-category', 'receive-amount']) {
       walletReceiveAddress = null;
       $('copy-receive-address').disabled = !$(id).value.trim();
     }
+    if (id === 'receive-category') updateReceiveTokenLogo();
   });
 }
 

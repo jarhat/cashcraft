@@ -9,6 +9,7 @@ export function setupGames($, { claimBeer, translate }) {
   let generation = 0;
   let activeGame = null;
   let minimized = false;
+  let loadingTimer;
   const restore = () => {
     minimized = false;
     $('game-restore').hidden = true;
@@ -41,6 +42,11 @@ export function setupGames($, { claimBeer, translate }) {
         void frame.offsetWidth;
         frame.src = game.url;
         activeGame = id;
+        clearTimeout(loadingTimer);
+        $('game-loading').hidden = id !== 'netcraft';
+        if (id === 'netcraft') {
+          loadingTimer = setTimeout(() => { $('game-loading').hidden = true; }, 2500);
+        }
         frame.classList.add('game-shift-in');
         for (const key of Object.keys(games)) {
           $(`switch-${key}`).setAttribute('aria-pressed', String(key === id));
@@ -59,11 +65,21 @@ export function setupGames($, { claimBeer, translate }) {
     dialog.close();
   });
   $('game-restore').addEventListener('click', restore);
+  $('game-maximize').addEventListener('click', () => {
+    const expanded = dialog.classList.toggle('game-maximized');
+    $('game-maximize').setAttribute('aria-pressed', String(expanded));
+    $('game-maximize').setAttribute('aria-label', expanded ? 'Restore game size' : 'Maximize game');
+  });
   $('game-close').addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => {
-    if (minimized) return;
+    if (minimized || dialog.open) return;
     generation++;
     activeGame = null;
+    clearTimeout(loadingTimer);
+    $('game-loading').hidden = true;
+    dialog.classList.remove('game-maximized');
+    $('game-maximize').setAttribute('aria-pressed', 'false');
+    $('game-maximize').setAttribute('aria-label', 'Maximize game');
     frame.removeAttribute('src');
     $('game-dialog-status').textContent = '';
     for (const key of Object.keys(games)) $(`switch-${key}`).setAttribute('aria-pressed', 'false');

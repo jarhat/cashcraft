@@ -7,8 +7,8 @@ import { inspectNft } from '../src/nft-inspection.js';
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
 test('theme preferences migrate and select the correct palette', () => {
-  for (const [saved, expected] of [[null, 'aurora'], ['bch', 'aurora'], ['bch-sunrise', 'aurora'], ['green', 'aurora'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'aurora'], ['frost', 'frost'], ['unknown', 'aurora']]) {
-    const buttons = ['frost', 'aurora'].map((themeOption) => ({
+  for (const [saved, expected] of [[null, 'miami'], ['bch', 'aurora'], ['bch-sunrise', 'aurora'], ['green', 'aurora'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'aurora'], ['frost', 'frost'], ['miami', 'miami'], ['unknown', 'miami']]) {
+    const buttons = ['miami', 'frost', 'aurora'].map((themeOption) => ({
       dataset: { themeOption },
       setAttribute(name, value) { this[name] = value; },
     }));
@@ -30,6 +30,37 @@ test('theme preferences migrate and select the correct palette', () => {
     assert.equal(document.meta.content, '#080a10');
     assert.equal(buttons.find((button) => button.dataset.themeOption === expected)['aria-pressed'], 'true');
   }
+});
+
+test('receive defaults to mainnet ParyonUSD and ignores stale token logos', async () => {
+  const pending = new Map();
+  const category = { value: '' };
+  const target = { textContent: '', title: '', replaceChildren(logo) { this.logo = logo; } };
+  const logger = { warn() {} };
+  const $ = (id) => id === 'receive-category' ? category : target;
+  const start = source.indexOf('const PARYON_USD_CATEGORY =');
+  const end = source.indexOf("\nfor (const field of ['address', 'category'])", start);
+  const context = {
+    $, mainnet: true, logger, translate: (text) => text,
+    loadTokenLogo(id) { return new Promise((resolve) => pending.set(id, resolve)); },
+  };
+  runInNewContext(`${source.slice(start, end)}\nthis.updateLogo = updateReceiveTokenLogo;`, context);
+  const paryon = '2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544';
+  assert.equal(category.value, paryon);
+  assert.equal(target.textContent, 'PUSD');
+  category.value = 'a'.repeat(64);
+  context.updateLogo();
+  pending.get(paryon)({ name: 'stale' });
+  pending.get(category.value)({ name: 'current' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(target.logo.name, 'current');
+
+  const chipnetCategory = { value: '' };
+  runInNewContext(source.slice(start, end), {
+    ...context, mainnet: false,
+    $: (id) => id === 'receive-category' ? chipnetCategory : target,
+  });
+  assert.equal(chipnetCategory.value, '');
 });
 
 test('wizard highlights and scrolls to each tutorial panel without moving the navigation', () => {
