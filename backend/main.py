@@ -220,11 +220,15 @@ def open_netcraft_db(timeout: int) -> sqlite3.Connection:
     db = sqlite3.connect(path.resolve().as_uri() + "?mode=rwc", uri=True, timeout=timeout)
     db.execute("""CREATE TABLE IF NOT EXISTS mining_rewards (
         id INTEGER PRIMARY KEY,
-        cash_address TEXT,
-        category TEXT,
+        x INTEGER NOT NULL,
+        y INTEGER NOT NULL,
+        z INTEGER NOT NULL,
+        cash_address TEXT NOT NULL,
+        category TEXT NOT NULL,
         signed_tx TEXT,
         txid TEXT,
-        sent_at TEXT
+        sent_at TEXT,
+        UNIQUE(x, y, z)
     )""")
     db.execute("""CREATE TABLE IF NOT EXISTS mining_payout_reservations (
         reward_id INTEGER NOT NULL, day TEXT NOT NULL, PRIMARY KEY (reward_id, day)
