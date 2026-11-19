@@ -17,6 +17,9 @@ bool get_client_enabled(void);
 void client_connect(char *hostname, int port);
 void client_start(void);
 void client_stop(void);
+#ifdef __EMSCRIPTEN__
+bool client_is_socket(int fd);
+#endif
 void client_send(char *data);
 void client_message(int fd, void *userData);
 char *client_recv(void);

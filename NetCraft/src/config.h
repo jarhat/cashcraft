@@ -32,7 +32,7 @@
 #define SHOW_ITEM true
 #define SHOW_CROSSHAIRS true
 #define SHOW_WIREFRAME true
-#define SHOW_INFO_TEXT true
+#define SHOW_INFO_TEXT false
 #define SHOW_CHAT_TEXT true
 #define SHOW_PLAYER_NAMES true
 
@@ -72,10 +72,16 @@
 #define GAMEPAD_RIGHT_STICK_VERTICAL 3
 
 // advanced parameters
+#ifdef __EMSCRIPTEN__
+#define CREATE_CHUNK_RADIUS 6
+#define RENDER_CHUNK_RADIUS 6
+#define DELETE_CHUNK_RADIUS 8
+#else
 #define CREATE_CHUNK_RADIUS 10
 #define RENDER_CHUNK_RADIUS 10
-#define RENDER_SIGN_RADIUS 4
 #define DELETE_CHUNK_RADIUS 14
+#endif
+#define RENDER_SIGN_RADIUS 4
 #define CHUNK_SIZE 32
 #define COMMIT_INTERVAL 0.1
 #define ORTHO_ZOOM_MIN 8

@@ -25,6 +25,11 @@ test('perspective mesh converges at the horizon and shares intersections through
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   assert.ok(html.indexOf('class="mesh-landscape"') > html.indexOf('<header class="topbar">'));
   assert.ok(html.indexOf('class="mesh-landscape"') < html.indexOf('</header>'));
+  assert.match(html, /data-theme-option="miami"/);
+  assert.match(css, /html\[data-theme="miami"\]/);
+  assert.match(css, /\.mesh-start\s*\{\s*stop-color:\s*var\(--mesh-color\)/);
+  assert.match(css, /\.mesh-end\s*\{\s*stop-color:\s*var\(--mesh-highlight\)/);
+  assert.doesNotMatch(html, /id="mesh-rgb"/);
 });
 
 test('mesh regenerates once per resize frame with the current dimensions', (t) => {

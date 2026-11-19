@@ -17,6 +17,7 @@
 #include "inventory.h"
 #include <unistd.h>
 #include "auth.h"
+#include "animals.h"
 #include "chunk.h"
 #include "client.h"
 #include "config.h"
@@ -106,6 +107,16 @@
 
 #define MODE_OFFLINE 0
 #define MODE_ONLINE 1
+
+#ifdef __EMSCRIPTEN__
+static bool online_ready = false;
+static bool connecting = false;
+static double reconnect_at = 0;
+static double connect_started = 0;
+static int reconnect_delay = 1;
+static bool has_connected = false;
+static bool preserve_position = false;
+#endif
 
 #define WORKER_IDLE 0
 #define WORKER_BUSY 1
@@ -212,6 +223,8 @@ typedef struct {
     int message_index;
     int message_view_index;
     char messages[MAX_MESSAGES][MAX_TEXT_LENGTH];
+    double message_times[MAX_MESSAGES];
+    uint32_t mina_mined;
     int width;
     int height;
     int observe1;
@@ -245,6 +258,10 @@ typedef struct {
 
 static Model model;
 static Model *g = &model;
+static struct {
+    bool active;
+    int x, y, z, item;
+} pending_placement;
 
 int chunked(float x) {
     return floorf(roundf(x) / CHUNK_SIZE);
@@ -324,7 +341,7 @@ void get_motion_vector(bool flying, double sz, double sx, double rx, float ry,
     }
 }
 
-GLuint gen_crosshair_buffer() {
+static GLuint gen_crosshair_buffer(void) {
     int x = g->width / 2;
     int y = g->height / 2;
     int p = 10 * g->scale;
@@ -534,7 +551,9 @@ void update_player(Player *player,
     if (interpolate) {
         State *s1 = &player->state1;
         State *s2 = &player->state2;
-        memcpy(s1, s2, sizeof(State));
+        float previous_time = s2->t;
+        memcpy(s1, &player->state, sizeof(State));
+        s1->t = previous_time;
         s2->x = x; s2->y = y; s2->z = z; s2->rx = rx; s2->ry = ry;
         s2->t = glfwGetTime();
         if (s2->rx - s1->rx > PI) {
@@ -546,9 +565,10 @@ void update_player(Player *player,
     }
     else {
         State *s = &player->state;
+        if (player->buffer && s->x == x && s->y == y && s->z == z &&
+            s->rx == rx && s->ry == ry) return;
         s->x = x; s->y = y; s->z = z; s->rx = rx; s->ry = ry;
-        del_buffer(player->buffer);
-        player->buffer = gen_player_buffer(s->x, s->y, s->z, s->rx, s->ry);
+        player->buffer = update_player_buffer(player->buffer, s->x, s->y, s->z, s->rx, s->ry);
     }
 }
 
@@ -557,8 +577,8 @@ void interpolate_player(Player *player) {
     State *s2 = &player->state2;
     float t1 = s2->t - s1->t;
     float t2 = glfwGetTime() - s2->t;
-    t1 = MIN(t1, 1);
-    t1 = MAX(t1, 0.1);
+    t1 = MIN(t1, 0.15);
+    t1 = MAX(t1, 0.05);
     float p = MIN(t2 / t1, 1);
     update_player(
         player,
@@ -643,6 +663,16 @@ Chunk *find_chunk(int p, int q) {
         }
     }
     return 0;
+}
+
+static bool chunk_is_ready(const Chunk *chunk) {
+#ifdef __EMSCRIPTEN__
+    return g->mode != MODE_ONLINE ||
+        (online_ready && !chunk->needs_resync && !chunk->sync_pending);
+#else
+    (void)chunk;
+    return true;
+#endif
 }
 
 typedef struct {
@@ -828,6 +858,9 @@ int hit_test(
     get_sight_vector(rx, ry, &vx, &vy, &vz);
     for (int i = 0; i < g->chunk_count; i++) {
         Chunk *chunk = g->chunks + i;
+        if (!chunk_is_ready(chunk)) {
+            continue;
+        }
         if (chunk_distance(chunk, p, q) > 1) {
             continue;
         }
@@ -1166,7 +1199,7 @@ void light_fill(
 void compute_chunk(WorkerItem *item) {
     char *opaque = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
     char *light = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
-    char *highest = (char *)calloc(XZ_SIZE * XZ_SIZE, sizeof(char));
+    short *highest = (short *)calloc(XZ_SIZE * XZ_SIZE, sizeof(short));
 
     int ox = item->p * CHUNK_SIZE - CHUNK_SIZE - 1;
     int oy = -1;
@@ -1193,6 +1226,15 @@ void compute_chunk(WorkerItem *item) {
                 continue;
             }
             MAP_FOR_EACH(map, ex, ey, ez, ew) {
+                if (ew <= 0) {
+                    int owner_a = chunked(ex) - item->p + 1;
+                    int owner_b = chunked(ez) - item->q + 1;
+                    if (owner_a >= 0 && owner_a < 3 && owner_b >= 0 && owner_b < 3 &&
+                            (owner_a != a || owner_b != b) &&
+                            item->block_maps[owner_a][owner_b]) {
+                        continue;
+                    }
+                }
                 int x = ex - ox;
                 int y = ey - oy;
                 int z = ez - oz;
@@ -1247,7 +1289,7 @@ void compute_chunk(WorkerItem *item) {
         int f1 = !opaque[XYZ(x - 1, y, z)];
         int f2 = !opaque[XYZ(x + 1, y, z)];
         int f3 = !opaque[XYZ(x, y + 1, z)];
-        int f4 = !opaque[XYZ(x, y - 1, z)] && (ey > 0);
+        int f4 = !opaque[XYZ(x, y - 1, z)];
         int f5 = !opaque[XYZ(x, y, z - 1)];
         int f6 = !opaque[XYZ(x, y, z + 1)];
         int total = f1 + f2 + f3 + f4 + f5 + f6;
@@ -1275,7 +1317,7 @@ void compute_chunk(WorkerItem *item) {
         int f1 = !opaque[XYZ(x - 1, y, z)];
         int f2 = !opaque[XYZ(x + 1, y, z)];
         int f3 = !opaque[XYZ(x, y + 1, z)];
-        int f4 = !opaque[XYZ(x, y - 1, z)] && (ey > 0);
+        int f4 = !opaque[XYZ(x, y - 1, z)];
         int f5 = !opaque[XYZ(x, y, z - 1)];
         int f6 = !opaque[XYZ(x, y, z + 1)];
         int total = f1 + f2 + f3 + f4 + f5 + f6;
@@ -1394,12 +1436,16 @@ void load_chunk(WorkerItem *item) {
 
 void request_chunk(int p, int q) {
     int key = db_get_key(p, q);
-    client_chunk(p, q, key);
+    client_chunk(p, q, key ? key : -1);
 }
 
 void init_chunk(Chunk *chunk, int p, int q) {
     chunk->p = p;
     chunk->q = q;
+#ifdef __EMSCRIPTEN__
+    chunk->needs_resync = 0;
+    chunk->sync_pending = 0;
+#endif
     chunk->faces = 0;
     chunk->sign_faces = 0;
     chunk->buffer = 0;
@@ -1421,13 +1467,15 @@ void create_chunk(Chunk *chunk, int p, int q) {
     init_chunk(chunk, p, q);
 
 #ifdef __EMSCRIPTEN__
-    if (get_client_enabled()) {
-        /* Stream the center chunk and its 8 neighbors. */
-        for (int dz = -1; dz <= 1; ++dz) {
-            for (int dx = -1; dx <= 1; ++dx) {
-                request_chunk(p + dx, q + dz);
-            }
-        }
+    if (online_ready) {
+        WorkerItem item = {0};
+        item.p = p;
+        item.q = q;
+        item.block_maps[1][1] = &chunk->map;
+        item.light_maps[1][1] = &chunk->lights;
+        load_chunk(&item);
+        chunk->sync_pending = 1;
+        request_chunk(p, q);
     } else {
         WorkerItem item = {0};
         item.p = chunk->p;
@@ -1455,6 +1503,11 @@ void delete_chunks() {
     State *states[3] = {s1, s2, s3};
     for (int i = 0; i < count; i++) {
         Chunk *chunk = g->chunks + i;
+#ifdef __EMSCRIPTEN__
+        if (online_ready && chunk->sync_pending) {
+            continue;
+        }
+#endif
         int delete = 1;
         for (int j = 0; j < 3; j++) {
             State *s = states[j];
@@ -1534,7 +1587,11 @@ void check_workers() {
 #define NEAR_RADIUS             2
 #define AHEAD_DISTANCE          6
 #define AHEAD_HALF_WIDTH        2
+#ifdef __EMSCRIPTEN__
+#define MAX_NEW_CHUNKS_FRAME    1
+#else
 #define MAX_NEW_CHUNKS_FRAME    8
+#endif
 #define MAX_CANDIDATE_CHUNKS    256
 
 typedef struct {
@@ -1597,8 +1654,23 @@ void force_chunks(Player *player) {
     const int center_p = chunked(s->x);
     const int center_q = chunked(s->z);
 
+#ifdef __EMSCRIPTEN__
+    static ChunkCandidate candidates[MAX_CANDIDATE_CHUNKS];
+    static int candidate_count = 0;
+    static int last_p, last_q, last_radius, last_heading;
+    static bool candidates_valid = false;
+    int heading = (int)floorf((s->rx + PI / 16) / (PI / 8));
+    bool rebuild_candidates = !candidates_valid || center_p != last_p ||
+        center_q != last_q || g->create_radius != last_radius || heading != last_heading;
+    if (rebuild_candidates) {
+        candidate_count = 0;
+        candidates_valid = true;
+        last_p = center_p; last_q = center_q;
+        last_radius = g->create_radius; last_heading = heading;
+#else
     ChunkCandidate candidates[MAX_CANDIDATE_CHUNKS];
     int candidate_count = 0;
+#endif
 
     float sight_x, sight_y, sight_z;
     get_sight_vector(s->rx, s->ry, &sight_x, &sight_y, &sight_z);
@@ -1629,6 +1701,17 @@ void force_chunks(Player *player) {
         }
     }
 
+#ifdef __EMSCRIPTEN__
+    /* Browser builds do not use pthread workers; fill the rest incrementally. */
+    for (int dp = -g->create_radius; dp <= g->create_radius; ++dp) {
+        for (int dq = -g->create_radius; dq <= g->create_radius; ++dq) {
+            add_chunk_candidate(candidates, &candidate_count,
+                center_p + dp, center_q + dq,
+                sqrtf((float)(dp * dp + dq * dq)));
+        }
+    }
+#endif
+
     /*
      * Add chunks ahead of the crosshair. The small forward bias makes
      * forward chunks load before equally distant side/rear chunks.
@@ -1649,6 +1732,10 @@ void force_chunks(Player *player) {
                 const int p = ahead_p + side_p * side;
                 const int q = ahead_q + side_q * side;
 
+#ifdef __EMSCRIPTEN__
+                if (ABS(p - center_p) > g->create_radius ||
+                    ABS(q - center_q) > g->create_radius) continue;
+#endif
                 /*
                  * Slightly penalize side chunks; centerline chunks ahead
                  * should be requested first.
@@ -1664,8 +1751,47 @@ void force_chunks(Player *player) {
     }
 
     sort_chunk_candidates(candidates, candidate_count);
+#ifdef __EMSCRIPTEN__
+    }
+#endif
 
     int created = 0;
+
+#ifdef __EMSCRIPTEN__
+    /* Finish visible edits before spending a frame on resynchronization. */
+    for (int i = 0; i < candidate_count && created < MAX_NEW_CHUNKS_FRAME; ++i) {
+        Chunk *chunk = find_chunk(candidates[i].p, candidates[i].q);
+        if (chunk && chunk->dirty && chunk_is_ready(chunk)) {
+            gen_chunk_buffer(chunk);
+            ++created;
+        }
+    }
+
+    for (int i = 0; i < candidate_count && created < MAX_NEW_CHUNKS_FRAME; ++i) {
+        Chunk *chunk = find_chunk(candidates[i].p, candidates[i].q);
+        if (chunk && chunk->needs_resync && online_ready) {
+            chunk->needs_resync = 0;
+            map_free(&chunk->map);
+            map_free(&chunk->lights);
+            sign_list_free(&chunk->signs);
+            sign_list_alloc(&chunk->signs, 16);
+            map_alloc(&chunk->map, chunk->p * CHUNK_SIZE - 1, 0,
+                chunk->q * CHUNK_SIZE - 1, 0x7fff);
+            map_alloc(&chunk->lights, chunk->p * CHUNK_SIZE - 1, 0,
+                chunk->q * CHUNK_SIZE - 1, 0xf);
+            WorkerItem item = {0};
+            item.p = chunk->p; item.q = chunk->q;
+            item.block_maps[1][1] = &chunk->map;
+            item.light_maps[1][1] = &chunk->lights;
+            load_chunk(&item);
+            dirty_chunk(chunk);
+            chunk->sync_pending = 1;
+            client_chunk(chunk->p, chunk->q, -1);
+            ++created;
+        }
+    }
+
+#endif
 
     for (int i = 0; i < candidate_count; ++i) {
         const int p = candidates[i].p;
@@ -1678,8 +1804,9 @@ void force_chunks(Player *player) {
              * do this when a chunk becomes visible or dirty rather than
              * rebuilding every frame.
              */
-            if (chunk->dirty) {
+            if (chunk->dirty && chunk_is_ready(chunk) && created < MAX_NEW_CHUNKS_FRAME) {
                 gen_chunk_buffer(chunk);
+                ++created;
             }
             continue;
         }
@@ -1696,7 +1823,7 @@ void force_chunks(Player *player) {
          * If create_chunk() already builds the buffer, remove this call.
          * For asynchronous generation, build only after data is ready.
          */
-        gen_chunk_buffer(chunk);
+        if (chunk_is_ready(chunk)) gen_chunk_buffer(chunk);
         ++created;
     }
 }
@@ -1749,7 +1876,7 @@ void ensure_chunks_worker(Player *player, Worker *worker) {
              * boost so they can be refreshed promptly.
              */
             const int dirty_with_buffer =
-                chunk != NULL && chunk->buffer != NULL && chunk->dirty;
+                chunk != NULL && chunk->buffer != 0 && chunk->dirty;
 
             const int score =
                 (invisible << 24) |
@@ -1786,13 +1913,13 @@ void ensure_chunks_worker(Player *player, Worker *worker) {
              * Online: ask the server for this chunk. Do not run load_chunk()
              * or compute an empty chunk before the response arrives.
              */
-            request_chunk(best_a, best_b);
-            return;
+            load = true;
+        } else {
+            load = true;
         }
-#endif
-
-        /* Offline Emscripten/native: generate the chunk locally. */
+#else
         load = true;
+#endif
     }
 
     WorkerItem *item = &worker->item;
@@ -1851,12 +1978,15 @@ void ensure_chunks(Player *player) {
         return;
     }
 
+#ifndef __EMSCRIPTEN__
     /* Finish completed jobs before selecting or scheduling more chunks. */
     check_workers();
+#endif
 
     /* Update the desired nearby and crosshair-forward chunk set. */
     force_chunks(player);
 
+#ifndef __EMSCRIPTEN__
     /* Dispatch available work to idle workers. */
     for (int i = 0; i < WORKERS; ++i) {
         Worker *worker = g->workers + i;
@@ -1867,6 +1997,7 @@ void ensure_chunks(Player *player) {
         }
         mtx_unlock(&worker->mtx);
     }
+#endif
 }
 
 
@@ -1942,6 +2073,9 @@ void _set_sign(
 }
 
 void set_sign(int x, int y, int z, int face, int rotation, const char *text) {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
     int p = chunked(x);
     int q = chunked(z);
     _set_sign(p, q, x, y, z, face, rotation, text, true);
@@ -1949,6 +2083,9 @@ void set_sign(int x, int y, int z, int face, int rotation, const char *text) {
 }
 
 void toggle_light(int x, int y, int z) {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
     int p = chunked(x);
     int q = chunked(z);
     Chunk *chunk = find_chunk(p, q);
@@ -1997,8 +2134,15 @@ void _set_block(int p, int q, int x, int y, int z, int w, bool dirty) {
 }
 
 void set_block(int x, int y, int z, int w) {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
     int p = chunked(x);
     int q = chunked(z);
+#ifdef __EMSCRIPTEN__
+    Chunk *target = find_chunk(p, q);
+    if (g->mode == MODE_ONLINE && (!target || !chunk_is_ready(target))) return;
+#endif
     _set_block(p, q, x, y, z, w, true);
     for (int dx = -1; dx <= 1; dx++) {
         for (int dz = -1; dz <= 1; dz++) {
@@ -2074,6 +2218,9 @@ int render_chunks(Attrib *attrib, Player *player) {
     glUniform1f(attrib->timer, time_of_day());
     for (int i = 0; i < g->chunk_count; i++) {
         Chunk *chunk = g->chunks + i;
+#ifdef __EMSCRIPTEN__
+        if (!chunk_is_ready(chunk) || chunk->dirty) continue;
+#endif
         if (chunk_distance(chunk, p, q) > g->render_radius) {
             continue;
         }
@@ -2104,6 +2251,9 @@ void render_signs(Attrib *attrib, Player *player) {
     glUniform1i(attrib->extra1, 1);
     for (int i = 0; i < g->chunk_count; i++) {
         Chunk *chunk = g->chunks + i;
+#ifdef __EMSCRIPTEN__
+        if (!chunk_is_ready(chunk) || chunk->dirty) continue;
+#endif
         if (chunk_distance(chunk, p, q) > g->sign_radius) {
             continue;
         }
@@ -2156,10 +2306,14 @@ void render_players(Attrib *attrib, Player *player) {
     glUniform1f(attrib->timer, time_of_day());
     for (int i = 0; i < g->player_count; i++) {
         Player *other = g->players + i;
-        if (other != player) {
+        float dx = other->state.x - s->x;
+        float dz = other->state.z - s->z;
+        float distance = g->render_radius * CHUNK_SIZE;
+        if (other != player && dx * dx + dz * dz <= distance * distance) {
             draw_player(attrib, other);
         }
     }
+    animals_render(attrib, matrix, s->x, s->y, s->z, g->render_radius);
 }
 
 void render_sky(Attrib *attrib, Player *player, GLuint buffer) {
@@ -2210,13 +2364,16 @@ void render_cover(Attrib *attrib, Player *player) {
 
     GLuint buffer = gen_cube_buffer_faces(target_x, target_y, target_z, 0.501, w, w, w, w, w, w);
     glEnable(GL_BLEND);
-    glBlendFuncSeparate(GL_DST_COLOR, GL_SRC_COLOR, GL_DST_ALPHA, GL_SRC_ALPHA);
+    glBlendFuncSeparate(GL_DST_COLOR, GL_ZERO, GL_ZERO, GL_ONE);
     draw_cube(attrib, buffer);
     glDisable(GL_BLEND);
     del_buffer(buffer);
 }
 
-void render_crosshairs(Attrib *attrib) {
+static GLuint crosshair_buffer;
+static int crosshair_width, crosshair_height, crosshair_scale;
+
+static void render_crosshairs(Attrib *attrib) {
     float matrix[16];
     set_matrix_2d(matrix, g->width, g->height);
     glUseProgram(attrib->program);
@@ -2225,53 +2382,67 @@ void render_crosshairs(Attrib *attrib) {
     glEnable(GL_COLOR_LOGIC_OP);
 #endif
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
-    GLuint crosshair_buffer = gen_crosshair_buffer();
+    if (!crosshair_buffer || crosshair_width != g->width ||
+        crosshair_height != g->height || crosshair_scale != g->scale) {
+        if (crosshair_buffer) del_buffer(crosshair_buffer);
+        crosshair_buffer = gen_crosshair_buffer();
+        crosshair_width = g->width;
+        crosshair_height = g->height;
+        crosshair_scale = g->scale;
+    }
     draw_lines(attrib, crosshair_buffer, 2, 4);
-    del_buffer(crosshair_buffer);
 #ifndef __EMSCRIPTEN__
     glDisable(GL_COLOR_LOGIC_OP);
 #endif
 }
 
+static GLuint item_buffers[256];
+
+static int visible_items(void) {
+    float spacing = 42.0f * g->scale;
+    int visible = 1 + (int)((g->height - 270.0f * g->scale) / spacing);
+    if (visible < 1) visible = 1;
+    if (visible > NUM_INVENTORY_VISIBLE) visible = NUM_INVENTORY_VISIBLE;
+    if (visible > hotbar_item_count) visible = hotbar_item_count;
+    return visible;
+}
+
 void render_item(Attrib *attrib) {
-    float matrix[16];
+    if (hotbar_item_count <= 0) return;
     glUseProgram(attrib->program);
-    set_matrix_item(matrix, g->width, g->height, g->scale + 1);
     glUniform3f(attrib->camera, 0, 0, 5);
     glUniform1i(attrib->sampler, 0);
+    glUniform1i(attrib->extra1, 2);
+    glUniform1f(attrib->extra2, 1);
+    glUniform1f(attrib->extra3, 100000);
+    glUniform1i(attrib->extra4, 0);
     glUniform1f(attrib->timer, time_of_day());
-    for(int i = 0; i < NUM_INVENTORY_VISIBLE; ++i) {
-        //if(g->item_index + i >= item_count) {
-        if(g->item_index + i >= 7) {
-            break;
-        }
 
+    float spacing = 42.0f * g->scale;
+    int visible = visible_items();
+    for (int i = 0; i < visible; i++) {
+        int w = hotbar_items[(g->item_index + i) % hotbar_item_count];
+        if (w <= 0 || w >= 256) continue;
+        if (!item_buffers[w]) {
+            item_buffers[w] = is_plant(w)
+                ? gen_plant_buffer(0, 0, 0, 0.5, w)
+                : gen_cube_buffer(0, 0, 0, 0.5, w);
+        }
+        float matrix[16];
+        set_matrix_item(matrix, g->width, g->height, g->scale);
+        if (i == 0) {
+            for (int j = 0; j < 12; j++) matrix[j] *= 1.2f;
+        }
+        matrix[12] = 1.0f - 80.0f * g->scale / g->width;
+        matrix[13] = 1.0f - 2.0f * (132.0f * g->scale + i * spacing) / g->height;
         glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
-
-//        int w = items[g->item_index + i];
-//        if (is_plant(w)) {
-//            GLuint buffer = gen_plant_buffer(0, 0, 0, 0.5, w);
-//            draw_plant(attrib, buffer);
-//            del_buffer(buffer);
-//        }
-//        else {
-//            GLuint buffer = gen_cube_buffer(0, 0, 0, 0.5, w);
-//            draw_cube(attrib, buffer);
-//            del_buffer(buffer);
-//        }
-
-        if(!i) {
-            set_matrix_item(matrix, g->width, g->height, g->scale);
-            matrix[12] += 0.08f;
-            matrix[13] += 0.1f;
-        }
-
-        matrix[13] += 0.25f;
+        if (is_plant(w)) draw_plant(attrib, item_buffers[w]);
+        else draw_cube(attrib, item_buffers[w]);
     }
 }
 
-void render_text(
-    Attrib *attrib, int justify, float x, float y, float n, char *text)
+static void render_text_opacity(
+    Attrib *attrib, int justify, float x, float y, float n, char *text, float opacity)
 {
     float matrix[16];
     set_matrix_2d(matrix, g->width, g->height);
@@ -2279,6 +2450,7 @@ void render_text(
     glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
     glUniform1i(attrib->sampler, 1);
     glUniform1i(attrib->extra1, 0);
+    glUniform1f(attrib->extra2, opacity);
     int length = strlen(text);
     x -= n * justify * (length - 1) / 2;
     GLuint buffer = gen_text_buffer(x, y, n, text);
@@ -2286,29 +2458,49 @@ void render_text(
     del_buffer(buffer);
 }
 
-void render_item_count(Attrib *attrib, float ts) {
-    const int buf_len = 4;
+static void render_text(
+    Attrib *attrib, int justify, float x, float y, float n, char *text)
+{
+    render_text_opacity(attrib, justify, x, y, n, text, 1.0f);
+}
 
-    float pos = 15.0f;
-    for(int i = 0; i < NUM_INVENTORY_VISIBLE; ++i) {
-        //if(g->item_index + i >= item_count) {
-        if(g->item_index + i >= 7) {
-            break;
+typedef struct {
+    GLuint buffer;
+    uint32_t count;
+    int item, width, height, scale, length;
+} ItemCountBuffer;
+static ItemCountBuffer item_count_buffers[NUM_INVENTORY_VISIBLE];
+
+static void render_item_counts(Attrib *attrib) {
+    if (hotbar_item_count <= 0) return;
+    float matrix[16];
+    set_matrix_2d(matrix, g->width, g->height);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glUniform1i(attrib->sampler, 1);
+    glUniform1i(attrib->extra1, 0);
+    glUniform1f(attrib->extra2, 1.0f);
+    for (int i = 0; i < visible_items(); i++) {
+        int w = hotbar_items[(g->item_index + i) % hotbar_item_count];
+        uint32_t count = Inventory_getCount(&g->inventory, w);
+        ItemCountBuffer *cached = &item_count_buffers[i];
+        if (!cached->buffer || cached->count != count || cached->item != w ||
+            cached->width != g->width || cached->height != g->height || cached->scale != g->scale) {
+            if (cached->buffer) del_buffer(cached->buffer);
+            char text[24];
+            snprintf(text, sizeof(text), "%u", (unsigned)count);
+            cached->length = strlen(text);
+            float size = 10.0f * g->scale;
+            float x = g->width - 72.0f * g->scale - size * (cached->length - 1);
+            float y = g->height - (132.0f + i * 42.0f) * g->scale;
+            cached->buffer = gen_text_buffer(x, y, size, text);
+            cached->count = count;
+            cached->item = w;
+            cached->width = g->width;
+            cached->height = g->height;
+            cached->scale = g->scale;
         }
-
-        char buf[buf_len];
-        //snprintf(buf, buf_len, "%d\n", Inventory_getCount(&g->inventory, items[g->item_index + i]));
-        //snprintf(buf, buf_len, "%d\n", g->inventory.count[items[g->item_index]]);
-
-        //render_text(attrib, ALIGN_CENTER, g->width - 20.0f, pos, ts, buf, g->width, g->height);
-        //printf("%d\n", g->width);
-
-        float ratio_to_hardcoded = (g->height / 768.0f);
-        if(i) {
-            pos += 96.0f * ratio_to_hardcoded;
-        } else {
-            pos += 140.0f * ratio_to_hardcoded;
-        }
+        draw_text(attrib, cached->buffer, cached->length);
     }
 }
 
@@ -2316,6 +2508,7 @@ void add_message(const char *text) {
     printf("%s\n", text);
     snprintf(
         g->messages[g->message_index], MAX_TEXT_LENGTH, "%s", text);
+    g->message_times[g->message_index] = glfwGetTime();
     g->message_index = (g->message_index + 1) % MAX_MESSAGES;
 
     g->message_view_index = g->message_index - MAX_VISIBLE_MESSAGES;
@@ -2324,6 +2517,24 @@ void add_message(const char *text) {
 
 static char username[128] = {0};
 static char access_token[128] = {0};
+#ifdef __EMSCRIPTEN__
+static char reward_address[128] = {0};
+
+EMSCRIPTEN_KEEPALIVE void netcraft_set_reward_address(const char *address) {
+    size_t length = strlen(address);
+    if (length >= sizeof(reward_address) || strspn(address, "abcdefghijklmnopqrstuvwxyz0123456789:") != length) {
+        fprintf(stderr, "Invalid reward address update\n");
+        return;
+    }
+    if (strcmp(reward_address, address) == 0) return;
+    snprintf(reward_address, sizeof(reward_address), "%s", address);
+    if (online_ready) {
+        char message[160];
+        snprintf(message, sizeof(message), "W,%s\n", reward_address);
+        client_send(message);
+    }
+}
+#endif
 static bool have_access_token = false;
 
 void set_access_token(char *username_in, char *access_token_in) {
@@ -2567,7 +2778,7 @@ void parse_command(const char *buffer, bool forward) {
     char filename[MAX_PATH_LENGTH];
     int radius, count, xc, yc, zc;
     float elapsed;
-    if (sscanf(buffer, "/identity %128s %128s", username, token) == 2) {
+    if (sscanf(buffer, "/identity %127s %127s", username, token) == 2) {
         db_auth_set(username, token);
         add_message("Successfully imported identity token!");
         login();
@@ -2576,7 +2787,7 @@ void parse_command(const char *buffer, bool forward) {
         db_auth_select_none();
         login();
     }
-    else if (sscanf(buffer, "/login %128s", username) == 1) {
+    else if (sscanf(buffer, "/login %127s", username) == 1) {
         if (db_auth_select(username)) {
             login();
         }
@@ -2665,7 +2876,12 @@ void parse_command(const char *buffer, bool forward) {
         cylinder(&g->block0, &g->block1, radius, 0);
     }
     else if (strcmp(buffer, "/noclip") == 0) {
-        g->noclip = !g->noclip;
+        if (g->mode == MODE_ONLINE) {
+            g->noclip = false;
+            add_message("Noclip is unavailable online.");
+        } else {
+            g->noclip = !g->noclip;
+        }
     }
     else if (strcmp(buffer, "/survival") == 0) {
         set_survival_gamemode();
@@ -2725,10 +2941,20 @@ int get_targeted_block(int *x, int *y, int *z, int *face) {
 }
 
 void on_mine() {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
     int hx, hy, hz, face;
     int hw = get_targeted_block(&hx, &hy, &hz, &face);
-    if (hy < 256 && is_destructable(hw)) {
+    if (hw && hy > 0 && hy < 256 && is_destructable(hw)) {
         set_block(hx, hy, hz, 0);
+        if (g->mode != MODE_ONLINE) {
+            Inventory_collect(&g->inventory, hw);
+            if (hw == Item_MINA_ORE && g->mina_mined < UINT32_MAX) g->mina_mined++;
+        }
+#ifdef __EMSCRIPTEN__
+        if (g->mode != MODE_ONLINE) EM_ASM(if (Module.playBlockSound) Module.playBlockSound(0););
+#endif
 
         //struct ItemStack stack = { .type = hw, .count = 1 };
         //inventory_add(hotbar, HOTBAR_INVENTORY_SIZE, &stack);
@@ -2741,30 +2967,39 @@ void on_mine() {
 }
 
 void on_build() {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(true, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (hy < 256) {
+    if (hw && hy > 0 && hy < 256) {
         if (!is_obstacle(hw)) {
             hw = hit_test(false, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
+            if (!hw) return;
         }
 
-        if (!player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
-            int hw;
-            if (is_creative) {
-                hw = hotbar_items[g->item_index];
-            } else {
-                //hw = hotbar[g->item_index % HOTBAR_INVENTORY_SIZE].type;
-                //struct ItemStack stack = { .type = hw, .count = 1 };
-                //int missing = inventory_subtract(hotbar, HOTBAR_INVENTORY_SIZE, &stack);
-		int missing = 0;
-                if (missing) {
-                    add_message("Out of blocks to build, go mine some");
-                    return;
-                }
-            }
+        if (hy > 0 && hy < 256 && !player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
+            int hw = hotbar_items[g->item_index];
 
+#ifdef __EMSCRIPTEN__
+            Chunk *target = find_chunk(chunked(hx), chunked(hz));
+            if (g->mode == MODE_ONLINE && (!target || !chunk_is_ready(target))) return;
+#endif
+            if (g->mode == MODE_ONLINE && pending_placement.active) return;
+            if (!Inventory_use(&g->inventory, hw)) {
+                add_message("Mine this block type before building with it.");
+                return;
+            }
+            if (g->mode == MODE_ONLINE) {
+                pending_placement.active = true;
+                pending_placement.x = hx; pending_placement.y = hy;
+                pending_placement.z = hz; pending_placement.item = hw;
+            }
             set_block(hx, hy, hz, hw);
+#ifdef __EMSCRIPTEN__
+            if (g->mode != MODE_ONLINE) EM_ASM(if (Module.playBlockSound) Module.playBlockSound(1););
+#endif
             record_block(hx, hy, hz, hw);
         }
     }
@@ -2832,7 +3067,11 @@ void on_key(GLFWwindow *window, int key, int scancode, int action, int mods) {
             if (!g->messages[g->message_view_index]) g->message_view_index = save;
         }
     }
-    if (key == CRAFT_KEY_FULLSCREEN) { // allow GLFW_REPEAT for F11
+    if (key == CRAFT_KEY_FULLSCREEN && action == GLFW_PRESS && !g->typing
+#ifdef __EMSCRIPTEN__
+        && !EM_ASM_INT(return window.parent !== window;)
+#endif
+    ) {
         fullscreen_toggle();
     }
 
@@ -3112,9 +3351,15 @@ void on_file_drop(GLFWwindow *window, int count, const char **paths) {
 }
 
 
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE void touch_next_item(void) {
+    on_key(g->window, CRAFT_KEY_ITEM_NEXT, 0, GLFW_PRESS, 0);
+}
+#endif
+
 void create_window() {
     g->window = glfwCreateWindow(
-        WINDOW_WIDTH, WINDOW_HEIGHT, "Craft", NULL, NULL);
+        WINDOW_WIDTH, WINDOW_HEIGHT, "CashCraft", NULL, NULL);
 
     init_fullscreen_monitor_dimensions(g->window);
 
@@ -3183,6 +3428,12 @@ void handle_mouse_input() {
 
 void handle_movement(double dt) {
     static float dy = 0;
+#ifdef __EMSCRIPTEN__
+    static float step_distance = 0;
+    static double last_grounded = 0;
+    float old_x = g->players->state.x, old_z = g->players->state.z;
+    bool grounded = false;
+#endif
     State *s = &g->players->state;
     double sz = 0;
     double sx = 0;
@@ -3195,6 +3446,8 @@ void handle_movement(double dt) {
         if (glfwGetKey(g->window, CRAFT_KEY_BACKWARD)) sz++;
         if (glfwGetKey(g->window, CRAFT_KEY_LEFT)) sx--;
         if (glfwGetKey(g->window, CRAFT_KEY_RIGHT)) sx++;
+        sx += touch_move_x;
+        sz += touch_move_z;
         if (glfwGetKey(g->window, GLFW_KEY_LEFT)) s->rx -= m;
         if (glfwGetKey(g->window, GLFW_KEY_RIGHT)) s->rx += m;
         if (glfwGetKey(g->window, GLFW_KEY_UP)) s->ry += m;
@@ -3202,6 +3455,7 @@ void handle_movement(double dt) {
 
         joystick_apply_move(&sx, &sz);
     }
+
     float vx, vy = 0, vz;
     get_motion_vector(g->flying, sz, sx, s->rx, s->ry, &vx, &vy, &vz);
 
@@ -3246,6 +3500,7 @@ void handle_movement(double dt) {
     vy = vy * ut * speed;
     vz = vz * ut * speed;
     for (int i = 0; i < step; i++) {
+        float old_step_x = s->x, old_step_y = s->y, old_step_z = s->z;
         if (g->flying) {
             dy = 0;
         }
@@ -3256,14 +3511,55 @@ void handle_movement(double dt) {
         s->x += vx;
         s->y += vy + dy * ut;
         s->z += vz;
-        if (g->noclip) continue;
+#ifdef __EMSCRIPTEN__
+        if (g->mode == MODE_ONLINE) {
+            bool ready = true;
+            for (int dx = -1; dx <= 1 && ready; dx += 2) {
+                for (int dz = -1; dz <= 1; dz += 2) {
+                    Chunk *chunk = find_chunk(chunked(s->x + dx * 0.25f),
+                        chunked(s->z + dz * 0.25f));
+                    if (!chunk || !chunk_is_ready(chunk)) {
+                        ready = false;
+                        break;
+                    }
+                }
+            }
+            if (!ready) {
+                s->x = old_step_x;
+                s->y = old_step_y;
+                s->z = old_step_z;
+                dy = 0;
+                continue;
+            }
+        }
+#else
+        (void)old_step_x;
+        (void)old_step_y;
+        (void)old_step_z;
+#endif
+        if (g->noclip && g->mode != MODE_ONLINE) continue;
         if (collide(2, &s->x, &s->y, &s->z)) {
+#ifdef __EMSCRIPTEN__
+            if (dy < 0) grounded = true;
+#endif
             dy = 0;
         }
     }
     if (s->y < 0) {
         s->y = highest_block(s->x, s->z) + 2;
     }
+#ifdef __EMSCRIPTEN__
+    if (grounded) last_grounded = glfwGetTime();
+    if (!g->flying && (grounded || (dy < 0 && glfwGetTime() - last_grounded < 0.25))) {
+        step_distance += hypotf(s->x - old_x, s->z - old_z);
+        if (step_distance >= 2.0f) {
+            step_distance = 0;
+            EM_ASM(if (Module.playGameSound) Module.playGameSound('step'););
+        }
+    } else {
+        step_distance = 0;
+    }
+#endif
 }
 
 void handle_compressed_multiblock_update(char *buffer, int len,
@@ -3327,19 +3623,74 @@ void parse_buffer(char *buffer, int len) {
     char *line = tokenize(buffer, "\n", &key);
     while (line) {
         int pid;
+        unsigned int animal_id;
+        float ax, ay, az;
+        int heading;
+        if (line[0] == 'M' && sscanf(line, "M,%u,%f,%f,%f,%d", &animal_id, &ax, &ay, &az, &heading) == 5) {
+            animals_update(animal_id, ax, ay, az, heading);
+        }
+        if (line[0] == 'M' && sscanf(line, "MD,%u", &animal_id) == 1) {
+            animals_remove(animal_id);
+        }
         float ux, uy, uz, urx, ury;
-        if (sscanf(line, "U,%d,%f,%f,%f,%f,%f",
+        if (line[0] == 'U' && sscanf(line, "U,%d,%f,%f,%f,%f,%f",
             &pid, &ux, &uy, &uz, &urx, &ury) == 6)
         {
             me->id = pid;
+#ifdef __EMSCRIPTEN__
+            if (!preserve_position) {
+#endif
             s->x = ux; s->y = uy; s->z = uz; s->rx = urx; s->ry = ury;
             force_chunks(me);
             if (uy == 0) {
                 s->y = highest_block(s->x, s->z) + 2;
             }
+#ifdef __EMSCRIPTEN__
+            }
+#endif
         }
         int bp, bq, bx, by, bz, bw;
-        if (sscanf(line, "B,%d,%d,%d,%d,%d,%d",
+        int mined_item;
+        if (line[0] == 'I' && sscanf(line, "I,%d", &mined_item) == 1) {
+            Inventory_collect(&g->inventory, mined_item);
+            if (mined_item == Item_MINA_ORE && g->mina_mined < UINT32_MAX) g->mina_mined++;
+#ifdef __EMSCRIPTEN__
+            EM_ASM(if (Module.playBlockSound) Module.playBlockSound(0););
+#endif
+        }
+        char mined_reward_address[121];
+        if (line[0] == 'Q' && sscanf(line, "Q,%120[^\n]", mined_reward_address) == 1) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({
+                    type: 'netcraft-mina-reward',
+                    address: UTF8ToString($0)
+                }, '*');
+            }, mined_reward_address);
+#endif
+        }
+        if (line[0] == 'F' && sscanf(line, "F,%120[^\n]", mined_reward_address) == 1) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({
+                    type: 'netcraft-mina-reward-failed',
+                    address: UTF8ToString($0)
+                }, '*');
+            }, mined_reward_address);
+#endif
+        }
+        int jx, jy, jz, item, accepted;
+        if (line[0] == 'J' && sscanf(line, "J,%d,%d,%d,%d,%d", &jx, &jy, &jz, &item, &accepted) == 5 &&
+            pending_placement.active && pending_placement.x == jx &&
+            pending_placement.y == jy && pending_placement.z == jz &&
+            pending_placement.item == item && (accepted == 0 || accepted == 1)) {
+            if (!accepted) Inventory_collect(&g->inventory, item);
+            pending_placement.active = false;
+#ifdef __EMSCRIPTEN__
+            if (accepted) EM_ASM(if (Module.playBlockSound) Module.playBlockSound(1););
+#endif
+        }
+        if (line[0] == 'B' && sscanf(line, "B,%d,%d,%d,%d,%d,%d",
             &bp, &bq, &bx, &by, &bz, &bw) == 6)
         {
             _set_block(bp, bq, bx, by, bz, bw, false);
@@ -3347,19 +3698,19 @@ void parse_buffer(char *buffer, int len) {
                 s->y = highest_block(s->x, s->z) + 2;
             }
         }
-        if (sscanf(line, "b,%d,%d,%d,%d,%d,%d",
+        if (line[0] == 'b' && sscanf(line, "b,%d,%d,%d,%d,%d,%d",
             &sx, &sy, &sz, &ex, &ey, &ez) == 6) {
             printf("multi-block update pending: (%d,%d,%d)-(%d,%d,%d)\n",
                     sx, sy, sz, ex, ey, ez);
             multiblock_pending = true;
         }
-        if (sscanf(line, "L,%d,%d,%d,%d,%d,%d",
+        if (line[0] == 'L' && sscanf(line, "L,%d,%d,%d,%d,%d,%d",
             &bp, &bq, &bx, &by, &bz, &bw) == 6)
         {
             set_light(bp, bq, bx, by, bz, bw);
         }
         float px, py, pz, prx, pry;
-        if (sscanf(line, "P,%d,%f,%f,%f,%f,%f",
+        if (line[0] == 'P' && sscanf(line, "P,%d,%f,%f,%f,%f,%f",
             &pid, &px, &py, &pz, &prx, &pry) == 6)
         {
             Player *player = find_player(pid);
@@ -3369,34 +3720,45 @@ void parse_buffer(char *buffer, int len) {
                 player->id = pid;
                 player->buffer = 0;
                 snprintf(player->name, MAX_NAME_LENGTH, "player%d", pid);
-                update_player(player, px, py, pz, prx, pry, true); // twice
+                update_player(player, px, py, pz, prx, pry, false);
+                update_player(player, px, py, pz, prx, pry, true);
+                player->state1 = player->state2;
             }
-            if (player) {
+            else if (player) {
                 update_player(player, px, py, pz, prx, pry, true);
             }
         }
-        if (sscanf(line, "D,%d", &pid) == 1) {
+        if (line[0] == 'D' && sscanf(line, "D,%d", &pid) == 1) {
             delete_player(pid);
         }
         int kp, kq, kk;
-        if (sscanf(line, "K,%d,%d,%d", &kp, &kq, &kk) == 3) {
+        if (line[0] == 'K' && sscanf(line, "K,%d,%d,%d", &kp, &kq, &kk) == 3) {
             db_set_key(kp, kq, kk);
         }
-        if (sscanf(line, "R,%d,%d", &kp, &kq) == 2) {
+        if (line[0] == 'R' && sscanf(line, "R,%d,%d", &kp, &kq) == 2) {
             Chunk *chunk = find_chunk(kp, kq);
             if (chunk) {
                 dirty_chunk(chunk);
             }
         }
+#ifdef __EMSCRIPTEN__
+        if (line[0] == 'C' && sscanf(line, "C,%d,%d", &kp, &kq) == 2) {
+            Chunk *chunk = find_chunk(kp, kq);
+            if (chunk && chunk->sync_pending) {
+                chunk->sync_pending = 0;
+                dirty_chunk(chunk);
+            }
+        }
+#endif
         double elapsed;
         int day_length;
-        if (sscanf(line, "E,%lf,%d", &elapsed, &day_length) == 2) {
+        if (line[0] == 'E' && sscanf(line, "E,%lf,%d", &elapsed, &day_length) == 2) {
             glfwSetTime(fmod(elapsed, day_length));
             g->day_length = day_length;
             g->time_changed = true;
         }
         int gamemode;
-        if (sscanf(line, "m,%d", &gamemode) == 1) {
+        if (line[0] == 'm' && sscanf(line, "m,%d", &gamemode) == 1) {
             switch (gamemode) {
                 case 0: set_survival_gamemode(); break;
                 case 1: set_creative_gamemode(); break;
@@ -3408,13 +3770,13 @@ void parse_buffer(char *buffer, int len) {
             add_message(text);
         }
         char name[MAX_NAME_LENGTH];
-        if (sscanf(line, "N,%d,%" MAX_NAME_LENGTH_FORMAT "s", &pid, name) == 2) {
+        if (line[0] == 'N' && sscanf(line, "N,%d,%" MAX_NAME_LENGTH_FORMAT "s", &pid, name) == 2) {
             Player *player = find_player(pid);
             if (player) {
                 strncpy(player->name, name, MAX_NAME_LENGTH);
             }
         }
-        if (sscanf(line, "u,%" MAX_NAME_LENGTH_FORMAT "s", name) == 1) {
+        if (line[0] == 'u' && sscanf(line, "u,%" MAX_NAME_LENGTH_FORMAT "s", name) == 1) {
             printf("We are %s\n", name);
             Player *me = g->players;
             if (me) {
@@ -3423,7 +3785,7 @@ void parse_buffer(char *buffer, int len) {
         }
         int face;
         char text[MAX_SIGN_LENGTH] = {0};
-        if (sscanf(line, "S,%d,%d,%d,%d,%d,%d,%" MAX_SIGN_LENGTH_FORMAT "[^\n]",
+        if (line[0] == 'S' && sscanf(line, "S,%d,%d,%d,%d,%d,%d,%" MAX_SIGN_LENGTH_FORMAT "[^\n]",
             &bp, &bq, &bx, &by, &bz, &face, text) >= 6)
         {
             int rotation = 0;
@@ -3437,7 +3799,7 @@ void parse_buffer(char *buffer, int len) {
         }
 #ifdef __EMSCRIPTEN__
         char url[256] = {0};
-        if (sscanf(line, "t,%256[^\n]", url) == 1) {
+        if (line[0] == 't' && sscanf(line, "t,%255[^\n]", url) == 1) {
             printf("server provided texture url: %s\n", url);
             if (strcmp(url, "-") == 0 || strlen(url) == 0) {
 #pragma clang diagnostic push
@@ -3451,7 +3813,7 @@ void parse_buffer(char *buffer, int len) {
 
                     function writeString(p, s, n) {
                         if (s.length + 1 > n) {
-                            console.err("url is too long, ignoring: " + s);
+                            console.error("url is too long, ignoring: " + s);
                             return;
                         }
 
@@ -3486,11 +3848,15 @@ void reset_model() {
     g->observe2 = 0;
     g->flying = false;
     g->item_index = 0;
+    Inventory_reset(&g->inventory);
+    pending_placement.active = false;
     g->ortho_zoom = 32;
     memset(g->typing_buffer, 0, sizeof(char) * MAX_TEXT_LENGTH);
     g->typing = false;
     g->just_clicked = false;
     memset(g->messages, 0, sizeof(char) * MAX_MESSAGES * MAX_TEXT_LENGTH);
+    memset(g->message_times, 0, sizeof(g->message_times));
+    g->mina_mined = 0;
     g->message_index = 0;
     g->message_view_index = 0;
     g->day_length = DAY_LENGTH;
@@ -3526,16 +3892,24 @@ int main(int argc, char **argv) {
 
     // WINDOW INITIALIZATION //
     if (!glfwInit()) {
+#ifdef __EMSCRIPTEN__
+        EM_ASM(Module.reportGameError('Could not initialize the game window. Check WebGL support and reload.'););
+#endif
         return -1;
     }
     create_window();
     if (!g->window) {
+#ifdef __EMSCRIPTEN__
+        EM_ASM(Module.reportGameError('Could not create the game window. Check WebGL support and reload.'););
+#endif
         glfwTerminate();
         return -1;
     }
 
     glfwMakeContextCurrent(g->window);
+#ifndef __EMSCRIPTEN__
     glfwSetInputMode(g->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+#endif
     glfwSetDropCallback(g->window, on_file_drop);
     glfwSetKeyCallback(g->window, on_key);
     glfwSetCharCallback(g->window, on_char);
@@ -3559,6 +3933,9 @@ int main(int argc, char **argv) {
 #endif
 
     if (glewInit() != GLEW_OK) {
+#ifdef __EMSCRIPTEN__
+        EM_ASM(Module.reportGameError('Could not initialize graphics. Check WebGL support and reload.'););
+#endif
         return -1;
     }
 
@@ -3607,6 +3984,7 @@ int main(int argc, char **argv) {
     text_attrib.matrix = glGetUniformLocation(program, "matrix");
     text_attrib.sampler = glGetUniformLocation(program, "sampler");
     text_attrib.extra1 = glGetUniformLocation(program, "is_sign");
+    text_attrib.extra2 = glGetUniformLocation(program, "opacity");
 
     program = load_program(
         "shaders/sky_vertex.glsl", "shaders/sky_fragment.glsl");
@@ -3622,9 +4000,14 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         g->mode = MODE_ONLINE;
         strncpy(g->server_addr, argv[1], MAX_ADDR_LENGTH);
-        g->server_port = (argc == 3 && strcmp(argv[2], "-") != 0 && strlen(argv[2]) != 0) ? atoi(argv[2]) : DEFAULT_PORT;
+        g->server_port = (argc >= 3 && strcmp(argv[2], "-") != 0 && strlen(argv[2]) != 0) ? atoi(argv[2]) : DEFAULT_PORT;
         set_db_path();
 
+#ifdef __EMSCRIPTEN__
+        if (argc == 4) {
+            snprintf(reward_address, sizeof(reward_address), "%s", argv[3]);
+        }
+#endif
         if (argc > 4) {
             set_access_token(argv[3], argv[4]);
         }
@@ -3633,12 +4016,26 @@ int main(int argc, char **argv) {
         g->mode = MODE_OFFLINE;
         snprintf(g->db_path, MAX_PATH_LENGTH, "%s", DB_PATH);
     }
+#ifdef __EMSCRIPTEN__
+    EM_ASM(Module.applyPendingRewardAddress(););
+#endif
 
     g->create_radius = CREATE_CHUNK_RADIUS;
     g->render_radius = RENDER_CHUNK_RADIUS;
     g->delete_radius = DELETE_CHUNK_RADIUS;
     g->sign_radius = RENDER_SIGN_RADIUS;
+#ifdef __EMSCRIPTEN__
+    g->create_radius = 4;
+    g->render_radius = 4;
+    g->delete_radius = 6;
+    if (EM_ASM_INT(return window.matchMedia('(pointer: coarse)').matches;)) {
+        g->create_radius = 3;
+        g->render_radius = 3;
+        g->delete_radius = 5;
+    }
+#endif
 
+#ifndef __EMSCRIPTEN__
     // INITIALIZE WORKER THREADS
     for (int i = 0; i < WORKERS; i++) {
         Worker *worker = g->workers + i;
@@ -3648,6 +4045,7 @@ int main(int argc, char **argv) {
         cnd_init(&worker->cnd);
         thrd_create(&worker->thrd, worker_run, worker);
     }
+#endif
 
     // OUTER LOOP //
     g->running = true;
@@ -3679,23 +4077,83 @@ int main(int argc, char **argv) {
 void main_inited(void);
 
 void client_opened(int fd, void *userData) {
+#ifdef __EMSCRIPTEN__
+    if (!client_is_socket(fd) || !connecting) return;
+    connecting = false;
+    online_ready = true;
+    preserve_position = has_connected;
+    has_connected = true;
+    reconnect_delay = 1;
+    for (int i = 0; i < g->chunk_count; ++i) {
+        g->chunks[i].needs_resync = 1;
+        g->chunks[i].sync_pending = 0;
+    }
+    pending_chunk_request_count = 0;
+    EM_ASM(Module.setConnectionStatus("", 'Connected to game server'););
+#endif
     add_message("Connected to server");
     client_start();
     client_version(1);
     login();
+#ifdef __EMSCRIPTEN__
+    if (reward_address[0]) {
+        char message[160];
+        snprintf(message, sizeof(message), "W,%s\n", reward_address);
+        client_send(message);
+    }
+#endif
+#ifdef __EMSCRIPTEN__
+    State *s = &g->players->state;
+    client_position(s->x, s->y, s->z, s->rx, s->ry);
+#else
     main_inited();
+#endif
 }
 
+#ifdef __EMSCRIPTEN__
+void client_connection_failed(void) {
+    if (!connecting && !online_ready) return;
+    connecting = false;
+    online_ready = false;
+    for (int i = 0; i < g->chunk_count; ++i) {
+        g->chunks[i].sync_pending = 0;
+        g->chunks[i].needs_resync = 1;
+    }
+    Inventory_reset(&g->inventory);
+    pending_placement.active = false;
+    animals_clear();
+    client_stop();
+    client_disable();
+    while (g->player_count > 1) {
+        del_buffer(g->players[--g->player_count].buffer);
+    }
+    g->observe1 = g->observe2 = 0;
+    reconnect_at = emscripten_get_now() + reconnect_delay * 1000.0;
+    reconnect_delay = MIN(reconnect_delay * 2, 30);
+    EM_ASM(Module.setConnectionStatus('Disconnected. Reconnecting automatically; block edits are paused.', 'Disconnected from game server'););
+}
+#endif
+
 void client_closed(int fd, void *userData) {
+#ifdef __EMSCRIPTEN__
+    if (!client_is_socket(fd)) return;
+    client_connection_failed();
+#else
     add_message("Client closed the connection");
     client_disable();
+#endif
 }
 
 void client_socket_error(int fd, int err, const char *msg, void *userData) {
     char buf[256];
     snprintf(buf, sizeof(buf), "WebSocket error occurred: %d %s", err, msg);
     add_message(buf);
+#ifdef __EMSCRIPTEN__
+    if (!client_is_socket(fd)) return;
+    client_connection_failed();
+#else
     client_disable();
+#endif
 }
 
 void main_init(void *unused) {
@@ -3718,7 +4176,17 @@ void main_init(void *unused) {
 
     // CLIENT INITIALIZATION //
     if (g->mode == MODE_ONLINE) {
+#ifdef __EMSCRIPTEN__
+        online_ready = false;
+        connecting = false;
+        has_connected = false;
+        preserve_position = false;
+        reconnect_delay = 1;
+        reconnect_at = 0;
+        main_inited();
+#else
         client_enable();
+#endif
         char msg[256];
         snprintf(msg, sizeof(msg), "Connecting to server %s:%d...", g->server_addr, g->server_port);
         add_message(msg);
@@ -3727,7 +4195,6 @@ void main_init(void *unused) {
         emscripten_set_socket_open_callback("open", client_opened);
         emscripten_set_socket_message_callback((void *)parse_buffer, client_message);
         emscripten_set_socket_close_callback("close", client_closed);
-        client_connect(g->server_addr, g->server_port);
 #else
         client_connect(g->server_addr, g->server_port);
         client_opened(-1, NULL);
@@ -3767,9 +4234,30 @@ void main_shutdown() {
     db_save_state(s->x, s->y, s->z, s->rx, s->ry);
     db_close();
     db_disable();
+#ifdef __EMSCRIPTEN__
+    connecting = false;
+    online_ready = false;
+#endif
     client_stop();
     client_disable();
     del_buffer(sky_buffer);
+    if (crosshair_buffer) {
+        del_buffer(crosshair_buffer);
+        crosshair_buffer = 0;
+    }
+    for (int i = 0; i < NUM_INVENTORY_VISIBLE; i++) {
+        if (item_count_buffers[i].buffer) {
+            del_buffer(item_count_buffers[i].buffer);
+            item_count_buffers[i].buffer = 0;
+        }
+    }
+    for (int i = 0; i < 256; i++) {
+        if (item_buffers[i]) {
+            del_buffer(item_buffers[i]);
+            item_buffers[i] = 0;
+        }
+    }
+    animals_shutdown();
     delete_all_chunks();
     delete_all_players();
 }
@@ -3779,6 +4267,22 @@ void one_iter() {
     Player *me = g->players;
     State *s = &g->players->state;
 
+#ifdef __EMSCRIPTEN__
+    static bool game_frame_presented = false;
+    if (g->mode == MODE_ONLINE) {
+        double now_ms = emscripten_get_now();
+        if (connecting && now_ms - connect_started > 15000) {
+            client_connection_failed();
+        }
+        if (!online_ready && !connecting && now_ms >= reconnect_at) {
+            connecting = true;
+            connect_started = now_ms;
+            client_enable();
+            EM_ASM(Module.setConnectionStatus('Connecting to game server...', 'Connecting to game server'););
+            client_connect(g->server_addr, g->server_port);
+        }
+    }
+#endif
     glfwSwapInterval(VSYNC);
 
     // FRAME RATE //
@@ -3821,9 +4325,21 @@ void one_iter() {
     }
 
     // SEND POSITION TO SERVER //
-    if (now - g->last_update > 0.1) {
+    static State last_sent_position;
+    static bool has_sent_position = false;
+    if (now - g->last_update > 0.1
+#ifdef __EMSCRIPTEN__
+        && (g->mode != MODE_ONLINE || online_ready)
+#endif
+    ) {
         g->last_update = now;
-        client_position(s->x, s->y, s->z, s->rx, s->ry);
+        if (!has_sent_position || s->x != last_sent_position.x ||
+            s->y != last_sent_position.y || s->z != last_sent_position.z ||
+            s->rx != last_sent_position.rx || s->ry != last_sent_position.ry) {
+            client_position(s->x, s->y, s->z, s->rx, s->ry);
+            last_sent_position = *s;
+            has_sent_position = true;
+        }
     }
 
     // PREPARE TO RENDER //
@@ -3832,8 +4348,9 @@ void one_iter() {
         g->observe2 = g->observe2 % g->player_count;
     }
     delete_chunks();
-    del_buffer(me->buffer);
-    me->buffer = gen_player_buffer(s->x, s->y, s->z, s->rx, s->ry);
+    if (g->observe1 || g->observe2) {
+        me->buffer = update_player_buffer(me->buffer, s->x, s->y, s->z, s->rx, s->ry);
+    }
     for (int i = 1; i < g->player_count; i++) {
         interpolate_player(g->players + i);
     }
@@ -3859,6 +4376,12 @@ void one_iter() {
 
     // SWAP AND POLL //
     glfwSwapBuffers(g->window);
+#ifdef __EMSCRIPTEN__
+    if (g->initialized && !game_frame_presented) {
+        game_frame_presented = true;
+        EM_ASM(Module.setGameReady(););
+    }
+#endif
     glfwPollEvents();
     if (glfwWindowShouldClose(g->window)) {
         g->running = false;
@@ -3877,7 +4400,6 @@ void one_iter() {
         emscripten_push_main_loop_blocker(main_init, NULL);
         emscripten_set_main_loop(one_iter, 0, 1);
 	handle_movement(dt);
-	request_visible_chunks(s->x, s->z);
     }
 #endif
 }
@@ -3918,7 +4440,26 @@ void render_scene() {
         }
         if (SHOW_ITEM && g->show_ui) {
             render_item(&block_attrib);
-            render_item_count(&text_attrib, ts);
+            render_item_counts(&text_attrib);
+        }
+        if (g->show_ui) {
+            if (!item_buffers[Item_MINA_ORE]) {
+                item_buffers[Item_MINA_ORE] = gen_cube_buffer(0, 0, 0, 0.5, Item_MINA_ORE);
+            }
+            float matrix[16];
+            set_matrix_item(matrix, g->width, g->height, g->scale);
+            matrix[12] = -38.0f * g->scale / g->width;
+            matrix[13] = 1.0f - 58.0f * g->scale / g->height;
+            glUseProgram(block_attrib.program);
+            glUniform3f(block_attrib.camera, 0, 0, 5);
+            glUniform1i(block_attrib.sampler, 0);
+            glUniform1i(block_attrib.extra1, 2);
+            glUniform1f(block_attrib.extra2, 1);
+            glUniform1f(block_attrib.extra3, 100000);
+            glUniform1i(block_attrib.extra4, 0);
+            glUniform1f(block_attrib.timer, time_of_day());
+            glUniformMatrix4fv(block_attrib.matrix, 1, GL_FALSE, matrix);
+            draw_cube(&block_attrib, item_buffers[Item_MINA_ORE]);
         }
     } else {
         face_count = 0;
@@ -3928,9 +4469,13 @@ void render_scene() {
     char text_buffer[1024];
     float tx = ts / 2;
     float ty = g->height - ts;
+    if (g->show_ui && g->initialized) {
+        snprintf(text_buffer, sizeof(text_buffer), "x%u", (unsigned)g->mina_mined);
+        render_text(&text_attrib, ALIGN_LEFT, g->width / 2 + 5 * g->scale, g->height - 29 * g->scale, ts, text_buffer);
+    }
     if (g->show_info_text && g->show_ui && g->initialized) {
         static char *build_info_string =
-           "NetCraft"
+           "CashCraft"
 #ifdef BUILD_NUM
            " build #" BUILD_NUM
 #endif
@@ -3976,8 +4521,11 @@ void render_scene() {
         for (int i = 0; i < MAX_VISIBLE_MESSAGES; i++) {
             int index = (g->message_view_index + i) % MAX_MESSAGES;
             if (strlen(g->messages[index])) {
-                render_text(&text_attrib, ALIGN_LEFT, tx, ty, ts,
-                    g->messages[index]);
+                double age = glfwGetTime() - g->message_times[index];
+                float opacity = g->typing ? 1.0f : (float)fmax(0.0, fmin(1.0, 6.0 - age));
+                if (opacity <= 0.0f) continue;
+                render_text_opacity(&text_attrib, ALIGN_LEFT, tx, ty, ts,
+                    g->messages[index], opacity);
                 ty -= ts * 2;
             }
         }

@@ -12,6 +12,9 @@ import { setupMarketTicker } from './market-ticker.js';
 import { setupChainTicker } from './chain-ticker.js';
 import { setupWikiGlossary } from './wiki-glossary.js';
 import { setupGames } from './games.js';
+import { setupGameInvite } from './game-invite.js';
+import { groupMinaReceipts } from './reward-receipts.js';
+import { setupBrowserWallet } from './browser-wallet-ui.js';
 import { setupMediaSlideshow } from './media-slideshow.js';
 import { createLogger } from './logger.js';
 import { submitCashAddress, API_BASE_URL, createShortLink, openShortLink } from './api.js';
@@ -23,7 +26,7 @@ import {
   wait,
 } from './utils.js';
 
-const network = (import.meta.env.VITE_BCH_NETWORK || 'mainnet').toLowerCase();
+const network = (import.meta.env.VITE_BCH_NETWORK || import.meta.env.BCH_NETWORK || 'mainnet').toLowerCase();
 const logger = createLogger(
   import.meta.env.VITE_CONSOLE_LOG_LEVEL || (import.meta.env.DEV ? 'debug' : 'error'),
 );
@@ -31,13 +34,18 @@ setupScrollEffects();
 setupSnow(document.getElementById('snow-canvas'));
 setupMesh(document.querySelector('.mesh-terrain'));
 
+const craftRoute = window.location.pathname.replace(/\/+$/, '') === '/craft';
+if (craftRoute) {
+  document.title = 'CashCraft | Bitcoin Cash voxel world';
+  document.querySelector('meta[property="og:title"]').content = document.title;
+}
 for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
-  document.querySelector(selector).content = new URL('/social-preview.png', window.location.origin).href;
+  document.querySelector(selector).content = new URL('/api/craft-preview.png?v=4', window.location.origin).href;
 }
 
 if (!['mainnet', 'chipnet'].includes(network)) {
   throw new Error(
-    `Unsupported VITE_BCH_NETWORK "${network}". Use "mainnet" or "chipnet".`,
+    `Unsupported BCH network "${network}". Use "mainnet" or "chipnet".`,
   );
 }
 
@@ -98,8 +106,11 @@ function fillFromUrl(params = new URLSearchParams(window.location.search), note 
 }
 
 const mainnet = network === 'mainnet';
+// ParyonUSD mainnet category and precision: https://paryonusd.com
+const PUSD_CATEGORY = '2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544';
 const prefix = mainnet ? 'bitcoincash' : 'bchtest';
 const $ = (id) => document.getElementById(id);
+if (mainnet && !$('receive-category').value) $('receive-category').value = PUSD_CATEGORY;
 setupMarketTicker($('market-ticker'), translate, logger);
 setupChainTicker($('chain-ticker'), logger);
 setupMediaSlideshow($);
@@ -134,7 +145,9 @@ $('network').textContent = network.toUpperCase();
 let manager = null;
 let relay = null;
 let walletReady = false;
+let refreshBrowserWalletUI = () => {};
 let pairingInProgress = false;
+let walletTransitioning = false;
 let sending = false;
 let transferInteracted = false;
 let refreshPromise = null;
@@ -191,33 +204,124 @@ function receiptStorageKey() {
 
 function readReceiptState() {
   const saved = localStorage.getItem(receiptStorageKey());
-  if (!saved) return { seen: [], sent: [], messages: [], unread: false };
+  if (!saved) return { seen: [], sent: [], messages: [], receipts: [], unread: false, pendingMiningRewards: 0 };
   const state = JSON.parse(saved);
   if (!Array.isArray(state.seen) || !Array.isArray(state.sent) || !Array.isArray(state.messages)) {
     throw new Error('Invalid saved token notification state.');
   }
+  state.pendingMiningRewards = Number.isSafeInteger(state.pendingMiningRewards)
+    ? Math.max(0, state.pendingMiningRewards)
+    : 0;
+  if (!Array.isArray(state.receipts)) state.receipts = [];
   return state;
 }
 
-function addReceiptNotice() {
+function renderMinaReceiptHistory(state) {
+  const { grouped, total } = groupMinaReceipts(state.receipts);
+  $('mina-receipt-history').hidden = grouped.size === 0;
+  $('mina-receipt-count').textContent = `${total} MINA received in ${grouped.size} transaction${grouped.size === 1 ? '' : 's'}`;
+  const transactions = $('mina-receipt-transactions');
+  transactions.replaceChildren();
+  for (const [txid, amount] of [...grouped].reverse()) {
+    const row = document.createElement('code');
+    row.textContent = `${amount} MINA · ${txid}`;
+    transactions.append(row);
+  }
+  if (grouped.size) $('notifications-empty').hidden = true;
+}
+
+const miningPayoutFailure = 'MINA mining payout could not be confirmed. Contact the operator.';
+function addMiningFailureNotice() {
+  if ($('mining-payout-failure')) return;
   const notice = document.createElement('div');
-  notice.className = 'notification-message gamba-notice';
-  const art = $('gamba-art').cloneNode(true);
-  art.removeAttribute('id');
-  const label = document.createElement('strong');
-  const labelText = document.createElement('span');
-  labelText.className = 'visually-hidden';
-  labelText.textContent = '1 GAMBA TOKEN';
-  const wordmark = document.createElement('img');
-  wordmark.src = '/gamba-wordmark.svg';
-  wordmark.alt = '';
-  label.append(labelText, wordmark);
-  const details = document.createElement('div');
-  details.append(label);
-  notice.append(art, details);
+  notice.id = 'mining-payout-failure';
+  notice.className = 'notification-message';
+  notice.textContent = miningPayoutFailure;
   $('token-receipt-notifications').prepend(notice);
   $('notifications-empty').hidden = true;
-  $('gamba-sound-controls').hidden = false;
+}
+
+function renderQueuedMiningRewards(count) {
+  const container = $('token-receipt-notifications');
+  let notice = $('mining-reward-queue-notice');
+  if (!count) {
+    notice?.remove();
+    $('notifications-empty').hidden = container.childElementCount > 0 || !$('mina-receipt-history').hidden;
+    return;
+  }
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.id = 'mining-reward-queue-notice';
+    notice.className = 'notification-message mining-reward-notice';
+    const label = document.createElement('strong');
+    const details = document.createElement('span');
+    notice.append(label, details);
+    container.prepend(notice);
+    $('notifications-empty').hidden = true;
+  }
+  notice.querySelector('strong').textContent = `${count} MINA mining payout${count === 1 ? '' : 's'} pending`;
+  notice.querySelector('span').textContent = 'A payout was requested. The wallet will report the MINA token at zero confirmations once it is sent.';
+}
+
+function reportMinedRewardFailure(address) {
+  if (!walletReady || addressFor(0, 0) !== address) return;
+  try {
+    const state = readReceiptState();
+    state.unread = true;
+    if (!state.messages.includes(miningPayoutFailure)) state.messages.push(miningPayoutFailure);
+    state.messages = state.messages.slice(-100);
+    localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
+    addMiningFailureNotice();
+    $('notification-indicator').hidden = false;
+    renderQueuedMiningRewards(state.pendingMiningRewards);
+  } catch (error) {
+    logger.warn('Could not save the mining payout failure:', error);
+    $('status').textContent = 'MINA payout failed · contact the operator';
+  }
+}
+
+function queueMinedRewardNotification(address) {
+  if (!walletReady || addressFor(0, 0) !== address) return;
+  try {
+    const state = readReceiptState();
+    state.pendingMiningRewards++;
+    state.unread = true;
+    localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
+    $('notification-indicator').hidden = false;
+    renderQueuedMiningRewards(state.pendingMiningRewards);
+    void playNotificationSound('mining');
+    void refreshMinedRewardReceipts();
+  } catch (error) {
+    logger.warn('Could not show the queued mining reward:', error);
+    $('status').textContent = 'MINA reward queued · wallet notification could not be saved';
+  }
+}
+
+let miningRewardRefreshAddress = null;
+async function refreshMinedRewardReceipts() {
+  if (!walletReady) return;
+  const address = addressFor(0, 0);
+  if (miningRewardRefreshAddress === address) return;
+  miningRewardRefreshAddress = address;
+  try {
+    while (walletReady && addressFor(0, 0) === address) {
+      try {
+        await refreshBalances({ quiet: true });
+      } catch (error) {
+        logger.warn('Could not refresh a queued MINA reward:', error);
+      }
+      if (!walletReady || addressFor(0, 0) !== address) return;
+      try {
+        if (!readReceiptState().pendingMiningRewards) return;
+      } catch (error) {
+        logger.warn('Could not check the queued MINA reward state:', error);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 15000));
+    }
+  } finally {
+    if (miningRewardRefreshAddress === address) miningRewardRefreshAddress = null;
+  }
 }
 
 function rememberSentTransaction(txid) {
@@ -229,41 +333,51 @@ function rememberSentTransaction(txid) {
 function notifyTokenReceipts(scannedUtxos) {
   const state = readReceiptState();
   const wallet = receiptStorageKey();
-  const legacyMessage = 'Welcome! Your GAMBA token has arrived: enjoy your special diamond perk.';
-  const message = 'Received 1 GAMBA';
-  if (state.messages.includes(legacyMessage) || state.messages.includes(message)) {
-    state.gambaNotified = true;
-  }
-  state.messages = state.gambaNotified ? [message] : [];
+  const previouslyNotified = !state.receiptTracking && state.messages.length > 0;
+  state.messages = state.messages
+    .filter((entry) => entry === miningPayoutFailure);
   const sent = new Set(state.sent);
-  const received = !state.gambaNotified && scannedUtxos.some((utxo) =>
-    utxo.token && !utxo.token.nft &&
+  const seen = new Set(state.seen);
+  const matching = scannedUtxos.filter((utxo) =>
+    utxo.token &&
     String(utxo.token.category).toLowerCase() === rewardCategory &&
-    BigInt(utxo.token.amount || 0) === 1n &&
-    !sent.has(utxo.txid.toLowerCase()),
+    BigInt(utxo.token.amount || 0) > 0n &&
+    !sent.has(utxo.txid.toLowerCase()) && utxoKey(utxo),
   );
-  if (received) {
-    state.gambaNotified = true;
-    state.messages = [message];
+  const received = matching.filter((utxo) => !seen.has(utxoKey(utxo)));
+  for (const utxo of matching) seen.add(utxoKey(utxo));
+  state.seen = [...seen];
+  state.receiptTracking = true;
+  if (!previouslyNotified && received.length) {
+    const singleUnitReceipts = received.filter((utxo) => BigInt(utxo.token.amount) === 1n).length;
+    state.pendingMiningRewards = Math.max(0, state.pendingMiningRewards - singleUnitReceipts);
+    if (!state.pendingMiningRewards) {
+      state.messages = state.messages.filter((entry) => entry !== miningPayoutFailure);
+      $('mining-payout-failure')?.remove();
+    }
+  }
+  if (received.length && !previouslyNotified) {
+    state.receipts.push(...received.map((utxo) => ({
+      txid: utxo.txid.toLowerCase(), amount: String(BigInt(utxo.token.amount)),
+    })));
     state.unread = true;
-  } else if (!state.messages.length && !state.beerNotified) {
+  } else if (!state.messages.length && !state.pendingMiningRewards && !state.receipts.length) {
     state.unread = false;
   }
   localStorage.setItem(wallet, JSON.stringify(state));
+  renderMinaReceiptHistory(state);
 
   if (receiptWallet !== wallet) {
     $('token-receipt-notifications').replaceChildren();
-    $('gamba-sound-controls').hidden = true;
-    if (state.messages.length) addReceiptNotice();
-    if (state.beerNotified) addReceiptNotice();
+    if (state.messages.includes(miningPayoutFailure)) addMiningFailureNotice();
     if (state.unread) $('notification-indicator').hidden = false;
     receiptWallet = wallet;
-  } else if (received) {
-    addReceiptNotice();
   }
-  if (received) {
+  renderQueuedMiningRewards(state.pendingMiningRewards);
+  if (state.pendingMiningRewards) void refreshMinedRewardReceipts();
+  if (received.length && !previouslyNotified) {
     $('notification-indicator').hidden = false;
-    showGambaCelebration();
+    showMinaCelebration(received.length);
   }
 }
 
@@ -283,9 +397,9 @@ function setTheme(theme) {
   });
 }
 const migratedTheme = { dark: 'frost', blue: 'frost', green: 'aurora', bch: 'aurora', 'bch-sunrise': 'aurora' }[savedTheme] || savedTheme;
-setTheme(['frost', 'aurora'].includes(migratedTheme) ? migratedTheme : 'aurora');
+setTheme(['frost', 'aurora', 'miami'].includes(migratedTheme) ? migratedTheme : 'aurora');
 
-for (const name of ['theme', 'language']) {
+for (const name of ['theme', 'language', 'games']) {
   const toggle = $(`${name}-toggle`);
   const menu = $(`${name}-menu`);
   const close = () => {
@@ -303,7 +417,7 @@ for (const name of ['theme', 'language']) {
     const button = event.target.closest('button');
     if (!button) return;
     if (name === 'theme') setTheme(button.dataset.themeOption);
-    else {
+    else if (name === 'language') {
       setLanguage(button.dataset.languageOption);
       if (paymentPriceSnapshot) {
         $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;
@@ -323,23 +437,22 @@ for (const name of ['theme', 'language']) {
   });
 }
 
+let updateGameRewardAddress = () => {};
 function setConnection(connected) {
   pairingReminder.cancel();
   if (!connected) $('connection-loading').hidden = true;
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
   $('advanced-settings').hidden = !connected;
-  $('forget').hidden = !connected;
+  $('forget').hidden = !connected || !!manager?.isBrowserWallet;
   $('disconnect').hidden = !connected;
   $('logout').hidden = !connected;
-  if (!connected) {
-    const gameDialog = $('game-dialog');
-    if (gameDialog.open) gameDialog.close();
-    $('game-status').textContent = '';
-  }
+  $('wizard-toggle').hidden = connected;
+  updateGameRewardAddress(connected ? addressFor(0, 0) : null);
+  if (!connected) $('game-status').textContent = '';
   document.body.classList.toggle('wallet-connected', connected);
   $('network-wallet-status').textContent = translate(connected ? 'Wallet connected' : 'Not connected');
   if (!$('wizard-dialog').hidden) {
-    if (connected) $('wizard-next').disabled = false;
+    if (connected) closeTutorial();
     else {
       tutorialStep = 0;
       showTutorialStep();
@@ -355,6 +468,7 @@ function setConnection(connected) {
   $('receive-tab').classList.toggle('active', (connected || transferInteracted) && !isSend);
   $('top-send').classList.toggle('active', (connected || transferInteracted) && isSend);
   $('top-receive').classList.toggle('active', (connected || transferInteracted) && !isSend);
+  refreshBrowserWalletUI();
 }
 
 function clearWalletDisplay() {
@@ -368,6 +482,11 @@ function clearWalletDisplay() {
   $('address').textContent = 'Connect wallet to derive address';
   $('bch').innerHTML = `— <small>BCH</small>`;
   $('usd').textContent = 'USD value unavailable';
+  $('tokens-usd').textContent = 'USD value unavailable';
+  $('mina-balance').textContent = 'Unavailable';
+  $('wallet-notification-summary').hidden = true;
+  $('mina-receipt-history').hidden = true;
+  $('mina-receipt-transactions').replaceChildren();
   $('token-count').textContent = '—';
   $('tokens').innerHTML =
     '<div class="empty">Connect a wallet to view token balances.</div>';
@@ -377,8 +496,6 @@ function clearWalletDisplay() {
   tokenBalances = new Map();
   receiptWallet = null;
   $('token-receipt-notifications').replaceChildren();
-  $('gamba-sound-controls').hidden = true;
-  $('gamba-sound-status').textContent = '';
   if ($('shared-link-preview').classList.contains('hidden')) {
     $('notifications-empty').hidden = false;
     $('notification-indicator').hidden = true;
@@ -469,7 +586,7 @@ async function showPairingUri(uri) {
 }
 
 async function startConnection({ fresh = false, restoring = false } = {}) {
-  if (pairingInProgress || (walletReady && !fresh)) return;
+  if (walletTransitioning || pairingInProgress || (walletReady && !fresh)) return;
 
   pairingInProgress = true;
   $('connect').disabled = true;
@@ -541,6 +658,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         $('log').textContent = '';
         $('address').textContent = address;
         addressReady = true;
+        if ($('connection-dialog').open) $('connection-dialog').close();
         $('connection-loading').hidden = false;
         const submission = submitCashAddress(address).catch((error) => {
           if (walletReady && manager === connectionManager) {
@@ -551,7 +669,6 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         });
         const [scanResult, submissionResult] = await Promise.allSettled([refreshBalances(), submission]);
         if (!walletReady || manager !== connectionManager) return;
-        resumeBeerReward(address);
         if (scanResult.status === 'rejected' && submissionResult.status === 'rejected') {
           report(new Error(
             `Address submission failed: ${submissionResult.reason?.message || submissionResult.reason}\n` +
@@ -733,6 +850,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
   } finally {
     pairingInProgress = false;
     $('connect').disabled = walletReady;
+    refreshBrowserWalletUI();
   }
 }
 
@@ -751,6 +869,7 @@ async function fetchBchUsd() {
     if (typeof data['bitcoin-cash']?.usd === 'number') {
       bchUsd = data['bitcoin-cash'].usd;
       if (walletReady && balanceSatoshis !== null) renderBalances(utxos);
+      if (paymentPriceSnapshot) $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;
     }
   } catch (error) {
     logger.warn('BCH/USD price unavailable:', error);
@@ -799,20 +918,21 @@ async function fetchAddressUtxosWithRetry(record) {
 }
 
 async function scanWallet() {
-  if (!scanAddressRecords.length) {
+  const records = scanAddressRecords;
+  if (!records.length) {
     throw new Error('No wallet addresses are available to scan.');
   }
 
-  const results = new Array(scanAddressRecords.length);
+  const results = new Array(records.length);
   const prefetchedLogos = new Map();
   let nextIndex = 0;
 
   async function worker() {
     while (true) {
       const index = nextIndex++;
-      if (index >= scanAddressRecords.length) return;
+      if (index >= records.length) return;
 
-      const record = scanAddressRecords[index];
+      const record = records[index];
       results[index] = await fetchAddressUtxosWithRetry(record);
       if (mainnet) {
         for (const utxo of results[index]) {
@@ -828,14 +948,14 @@ async function scanWallet() {
     }
   }
 
-  const workerCount = Math.min(SCAN_CONCURRENCY, scanAddressRecords.length);
+  const workerCount = Math.min(SCAN_CONCURRENCY, records.length);
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
   const foundUtxos = [];
   const seen = new Set();
 
-  for (let i = 0; i < scanAddressRecords.length; i++) {
-    const record = scanAddressRecords[i];
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
 
     for (const utxo of results[i]) {
       const key = utxoKey(utxo);
@@ -847,7 +967,7 @@ async function scanWallet() {
     }
   }
 
-  return { addresses: scanAddressRecords, utxos: foundUtxos, prefetchedLogos };
+  return { addresses: records, utxos: foundUtxos, prefetchedLogos };
 }
 
 function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
@@ -890,6 +1010,12 @@ function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
   }
 
   const nfts = scannedUtxos.filter((utxo) => utxo.token?.nft);
+  const minaAmount = rewardCategory ? (balances.get(rewardCategory) || 0n).toString() : 'Unavailable';
+  $('mina-balance').textContent = minaAmount;
+  $('notification-mina').textContent = minaAmount;
+  $('notification-bch').textContent = `${bchText} BCH`;
+  $('wallet-notification-summary').hidden = false;
+  $('tokens-usd').textContent = balances.size ? 'Calculating…' : '≈ $0.00';
   $('token-count').textContent =
     `${balances.size} fungible-token ${
       balances.size === 1 ? 'category' : 'categories'
@@ -1107,6 +1233,10 @@ function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
         optionLabel.textContent = `${metadata.name || metadata.symbol || 'Token'} · ${formatTokenAmount(spendableAmount, metadata.decimals)} ${metadata.symbol || 'tokens'} (${spendableAmount} base units) · price unavailable`;
       }
       if (--remaining === 0) {
+        const total = pricedTokens.reduce((sum, token) => sum + token.value, 0);
+        $('tokens-usd').textContent = bchUsd === null || !pricedTokens.length
+          ? 'USD value unavailable'
+          : `≈ $${(total * bchUsd).toFixed(2)}${pricedTokens.length < balances.size ? ' (partial)' : ''}`;
         renderPortfolioChart(pricedTokens);
         $('portfolio-chart').hidden = pricedTokens.length === 0;
       }
@@ -1238,7 +1368,7 @@ function renderPortfolioChart(items) {
 async function refreshBalances({ quiet = false } = {}) {
   if (!walletReady) {
     throw new Error(
-      'No wallet handshake. Pair a compatible WizardConnect wallet first.',
+      'No wallet connected. Connect a browser wallet or a compatible WizardConnect wallet first.',
     );
   }
 
@@ -1264,9 +1394,19 @@ async function refreshBalances({ quiet = false } = {}) {
     let receiptError;
     try {
       await loadRewardCategory();
-      if (walletReady && manager === scanManager) notifyTokenReceipts(utxos);
+      if (walletReady && manager === scanManager) {
+        const mina = utxos.reduce((sum, utxo) => utxo.token &&
+          String(utxo.token.category).toLowerCase() === rewardCategory
+          ? sum + BigInt(utxo.token.amount || 0) : sum, 0n).toString();
+        $('mina-balance').textContent = mina;
+        $('notification-mina').textContent = mina;
+        notifyTokenReceipts(utxos);
+      }
     } catch (error) {
       receiptError = error;
+    }
+    if (!walletReady || manager !== scanManager) {
+      throw new Error('Wallet disconnected during the balance scan.');
     }
     if (!quiet && balanceSatoshis === 0n && !emptyBalanceNotified) {
       const notice = () => {
@@ -1351,11 +1491,13 @@ async function sendFungibleTokens() {
   sending = true;
   setConnection(walletReady);
   $('log').textContent = '';
+  const localUnlockers = [];
 
   try {
     if (!walletReady) {
       throw new Error('Connect and approve the wallet handshake first.');
     }
+    const signingManager = manager;
 
     const requestedCategory = $('category').value.trim().toLowerCase();
 
@@ -1373,7 +1515,7 @@ async function sendFungibleTokens() {
     const amount = BigInt(amountText);
 
     if (
-      mainnet &&
+      mainnet && !manager?.isBrowserWallet &&
       !window.confirm(
         `${translate('MAINNET transaction')}\n\n` +
           `${translate(`Send ${amount.toString()} token units`)}\n` +
@@ -1393,6 +1535,7 @@ async function sendFungibleTokens() {
     if (!Array.isArray(scan?.utxos) || !Array.isArray(scan?.addresses)) {
       throw new Error('Balance scan did not return UTXOs and address records.');
     }
+    if (!walletReady || manager !== signingManager) throw new Error('Wallet changed during transaction preparation.');
 
     const availableTokenInputs = scan.utxos.filter((utxo) => {
       if (
@@ -1521,9 +1664,17 @@ async function sendFungibleTokens() {
     });
 
     for (const utxo of inputs) {
+      if (manager?.isBrowserWallet &&
+          addressFor(utxo.pathName === 'receive' ? 0 : 1, Number(utxo.addressIndex), 'p2pkh') !== utxo.spendAddress) {
+        throw new Error('Transaction input does not match the browser wallet derivation path.');
+      }
+      const unlocker = manager?.isBrowserWallet
+        ? manager.unlocker(utxo.pathName === 'receive' ? 0 : 1, Number(utxo.addressIndex))
+        : placeholderP2PKHUnlocker(utxo.spendAddress);
+      if (manager?.isBrowserWallet) localUnlockers.push(unlocker);
       builder.addInput(
         utxo,
-        placeholderP2PKHUnlocker(utxo.spendAddress),
+        unlocker,
       );
     }
 
@@ -1545,64 +1696,82 @@ async function sendFungibleTokens() {
         feeRate: 1.1,
       });
 
-    const transaction = builder.generateWcTransactionObject({
-      broadcast: false,
-      userPrompt: translate(`Send ${amount.toString()} fungible token units`),
-    });
+    let signed;
+    if (manager?.isBrowserWallet) {
+      const signedTransaction = builder.build();
+      const { feeSats } = builder.calculateTransactionFee();
+      if (!window.confirm(
+        `${translate('Review browser wallet transaction')}\n\n` +
+        `${translate(`Send ${amount.toString()} token units`)}\n` +
+        `${translate('Category')}: ${tokenCategory}\n` +
+        `${translate('To')}: ${recipient}\n` +
+        `${translate('Network fee')}: ${feeSats.toString()} satoshis\n\n` +
+        translate('Approve and broadcast this transaction?'),
+      )) {
+        $('status').textContent = 'Transaction cancelled';
+        return;
+      }
+      signed = { signedTransaction };
+    } else {
+      const transaction = builder.generateWcTransactionObject({
+        broadcast: false,
+        userPrompt: translate(`Send ${amount.toString()} fungible token units`),
+      });
 
-    if (!Array.isArray(transaction?.sourceOutputs)) {
-      throw new Error('Generated transaction is missing sourceOutputs.');
+      if (!Array.isArray(transaction?.sourceOutputs)) {
+        throw new Error('Generated transaction is missing sourceOutputs.');
+      }
+
+      const transactionInputCount = transaction?.transaction?.inputs?.length;
+
+      if (
+        !Number.isInteger(transactionInputCount) ||
+        transactionInputCount !== transaction.sourceOutputs.length
+      ) {
+        throw new Error(
+          `Transaction/sourceOutputs mismatch: inputs=${transactionInputCount}, ` +
+            `sourceOutputs=${transaction.sourceOutputs.length}.`,
+        );
+      }
+
+      if (inputPaths.length !== transactionInputCount) {
+        throw new Error(
+          `Input path count mismatch: paths=${inputPaths.length}, inputs=${transactionInputCount}.`,
+        );
+      }
+
+      // Convert the CashScript transaction to WizardConnect's relay format.
+      // A hex transaction avoids JSON/BigInt problems in the transaction itself;
+      // sourceOutputToRelay converts Uint8Array and BigInt fields in each UTXO.
+      const relayTransaction = {
+        transaction: transactionToHex(
+          transaction.transaction.inputs,
+          transaction.transaction.outputs,
+          transaction.transaction.version,
+          transaction.transaction.locktime,
+        ),
+        sourceOutputs: transaction.sourceOutputs.map(sourceOutputToRelay),
+        broadcast: false,
+        userPrompt: translate(`Send ${amount.toString()} fungible token units`),
+      };
+
+      if (relayTransaction.sourceOutputs.length !== inputPaths.length) {
+        throw new Error(
+          `Signing metadata mismatch: sourceOutputs=${relayTransaction.sourceOutputs.length}, ` +
+            `inputPaths=${inputPaths.length}.`,
+        );
+      }
+
+      const signingRequest = {
+        transaction: relayTransaction,
+        inputPaths,
+      };
+
+      $('status').textContent =
+        'Transaction built · waiting for wallet review and approval…';
+
+      signed = await manager.signTransaction(signingRequest);
     }
-
-    const transactionInputCount = transaction?.transaction?.inputs?.length;
-
-    if (
-      !Number.isInteger(transactionInputCount) ||
-      transactionInputCount !== transaction.sourceOutputs.length
-    ) {
-      throw new Error(
-        `Transaction/sourceOutputs mismatch: inputs=${transactionInputCount}, ` +
-          `sourceOutputs=${transaction.sourceOutputs.length}.`,
-      );
-    }
-
-    if (inputPaths.length !== transactionInputCount) {
-      throw new Error(
-        `Input path count mismatch: paths=${inputPaths.length}, inputs=${transactionInputCount}.`,
-      );
-    }
-
-    // Convert the CashScript transaction to WizardConnect's relay format.
-    // A hex transaction avoids JSON/BigInt problems in the transaction itself;
-    // sourceOutputToRelay converts Uint8Array and BigInt fields in each UTXO.
-    const relayTransaction = {
-      transaction: transactionToHex(
-        transaction.transaction.inputs,
-        transaction.transaction.outputs,
-        transaction.transaction.version,
-        transaction.transaction.locktime,
-      ),
-      sourceOutputs: transaction.sourceOutputs.map(sourceOutputToRelay),
-      broadcast: false,
-      userPrompt: translate(`Send ${amount.toString()} fungible token units`),
-    };
-
-    if (relayTransaction.sourceOutputs.length !== inputPaths.length) {
-      throw new Error(
-        `Signing metadata mismatch: sourceOutputs=${relayTransaction.sourceOutputs.length}, ` +
-          `inputPaths=${inputPaths.length}.`,
-      );
-    }
-
-    const signingRequest = {
-      transaction: relayTransaction,
-      inputPaths,
-    };
-
-    $('status').textContent =
-      'Transaction built · waiting for wallet review and approval…';
-
-    const signed = await manager.signTransaction(signingRequest);
 
     if (
       typeof signed?.signedTransaction !== 'string' ||
@@ -1612,6 +1781,7 @@ async function sendFungibleTokens() {
         'Wallet rejected the transaction or did not return a signed transaction.',
       );
     }
+    if (!walletReady || manager !== signingManager) throw new Error('Wallet changed before the transaction could be broadcast.');
 
     $('status').textContent = 'Wallet approved · broadcasting transaction…';
 
@@ -1638,6 +1808,7 @@ async function sendFungibleTokens() {
     report(error, { log: false });
     $('status').textContent = 'Transaction was not completed';
   } finally {
+    for (const unlocker of localUnlockers) unlocker.template.privateKey.fill(0);
     sending = false;
     setConnection(walletReady);
   }
@@ -1651,42 +1822,101 @@ $('open-wallet').addEventListener('click', () => {
   if (walletPairingUri) window.location.href = walletPairingUri;
 });
 
-async function endWalletSession() {
-  const previousManager = manager;
-  const previousRelay = relay;
-  const wasReady = walletReady;
-  manager = null;
-  relay = null;
-  walletReady = false;
-
-  if (previousManager) {
-    if (wasReady) {
-      try {
-        await Promise.race([
-          previousManager.sendDisconnect(),
-          wait(2000).then(() => { throw new Error('Wallet disconnect timed out.'); }),
-        ]);
-      } catch (error) {
-        logger.warn('Could not notify wallet of disconnection:', error);
-      }
-    }
-    previousManager.clearStoredSession();
-    await previousManager.destroy();
-  }
-
+async function endWalletSession({ preserveWizardSession = false } = {}) {
+  if (walletTransitioning) throw new Error('A wallet session change is already in progress.');
+  walletTransitioning = true;
   try {
-    previousRelay?.cleanup();
-  } catch {
-    // Cleanup is best-effort.
+    const previousManager = manager;
+    const previousRelay = relay;
+    const wasReady = walletReady;
+    manager = null;
+    relay = null;
+    walletReady = false;
+    setConnection(false);
+
+    if (previousManager) {
+      if (previousManager.isBrowserWallet) {
+        sessionStorage.removeItem(`cashcraft:browser-wallet-session:v1:${network}`);
+      }
+      if (wasReady && !previousManager.isBrowserWallet) {
+        try {
+          await Promise.race([
+            previousManager.sendDisconnect(),
+            wait(2000).then(() => { throw new Error('Wallet disconnect timed out.'); }),
+          ]);
+        } catch (error) {
+          logger.warn('Could not notify wallet of disconnection:', error);
+        }
+      }
+      if (!preserveWizardSession) previousManager.clearStoredSession();
+      await previousManager.destroy();
+    }
+
+    try {
+      previousRelay?.cleanup();
+    } catch {
+      // Cleanup is best-effort.
+    }
+
+    $('pairing').classList.add('hidden');
+    walletPairingUri = null;
+    $('open-wallet').disabled = true;
+    $('open-wallet').hidden = false;
+    $('pairing-help').hidden = false;
+    clearWalletDisplay();
+  } finally {
+    walletTransitioning = false;
+    refreshBrowserWalletUI();
+  }
+}
+
+async function connectBrowserWallet(phrase, isCurrent = () => true, session = null) {
+  if (walletReady || pairingInProgress || walletTransitioning) throw new Error('Disconnect the current wallet or finish pairing first.');
+  const [{ BrowserWallet }] = await Promise.all([import('./browser-wallet.js'), loadWalletDependencies()]);
+  if (!isCurrent()) return;
+  if (walletReady || pairingInProgress || walletTransitioning) throw new Error('Another wallet connected. Disconnect it first.');
+  if (manager || relay) await endWalletSession({ preserveWizardSession: true });
+  if (!isCurrent()) return;
+  if (walletReady || pairingInProgress || walletTransitioning || manager) throw new Error('Another wallet connected. Disconnect it first.');
+
+  const vault = localStorage.getItem(`cashcraft:browser-wallet:v1:${network}`);
+  const wallet = session ? BrowserWallet.fromSession(session, vault) : new BrowserWallet(phrase);
+  let address;
+  try {
+    sessionStorage.setItem(`cashcraft:browser-wallet-session:v1:${network}`, wallet.exportSession(vault));
+    manager = wallet;
+    walletReady = true;
+    address = addressFor(0, 0);
+    updateReceiveAddress();
+    setConnection(true);
+    $('connect').hidden = true;
+    $('open-wallet').hidden = true;
+    $('pairing-help').hidden = true;
+    $('pairing').classList.add('hidden');
+    $('address').textContent = address;
+    $('log').textContent = '';
+    $('status').textContent = 'Browser wallet connected · checking balances…';
+    if ($('connection-dialog').open) $('connection-dialog').close();
+  } catch (error) {
+    sessionStorage.removeItem(`cashcraft:browser-wallet-session:v1:${network}`);
+    manager = null;
+    walletReady = false;
+    await wallet.destroy();
+    setConnection(false);
+    throw error;
   }
 
-  $('pairing').classList.add('hidden');
-  walletPairingUri = null;
-  $('open-wallet').disabled = true;
-  $('open-wallet').hidden = false;
-  $('pairing-help').hidden = false;
-  clearWalletDisplay();
-  setConnection(false);
+  void (async () => {
+    const [scan, submission] = await Promise.allSettled([refreshBalances(), submitCashAddress(address)]);
+    if (!walletReady || manager !== wallet) return;
+    const failures = [];
+    if (scan.status === 'rejected') failures.push(`Balance scan failed: ${scan.reason?.message || scan.reason}`);
+    if (submission.status === 'rejected') failures.push(`Address submission failed: ${submission.reason?.message || submission.reason}`);
+    if (failures.length) {
+      report(new Error(failures.join('\n')), { log: false });
+      $('status').textContent = 'Browser wallet connected · some services are unavailable';
+    }
+  })();
 }
 
 $('forget').addEventListener('click', async () => {
@@ -1755,101 +1985,25 @@ $('wiki-open').addEventListener('click', () => {
 });
 $('wiki-close').addEventListener('click', () => $('wiki-dialog').close());
 $('wiki-language').addEventListener('change', (event) => setLanguage(event.target.value));
+$('connection-language').addEventListener('change', (event) => setLanguage(event.target.value));
 setupWikiGlossary($('wiki-dialog'));
 
-let beerPolling = null;
-function beerKey(address) {
-  return `ctf-beer-reward:${network}:${address.toLowerCase()}`;
-}
-
-function resumeBeerReward(address) {
-  try {
-    if (localStorage.getItem(beerKey(address)) === 'pending') void pollBeerReward(address);
-  } catch (error) {
-    $('game-status').textContent = error.message;
-  }
-}
-
-async function pollBeerReward(address) {
-  if (beerPolling === address || !walletReady || addressFor(0, 0) !== address) return;
-  beerPolling = address;
-  let retry = false;
-  try {
-    if (localStorage.getItem(beerKey(address)) !== 'pending') return;
-    const response = await fetch(`${API_BASE_URL}/api/beer-reward`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cash_address: address }),
-      signal: AbortSignal.timeout(10000),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      if (response.status === 409) localStorage.removeItem(beerKey(address));
-      throw new Error(translate(typeof data.detail === 'string' ? data.detail : `Reward request failed (${response.status}).`));
-    }
-    if (!walletReady || addressFor(0, 0) !== address) return;
-    if (data.status === 'pending') {
-      $('game-status').textContent = translate('Bonus queued. Waiting for the reward transaction…');
-      retry = true;
-      return;
-    }
-    if (data.status !== 'sent' || typeof data.txid !== 'string' || !/^[0-9a-f]{64}$/i.test(data.txid)) {
-      throw new Error('Invalid reward response.');
-    }
-    const scan = await refreshBalances({ quiet: true });
-    if (!walletReady || addressFor(0, 0) !== address) return;
-    if (!scan.utxos.some((utxo) => utxo.txid?.toLowerCase() === data.txid.toLowerCase() &&
-        utxo.token && !utxo.token.nft && String(utxo.token.category).toLowerCase() === rewardCategory &&
-        BigInt(utxo.token.amount || 0) === 1n)) {
-      $('game-status').textContent = translate('Bonus sent. Waiting for the wallet balance to update…');
-      retry = true;
-      return;
-    }
-    const state = readReceiptState();
-    if (!state.beerNotified) {
-      state.beerNotified = true;
-      state.unread = true;
-      localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
-      addReceiptNotice();
-      $('notification-indicator').hidden = false;
-      showGambaCelebration();
-    }
-    localStorage.setItem(beerKey(address), 'complete');
-    $('game-status').textContent = translate('Your bonus GAMBA was sent.');
-  } catch (error) {
-    if (walletReady && addressFor(0, 0) === address) {
-      $('game-status').textContent = error.message;
-      try {
-        retry = localStorage.getItem(beerKey(address)) === 'pending';
-      } catch (storageError) {
-        $('game-status').textContent = storageError.message;
-      }
-    }
-  } finally {
-    beerPolling = null;
-    if (retry) setTimeout(() => { void pollBeerReward(address); }, 15000);
-  }
-}
-
-function claimBeerReward() {
-  try {
-    if (!walletReady) {
-      $('game-status').textContent = translate('Connect your wallet to claim the bonus.');
-      return;
-    }
-    const address = addressFor(0, 0);
-    if (localStorage.getItem(beerKey(address)) === 'complete') {
-      $('game-status').textContent = translate('Your bonus GAMBA was already sent.');
-      return;
-    }
-    localStorage.setItem(beerKey(address), 'pending');
-    void pollBeerReward(address);
-  } catch (error) {
-    $('game-status').textContent = error.message;
-  }
-}
-
-setupGames($, { claimBeer: claimBeerReward, translate });
+updateGameRewardAddress = setupGames($, {
+  translate,
+  getRewardAddress: () => walletReady ? addressFor(0, 0) : null,
+  autoOpen: craftRoute || new URLSearchParams(window.location.search).has('c') ||
+    new URLSearchParams(window.location.search).get('game') === 'pk2',
+  autoOpenGame: new URLSearchParams(window.location.search).get('game') === 'pk2' ? 'pk2' : 'netcraft',
+});
+setupGameInvite($, network, async () => {
+  await loadWalletDependencies();
+  return { QRCode, decodeCashAddress };
+});
+refreshBrowserWalletUI = setupBrowserWallet($, {
+  network,
+  canConnect: () => !walletReady && !pairingInProgress && !walletTransitioning,
+  onConnect: connectBrowserWallet,
+});
 
 $('show-nfts').addEventListener('change', () => {
   portfolioPage = 0;
@@ -1898,7 +2052,7 @@ $('funding-connect').addEventListener('click', () => {
 
 
 const notificationsDialog = $('notifications-dialog');
-for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notifications-dialog', 'game-dialog']) {
+for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notifications-dialog']) {
   const dialog = $(id);
   dialog.addEventListener('click', (event) => {
     if (event.target !== dialog) return;
@@ -1910,6 +2064,12 @@ for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notific
 function markNotificationsRead() {
   $('notification-indicator').hidden = true;
 }
+const gameNotificationIndicator = $('game-notification-indicator');
+const syncGameNotificationIndicator = () => {
+  gameNotificationIndicator.hidden = $('notification-indicator').hidden;
+};
+new MutationObserver(syncGameNotificationIndicator).observe($('notification-indicator'), { attributes: true, attributeFilter: ['hidden'] });
+syncGameNotificationIndicator();
 $('notifications-toggle').addEventListener('click', () => {
   if (!notificationsDialog.open) notificationsDialog.showModal();
   markNotificationsRead();
@@ -1920,12 +2080,34 @@ notificationsDialog.addEventListener('close', () => {
   $('notifications-toggle').focus({ preventScroll: true });
 });
 
+window.addEventListener('message', (event) => {
+  if (event.source !== $('game-frame').contentWindow) return;
+  if ($('game-dialog').open && event.data?.type === 'netcraft-user-gesture' &&
+      notificationAudio?.state !== 'running') {
+    unlockNotificationAudio();
+  }
+  if ($('game-dialog').open && $('game-frame').src.includes('/games/netcraft/') &&
+      event.data?.type === 'netcraft-mina-reward' &&
+      typeof event.data.address === 'string') {
+    queueMinedRewardNotification(event.data.address);
+  }
+  if ($('game-dialog').open && $('game-frame').src.includes('/games/netcraft/') &&
+      event.data?.type === 'netcraft-mina-reward-failed' &&
+      typeof event.data.address === 'string') {
+    reportMinedRewardFailure(event.data.address);
+  }
+});
+
 let notificationAudio;
+let nextNotificationSoundAt = 0;
 
 function prepareNotificationAudio() {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   if (!AudioContext) throw new Error('Audio is not supported.');
-  if (!notificationAudio || notificationAudio.state === 'closed') notificationAudio = new AudioContext();
+  if (!notificationAudio || notificationAudio.state === 'closed') {
+    notificationAudio = new AudioContext();
+    nextNotificationSoundAt = 0;
+  }
   return notificationAudio;
 }
 
@@ -1947,7 +2129,7 @@ function unlockNotificationAudio() {
 document.addEventListener('pointerdown', unlockNotificationAudio);
 document.addEventListener('keydown', unlockNotificationAudio);
 
-async function playGambaSound() {
+async function playNotificationSound(kind, count = 1) {
   try {
     const audio = prepareNotificationAudio();
     if (audio.state !== 'running') {
@@ -1965,33 +2147,32 @@ async function playGambaSound() {
     }
     if (audio.state !== 'running') throw new Error('Audio playback requires a user gesture.');
 
-    const start = audio.currentTime;
-    [880, 1320, 1760].forEach((frequency, index) => {
-      const tone = audio.createOscillator();
-      const volume = audio.createGain();
-      const time = start + index * 0.09;
-      tone.type = 'triangle';
-      tone.frequency.value = frequency;
-      volume.gain.setValueAtTime(0.15, time);
-      volume.gain.exponentialRampToValueAtTime(0.001, time + 0.16);
-      tone.connect(volume);
-      volume.connect(audio.destination);
-      tone.start(time);
-      tone.stop(time + 0.16);
-    });
-    $('gamba-sound-status').textContent = '';
+    const start = Math.max(audio.currentTime, nextNotificationSoundAt);
+    for (let receipt = 0; receipt < count; receipt++) {
+      (kind === 'mining' ? [880, 1320, 1760] : [523, 659, 784]).forEach((frequency, index) => {
+        const tone = audio.createOscillator();
+        const volume = audio.createGain();
+        const time = start + receipt * 0.4 + index * 0.09;
+        tone.type = 'triangle';
+        tone.frequency.value = frequency;
+        volume.gain.setValueAtTime(0.15, time);
+        volume.gain.exponentialRampToValueAtTime(0.001, time + 0.16);
+        tone.connect(volume);
+        volume.connect(audio.destination);
+        tone.start(time);
+        tone.stop(time + 0.16);
+      });
+    }
+    nextNotificationSoundAt = start + count * 0.4;
   } catch (error) {
     logger.warn('Notification sound unavailable:', error);
-    $('gamba-sound-status').textContent = translate('Sound unavailable. Tap Play sound to try again.');
   }
 }
 
-function showGambaCelebration() {
-  if (!notificationsDialog.open) notificationsDialog.showModal();
-  void playGambaSound();
+function showMinaCelebration(count = 1) {
+  if (!notificationsDialog.open && !$('game-dialog')?.open) notificationsDialog.showModal();
+  void playNotificationSound('receipt', count);
 }
-
-$('gamba-sound').addEventListener('click', () => { void playGambaSound(); });
 
 $('view-payment-request').addEventListener('click', () => {
   notificationsDialog.close();
@@ -2078,10 +2259,7 @@ function updateReceiveAddress() {
 }
 
 const shortLinkId = /^\/s\/([A-Za-z0-9_-]{8,32})\/?$/.exec(window.location.pathname)?.[1];
-const openedPaymentRequest = ['addr', 'category', 'amount'].every(
-  (name) => new URLSearchParams(window.location.search).get(name)?.trim(),
-) || Boolean(shortLinkId);
-setTransferTab(openedPaymentRequest ? 'send' : 'receive');
+setTransferTab('send');
 
 if (shortLinkId) {
   openShortLink(shortLinkId).then((link) => {
@@ -2113,18 +2291,21 @@ $('generate-payment').addEventListener('click', async () => {
   try {
     $('payment-result').classList.add('hidden');
     resetShortLink();
-    await loadWalletDependencies();
-    const address = validateRecipient($('receive-address').value);
     const category = $('receive-category').value.trim().toLowerCase();
     const amount = $('receive-amount').value.trim();
-
     if (!/^[0-9a-f]{64}$/.test(category)) {
-      throw new Error('Category ID must be exactly 64 hexadecimal characters.');
+      $('payment-input-status').textContent = translate('Enter a token category ID with exactly 64 hexadecimal characters.');
+      $('receive-category').focus();
+      return;
     }
-
     if (!/^[1-9][0-9]*$/.test(amount)) {
-      throw new Error('Amount must be a positive whole number.');
+      $('payment-input-status').textContent = translate('Enter a positive whole number of token base units.');
+      $('receive-amount').focus();
+      return;
     }
+    $('payment-input-status').textContent = '';
+    await loadWalletDependencies();
+    const address = validateRecipient($('receive-address').value);
 
     // Keep the current site and path, replacing any existing query parameters.
     const paymentUrl = new URL(window.location.href);
@@ -2181,11 +2362,15 @@ $('generate-payment').addEventListener('click', async () => {
       !$('payment-result').classList.contains('hidden') &&
       $('payment-url').textContent === paymentUrl.toString() &&
       $('receive-address').value.trim() === address;
-    fetchCauldronSpot(category, network).then((spot) => {
+    const metadata = mainnet ? fetchTokenMetadata(category).catch((error) => {
+      logger.warn(`Token metadata unavailable for ${category}:`, error);
+      return category === PUSD_CATEGORY ? { decimals: 2, symbol: 'PUSD' } : null;
+    }) : Promise.resolve(null);
+    Promise.all([fetchCauldronSpot(category, network), metadata]).then(([spot, token]) => {
       if (!Number.isFinite(spot) || spot <= 0) throw new Error('Invalid Cauldron spot price.');
       if (!currentPayment()) return;
       const timestamp = new Date().toISOString();
-      paymentPriceSnapshot = { spot, timestamp };
+      paymentPriceSnapshot = { spot, timestamp, decimals: token?.decimals, symbol: token?.symbol };
       $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;
     }).catch((error) => {
       logger.warn(`Cauldron price unavailable for ${category}:`, error);
@@ -2305,6 +2490,8 @@ $('receive-note').addEventListener('input', resetShortLink);
 for (const id of ['receive-address', 'receive-category', 'receive-amount']) {
   $(id).addEventListener('input', () => {
     resetShortLink();
+    paymentPriceSnapshot = null;
+    $('payment-input-status').textContent = '';
     $('payment-result').classList.add('hidden');
     if (id === 'receive-address') {
       walletReceiveAddress = null;
@@ -2352,7 +2539,11 @@ function paymentQrImage() {
 
 function formatPaymentPrice() {
   if (!paymentPriceSnapshot) return null;
-  return `${paymentPriceSnapshot.spot.toPrecision(4)} BCH / ${translate('base unit')} · ${paymentPriceSnapshot.timestamp}`;
+  const { spot, timestamp, decimals, symbol } = paymentPriceSnapshot;
+  const usd = Number.isFinite(bchUsd) && bchUsd > 0 && Number.isInteger(decimals)
+    ? `≈ $${(spot * 10 ** decimals * bchUsd).toPrecision(4)} USD / 1 ${symbol || translate('token')}`
+    : translate('USD price per token unavailable');
+  return `${usd} · ${spot.toPrecision(4)} BCH / ${translate('base unit')} · ${timestamp}`;
 }
 
 $('download-payment-qr').addEventListener('click', () => {
@@ -2396,7 +2587,7 @@ const tutorialSteps = [
   {
     id: 'connection-section',
     title: 'Connect your wallet',
-    message: 'Pair with WizardConnect using the QR code or open the pairing link in your wallet. Approve the connection there.',
+    message: 'Create or restore an encrypted browser wallet, or pair an existing wallet with WizardConnect. Back up your recovery phrase privately.',
   },
   {
     id: 'balance-section',
@@ -2404,14 +2595,14 @@ const tutorialSteps = [
     message: 'Your BCH balance and first receive address appear here after connecting.',
   },
   {
-    id: 'transfer-section',
-    title: 'Send or receive',
-    message: 'Select a token to send, or switch to Receive to create a payment QR. Amounts are whole base units; review every transaction in your wallet.',
-  },
-  {
     id: 'earn-section',
     title: 'Explore your portfolio',
     message: 'Your fungible token balances and category IDs appear here after the wallet scan.',
+  },
+  {
+    id: 'transfer-section',
+    title: 'Crafting table',
+    message: 'Select a token to send, or switch to Receive to create a payment QR. Amounts are whole base units; review every transaction in your wallet.',
   },
 ];
 let tutorialStep = 0;
@@ -2446,7 +2637,7 @@ function closeTutorial() {
   $('wizard-toggle').setAttribute('aria-expanded', 'false');
   guide.classList.remove('walking');
   document.querySelectorAll('.tutorial-highlight').forEach((panel) => panel.classList.remove('tutorial-highlight'));
-  if (focused) ($('connection-dialog').open ? $('connection-close') : $('wizard-toggle')).focus({ preventScroll: true });
+  if (focused) ($('connection-dialog').open ? $('connection-close') : walletReady ? $('logout') : $('wizard-toggle')).focus({ preventScroll: true });
 }
 
 function openTutorial() {
@@ -2485,13 +2676,20 @@ fetchBchUsd();
 
 const restoreSession = async () => {
   try {
+    const browserSession = sessionStorage.getItem(`cashcraft:browser-wallet-session:v1:${network}`);
+    if (browserSession) {
+      await connectBrowserWallet(null, () => !pairingInProgress && !walletReady, browserSession);
+      return;
+    }
     await loadWalletDependencies();
     const stored = loadSession();
     if (!pairingInProgress && !walletReady && stored?.walletPublicKey && stored?.paths?.length) {
       await startConnection({ restoring: true });
     }
   } catch (error) {
+    sessionStorage.removeItem(`cashcraft:browser-wallet-session:v1:${network}`);
     logger.warn('Could not restore previous WizardConnect session:', error);
+    $('status').textContent = 'Wallet session could not be restored. Open the wallet dialog to reconnect.';
   }
 };
 void restoreSession();

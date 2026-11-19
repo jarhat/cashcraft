@@ -1,10 +1,11 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <GLFW/glfw3.h>
 #include "mining.h"
 #include "item.h"
 
-static int mining_progress = 0;
+static double mining_started = 0;
 static bool holding_mine_button = false;
 static int building_progress = 0;
 static bool holding_build_button = false;
@@ -30,7 +31,7 @@ bool is_mining() {
 
 void mining_stop() {
     holding_mine_button = false;
-    mining_progress = false;
+    mining_started = 0;
     mining_stage = 0;
 }
 
@@ -44,34 +45,36 @@ void mining_tick() {
             mining_y = target_y;
             mining_z = target_z;
 
-            mining_progress = 0;
+            mining_started = glfwGetTime();
             mining_stage = 0;
             return;
         }
 
-        if (!target_w) return;
-        if (!isfinite(is_hardness(target_w))) return;
+        if (!target_w || !isfinite(is_hardness(target_w))) {
+            mining_started = glfwGetTime();
+            mining_stage = 0;
+            return;
+        }
 
-        // Scale by FPS
-        int hardness = (int)(is_hardness(target_w) * 60);
+        double hardness = is_hardness(target_w);
+        double elapsed = glfwGetTime() - mining_started;
 
         // Block break indicator
-        if (hardness == 0) mining_stage = 9;
-        else mining_stage = (int)roundf((float)mining_progress / hardness * 9);
+        if (hardness <= 0) mining_stage = 9;
+        else mining_stage = (int)fmin(9, floor(elapsed / hardness * 9));
 
-        if (mining_progress == hardness) {
-            mining_progress = 0;
+        if (elapsed >= hardness) {
+            mining_started = glfwGetTime();
             mining_stage = 0;
             on_mine();
             return;
         }
-
-        mining_progress++;
     }
 }
 
 void mining_start() {
     holding_mine_button = true;
+    mining_started = glfwGetTime();
 
     (void) get_targeted_block(&mining_x, &mining_y, &mining_z, &target_face);
 }

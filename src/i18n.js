@@ -9,6 +9,9 @@ const spanish = {
   'Have BTC? You can swap it for BCH with': '¿Tienes BTC? Puedes cambiarlo por BCH con',
   '. This independent service uses mainnet; check the rate, fees and recipient address.': '. Este servicio independiente usa mainnet; comprueba el tipo de cambio, las comisiones y la dirección de destino.',
   'Wallet connection': 'Conexión de la cartera',
+  'Mining': 'Minería',
+  'Enter fullscreen': 'Entrar en pantalla completa',
+  'Exit fullscreen': 'Salir de pantalla completa',
   'No account. No KYC. Just your wallet.': 'Sin cuenta. Sin KYC. Solo tu cartera.',
   'Connect your wallet to manage BCH and CashTokens. Your keys stay in your wallet.': 'Conecta tu cartera para gestionar BCH y CashTokens. Tus claves permanecen en tu cartera.',
   'BCH COMMUNITY': 'COMUNIDAD BCH',
@@ -33,7 +36,7 @@ const spanish = {
   'Show NFTs': 'Mostrar NFT',
   'Previous': 'Anterior',
   'No fungible tokens found. Show NFTs to view your collectibles.': 'No se encontraron tokens fungibles. Muestra los NFT para ver tus coleccionables.',
-  'Received 1 GAMBA': 'Recibiste 1 GAMBA',
+  'Received 1 MINA': 'Recibiste 1 MINA',
   'Your special diamond perk is here!': '¡Tu beneficio especial de diamante ha llegado!',
   'Play sound': 'Reproducir sonido',
   'Awesome': 'Genial',
@@ -56,10 +59,6 @@ const spanish = {
   'Indicative token price': 'Precio indicativo del token',
   'Loading token logo…': 'Cargando el logotipo del token…',
   'Token logo unavailable.': 'Logotipo del token no disponible.',
-  'Beer': 'Cerveza',
-  'Beerware information': 'Información sobre Beerware',
-  'Close Beerware information': 'Cerrar información sobre Beerware',
-  'Beerware is a lighthearted license idea: if you enjoy using the work, consider buying its creator a beer. No payment is required here.': 'Beerware es una idea de licencia desenfadada: si disfrutas usando la obra, considera invitar a su creador a una cerveza. No se requiere ningún pago aquí.',
   'Top cryptocurrencies by market capitalization': 'Principales criptomonedas por capitalización de mercado',
   'Loading market prices…': 'Cargando precios de mercado…',
   'Market prices unavailable.': 'Precios de mercado no disponibles.',
@@ -215,6 +214,9 @@ const french = {
   'Have BTC? You can swap it for BCH with': 'Vous avez des BTC ? Vous pouvez les échanger contre des BCH avec',
   '. This independent service uses mainnet; check the rate, fees and recipient address.': '. Ce service indépendant utilise le réseau principal ; vérifiez le taux, les frais et l’adresse du destinataire.',
   'Wallet connection': 'Connexion du portefeuille',
+  'Mining': 'Minage',
+  'Enter fullscreen': 'Passer en plein écran',
+  'Exit fullscreen': 'Quitter le plein écran',
   'No account. No KYC. Just your wallet.': 'Pas de compte. Pas de KYC. Juste votre portefeuille.',
   'Connect your wallet to manage BCH and CashTokens. Your keys stay in your wallet.': 'Connectez votre portefeuille pour gérer vos BCH et CashTokens. Vos clés restent dans votre portefeuille.',
   'BCH COMMUNITY': 'COMMUNAUTÉ BCH',
@@ -239,7 +241,7 @@ const french = {
   'Show NFTs': 'Afficher les NFT',
   'Previous': 'Précédent',
   'No fungible tokens found. Show NFTs to view your collectibles.': 'Aucun jeton fongible trouvé. Affichez les NFT pour voir vos objets de collection.',
-  'Received 1 GAMBA': '1 GAMBA reçu',
+  'Received 1 MINA': '1 MINA reçu',
   'Your special diamond perk is here!': 'Votre avantage diamant spécial est arrivé !',
   'Play sound': 'Jouer le son',
   'Awesome': 'Super',
@@ -262,10 +264,6 @@ const french = {
   'Indicative token price': 'Prix indicatif du jeton',
   'Loading token logo…': 'Chargement du logo du jeton…',
   'Token logo unavailable.': 'Logo du jeton indisponible.',
-  'Beer': 'Bière',
-  'Beerware information': 'Informations sur Beerware',
-  'Close Beerware information': 'Fermer les informations sur Beerware',
-  'Beerware is a lighthearted license idea: if you enjoy using the work, consider buying its creator a beer. No payment is required here.': 'Beerware est une idée de licence humoristique : si cette œuvre vous plaît, pensez à offrir une bière à son créateur. Aucun paiement ne vous est demandé ici.',
   'Top cryptocurrencies by market capitalization': 'Principales cryptomonnaies par capitalisation',
   'Loading market prices…': 'Chargement des prix du marché…',
   'Market prices unavailable.': 'Prix du marché indisponibles.',
@@ -421,6 +419,9 @@ const german = {
   'Have BTC? You can swap it for BCH with': 'Du hast BTC? Tausche sie gegen BCH mit',
   '. This independent service uses mainnet; check the rate, fees and recipient address.': '. Dieser unabhängige Dienst nutzt das Mainnet; prüfe Kurs, Gebühren und Empfängeradresse.',
   'Wallet connection': 'Wallet-Verbindung',
+  'Mining': 'Mining',
+  'Enter fullscreen': 'Vollbild öffnen',
+  'Exit fullscreen': 'Vollbild verlassen',
   'No account. No KYC. Just your wallet.': 'Kein Konto. Kein KYC. Nur deine Wallet.',
   'Connect your wallet to manage BCH and CashTokens. Your keys stay in your wallet.': 'Verbinde deine Wallet, um BCH und CashTokens zu verwalten. Deine Schlüssel bleiben in deiner Wallet.',
   'BCH COMMUNITY': 'BCH-COMMUNITY',
@@ -445,7 +446,7 @@ const german = {
   'Show NFTs': 'NFTs anzeigen',
   'Previous': 'Zurück',
   'No fungible tokens found. Show NFTs to view your collectibles.': 'Keine fungiblen Token gefunden. Zeige NFTs an, um deine Sammlerstücke zu sehen.',
-  'Received 1 GAMBA': '1 GAMBA erhalten',
+  'Received 1 MINA': '1 MINA erhalten',
   'Your special diamond perk is here!': 'Dein besonderer Diamant-Vorteil ist da!',
   'Play sound': 'Ton abspielen',
   'Awesome': 'Super',
@@ -468,10 +469,6 @@ const german = {
   'Indicative token price': 'Ungefährer Token-Preis',
   'Loading token logo…': 'Token-Logo wird geladen…',
   'Token logo unavailable.': 'Token-Logo nicht verfügbar.',
-  'Beer': 'Bier',
-  'Beerware information': 'Informationen zu Beerware',
-  'Close Beerware information': 'Beerware-Informationen schließen',
-  'Beerware is a lighthearted license idea: if you enjoy using the work, consider buying its creator a beer. No payment is required here.': 'Beerware ist eine augenzwinkernde Lizenzidee: Wenn dir das Werk gefällt, kannst du dem Ersteller ein Bier ausgeben. Hier ist keine Zahlung erforderlich.',
   'Top cryptocurrencies by market capitalization': 'Größte Kryptowährungen nach Marktkapitalisierung',
   'Loading market prices…': 'Marktpreise werden geladen…',
   'Market prices unavailable.': 'Marktpreise nicht verfügbar.',
@@ -619,10 +616,11 @@ const german = {
 };
 
 Object.assign(spanish, {
-  'The first reward must be sent before claiming the bonus.': 'La primera recompensa debe enviarse antes de reclamar el premio.',
+  'Wallet and notifications': 'Cartera y notificaciones',
+  'MINA mining payout could not be confirmed. Contact the operator.': 'No se pudo confirmar el pago de minería MINA. Contacta con el operador.',
+  'A payout was requested. The wallet will report the MINA token at zero confirmations once it is sent.': 'Se ha solicitado un pago. La cartera mostrará el token MINA con cero confirmaciones cuando se envíe.',
   'Switching games ends the current session.': 'Cambiar de juego termina la sesión actual.',
   'Choose a game': 'Elige un juego',
-  'One bonus per address after its first GAMBA reward has been sent.': 'Un premio por dirección después de enviar su primer GAMBA.',
   'Disconnect wallet': 'Desconectar cartera',
   'Copy original link': 'Copiar enlace original',
   'After creating a short link, the QR, Share and Download QR use it.': 'Después de crear un enlace corto, el QR, Compartir y Descargar QR lo usan.',
@@ -643,7 +641,6 @@ Object.assign(spanish, {
   'No fungible tokens found.': 'No se encontraron tokens fungibles.',
   'NFT balances are not included.': 'Los saldos de NFT no están incluidos.',
   'Enter whole base units. Select a token to see its decimals and available balance.': 'Introduce unidades base enteras. Selecciona un token para ver sus decimales y saldo disponible.',
-  'Beer': 'Cerveza',
   'Waiting for wallet approval and handshake…': 'Esperando la aprobación y conexión de la cartera…',
   'Relay reconnecting · check your internet connection…': 'Reconectando el relay · comprueba tu conexión a internet…',
   'Reconnecting saved session. Open your wallet and approve the connection if prompted.': 'Reconectando la sesión guardada. Abre tu cartera y aprueba la conexión si se solicita.',
@@ -662,10 +659,11 @@ Object.assign(spanish, {
   'Loading market prices…': 'Cargando precios…',
 });
 Object.assign(french, {
-  'The first reward must be sent before claiming the bonus.': 'La première récompense doit être envoyée avant de réclamer le bonus.',
+  'Wallet and notifications': 'Portefeuille et notifications',
+  'MINA mining payout could not be confirmed. Contact the operator.': 'Le paiement de minage MINA n’a pas pu être confirmé. Contactez l’opérateur.',
+  'A payout was requested. The wallet will report the MINA token at zero confirmations once it is sent.': 'Un paiement a été demandé. Le portefeuille affichera le jeton MINA avec zéro confirmation après son envoi.',
   'Switching games ends the current session.': 'Changer de jeu termine la session actuelle.',
   'Choose a game': 'Choisissez un jeu',
-  'One bonus per address after its first GAMBA reward has been sent.': 'Un bonus par adresse après l’envoi de son premier GAMBA.',
   'Disconnect wallet': 'Déconnecter le portefeuille',
   'Copy original link': 'Copier le lien original',
   'After creating a short link, the QR, Share and Download QR use it.': 'Après création, le QR, le partage et le téléchargement utilisent le lien court.',
@@ -686,7 +684,6 @@ Object.assign(french, {
   'No fungible tokens found.': 'Aucun jeton fongible trouvé.',
   'NFT balances are not included.': 'Les soldes de NFT ne sont pas inclus.',
   'Enter whole base units. Select a token to see its decimals and available balance.': 'Saisissez des unités de base entières. Sélectionnez un jeton pour voir ses décimales et son solde disponible.',
-  'Beer': 'Bière',
   'Waiting for wallet approval and handshake…': 'En attente de l’approbation et de la connexion du portefeuille…',
   'Relay reconnecting · check your internet connection…': 'Reconnexion du relais · vérifiez votre connexion internet…',
   'Reconnecting saved session. Open your wallet and approve the connection if prompted.': 'Reconnexion de la session enregistrée. Ouvrez votre portefeuille et approuvez la connexion si demandé.',
@@ -705,10 +702,11 @@ Object.assign(french, {
   'Loading market prices…': 'Chargement des cours…',
 });
 Object.assign(german, {
-  'The first reward must be sent before claiming the bonus.': 'Die erste Belohnung muss gesendet sein, bevor du den Bonus anfordern kannst.',
+  'Wallet and notifications': 'Wallet und Benachrichtigungen',
+  'MINA mining payout could not be confirmed. Contact the operator.': 'Die MINA-Mining-Auszahlung konnte nicht bestätigt werden. Kontaktiere den Betreiber.',
+  'A payout was requested. The wallet will report the MINA token at zero confirmations once it is sent.': 'Eine Auszahlung wurde angefordert. Nach dem Versand zeigt die Wallet den MINA-Token mit null Bestätigungen an.',
   'Switching games ends the current session.': 'Beim Spielwechsel endet die aktuelle Sitzung.',
   'Choose a game': 'Spiel auswählen',
-  'One bonus per address after its first GAMBA reward has been sent.': 'Ein Bonus pro Adresse, nachdem ihre erste GAMBA-Belohnung gesendet wurde.',
   'Disconnect wallet': 'Wallet trennen',
   'Copy original link': 'Originallink kopieren',
   'After creating a short link, the QR, Share and Download QR use it.': 'Nach dem Erstellen verwenden QR, Teilen und QR herunterladen den Kurzlink.',
@@ -729,7 +727,6 @@ Object.assign(german, {
   'No fungible tokens found.': 'Keine fungiblen Token gefunden.',
   'NFT balances are not included.': 'NFT-Guthaben sind nicht enthalten.',
   'Enter whole base units. Select a token to see its decimals and available balance.': 'Ganze Basiseinheiten eingeben. Einen Token auswählen, um Dezimalstellen und verfügbares Guthaben zu sehen.',
-  'Beer': 'Bier',
   'Waiting for wallet approval and handshake…': 'Warten auf Bestätigung und Verbindung der Wallet…',
   'Relay reconnecting · check your internet connection…': 'Relay verbindet erneut · prüfe deine Internetverbindung…',
   'Reconnecting saved session. Open your wallet and approve the connection if prompted.': 'Gespeicherte Sitzung wird verbunden. Öffne deine Wallet und bestätige die Verbindung, falls du dazu aufgefordert wirst.',
@@ -798,17 +795,10 @@ Object.assign(spanish, {
   'PAYMENT REQUEST': 'SOLICITUD DE PAGO',
   'Scan to open this payment request': 'Escanea para abrir esta solicitud de pago',
   'Take a break': 'Haz una pausa',
-  'Beer bonus': 'Premio de cerveza',
-  'Play Netcraft': 'Jugar a Netcraft',
+  'Play CashCraft': 'Jugar a CashCraft',
   'Play Pekka Kana 2': 'Jugar a Pekka Kana 2',
-  'Claim beer bonus': 'Reclamar premio de cerveza',
   'Loading game…': 'Cargando juego…',
   'Game build unavailable. Check the server mount.': 'Juego no disponible. Comprueba el montaje del servidor.',
-  'Connect your wallet to claim the bonus.': 'Conecta tu cartera para reclamar el premio.',
-  'Bonus queued. Waiting for the reward transaction…': 'Premio en cola. Esperando la transacción…',
-  'Bonus sent. Waiting for the wallet balance to update…': 'Premio enviado. Esperando la actualización del saldo…',
-  'Your bonus GAMBA was sent.': 'Tu GAMBA adicional fue enviado.',
-  'Your bonus GAMBA was already sent.': 'Tu GAMBA adicional ya fue enviado.',
 });
 Object.assign(french, {
   'One-time links are deleted on first open, or after 1 week if unused.': 'Les liens à usage unique sont supprimés à leur première ouverture ou après une semaine sans utilisation.',
@@ -816,17 +806,10 @@ Object.assign(french, {
   'PAYMENT REQUEST': 'DEMANDE DE PAIEMENT',
   'Scan to open this payment request': 'Scannez pour ouvrir cette demande de paiement',
   'Take a break': 'Faites une pause',
-  'Beer bonus': 'Bonus bière',
-  'Play Netcraft': 'Jouer à Netcraft',
+  'Play CashCraft': 'Jouer à CashCraft',
   'Play Pekka Kana 2': 'Jouer à Pekka Kana 2',
-  'Claim beer bonus': 'Réclamer le bonus bière',
   'Loading game…': 'Chargement du jeu…',
   'Game build unavailable. Check the server mount.': 'Jeu indisponible. Vérifiez le montage du serveur.',
-  'Connect your wallet to claim the bonus.': 'Connectez votre portefeuille pour réclamer le bonus.',
-  'Bonus queued. Waiting for the reward transaction…': 'Bonus en attente. En attente de la transaction…',
-  'Bonus sent. Waiting for the wallet balance to update…': 'Bonus envoyé. En attente de la mise à jour du solde…',
-  'Your bonus GAMBA was sent.': 'Votre GAMBA bonus a été envoyé.',
-  'Your bonus GAMBA was already sent.': 'Votre GAMBA bonus a déjà été envoyé.',
 });
 Object.assign(german, {
   'One-time links are deleted on first open, or after 1 week if unused.': 'Einmal-Links werden beim ersten Öffnen oder nach einer Woche ohne Nutzung gelöscht.',
@@ -834,17 +817,10 @@ Object.assign(german, {
   'PAYMENT REQUEST': 'ZAHLUNGSANFORDERUNG',
   'Scan to open this payment request': 'Scannen, um diese Zahlungsanforderung zu öffnen',
   'Take a break': 'Mach eine Pause',
-  'Beer bonus': 'Bierbonus',
-  'Play Netcraft': 'Netcraft spielen',
+  'Play CashCraft': 'CashCraft spielen',
   'Play Pekka Kana 2': 'Pekka Kana 2 spielen',
-  'Claim beer bonus': 'Bierbonus anfordern',
   'Loading game…': 'Spiel wird geladen…',
   'Game build unavailable. Check the server mount.': 'Spiel nicht verfügbar. Server-Mount prüfen.',
-  'Connect your wallet to claim the bonus.': 'Verbinde deine Wallet, um den Bonus anzufordern.',
-  'Bonus queued. Waiting for the reward transaction…': 'Bonus vorgemerkt. Warte auf die Transaktion…',
-  'Bonus sent. Waiting for the wallet balance to update…': 'Bonus gesendet. Warte auf die Aktualisierung des Guthabens…',
-  'Your bonus GAMBA was sent.': 'Dein Bonus-GAMBA wurde gesendet.',
-  'Your bonus GAMBA was already sent.': 'Dein Bonus-GAMBA wurde bereits gesendet.',
 });
 const translations = { es: spanish, fr: french, de: german };
 let language = ['es', 'fr', 'de'].includes(localStorage.getItem('ctf-language')) ? localStorage.getItem('ctf-language') : 'en';
@@ -957,12 +933,72 @@ Object.assign(german, {
   'Choose your wallet': 'Wähle deine Wallet',
 });
 
+Object.assign(spanish, {
+  'Browser wallet: create, restore or unlock': 'Cartera del navegador: crear, restaurar o desbloquear',
+  "Create a browser wallet if you don't have a WizardConnect wallet, or restore your existing phrase. Back up the recovery phrase offline; anyone with it can spend your funds. The unlocked account key stays in this tab across refreshes until you disconnect or close the tab. Anyone with access to this tab or browser can spend while it is unlocked.": 'Crea una cartera del navegador si no tienes una cartera WizardConnect o restaura tu frase existente. Guarda una copia de la frase sin conexión; cualquiera que la tenga puede gastar tus fondos. La clave desbloqueada permanece en esta pestaña al actualizar hasta que te desconectes o cierres la pestaña. Cualquiera con acceso a esta pestaña o navegador puede gastar mientras esté desbloqueada.',
+  'Create wallet': 'Crear cartera', 'Restore from phrase': 'Restaurar con frase',
+  'Unlock wallet': 'Desbloquear cartera', 'Show recovery phrase': 'Mostrar frase de recuperación',
+  'Remove local wallet': 'Eliminar cartera local', 'Recovery phrase': 'Frase de recuperación',
+  'Copy recovery phrase': 'Copiar frase de recuperación',
+  'Re-enter your recovery phrase to confirm your backup': 'Vuelve a introducir la frase de recuperación para confirmar tu copia',
+  'Password': 'Contraseña', 'Confirm password': 'Confirmar contraseña',
+  'Continue': 'Continuar', 'Cancel': 'Cancelar', 'Reveal phrase': 'Mostrar frase',
+  'Unlock': 'Desbloquear', 'Save and connect': 'Guardar y conectar',
+  'Enter your English BIP39 recovery phrase and choose a new password.': 'Introduce tu frase de recuperación BIP39 en inglés y elige una contraseña nueva.',
+  'Enter the password for this browser wallet.': 'Introduce la contraseña de esta cartera del navegador.',
+  'Enter the password to reveal the recovery phrase. Keep it private.': 'Introduce la contraseña para mostrar la frase de recuperación. Mantenla privada.',
+  'Write down these words offline, then re-enter them below. Copying places them on your clipboard.': 'Anota estas palabras sin conexión y vuelve a introducirlas abajo. Al copiarlas se guardan en el portapapeles.',
+  'Passwords do not match.': 'Las contraseñas no coinciden.',
+  'The recovery phrase confirmation does not match.': 'La confirmación de la frase de recuperación no coincide.',
+  'Browser wallet connected.': 'Cartera del navegador conectada.',
+});
+Object.assign(french, {
+  'Browser wallet: create, restore or unlock': 'Portefeuille du navigateur : créer, restaurer ou déverrouiller',
+  "Create a browser wallet if you don't have a WizardConnect wallet, or restore your existing phrase. Back up the recovery phrase offline; anyone with it can spend your funds. The unlocked account key stays in this tab across refreshes until you disconnect or close the tab. Anyone with access to this tab or browser can spend while it is unlocked.": 'Créez un portefeuille de navigateur si vous ne possédez pas de portefeuille WizardConnect, ou restaurez votre phrase existante. Sauvegardez la phrase hors ligne ; toute personne qui la possède peut dépenser vos fonds. La clé déverrouillée reste dans cet onglet après actualisation jusqu’à la déconnexion ou la fermeture de l’onglet. Toute personne ayant accès à cet onglet ou navigateur peut dépenser tant qu’il est déverrouillé.',
+  'Create wallet': 'Créer un portefeuille', 'Restore from phrase': 'Restaurer avec une phrase',
+  'Unlock wallet': 'Déverrouiller le portefeuille', 'Show recovery phrase': 'Afficher la phrase de récupération',
+  'Remove local wallet': 'Supprimer le portefeuille local', 'Recovery phrase': 'Phrase de récupération',
+  'Copy recovery phrase': 'Copier la phrase de récupération',
+  'Re-enter your recovery phrase to confirm your backup': 'Saisissez à nouveau votre phrase pour confirmer votre sauvegarde',
+  'Password': 'Mot de passe', 'Confirm password': 'Confirmer le mot de passe',
+  'Continue': 'Continuer', 'Cancel': 'Annuler', 'Reveal phrase': 'Afficher la phrase',
+  'Unlock': 'Déverrouiller', 'Save and connect': 'Enregistrer et connecter',
+  'Enter your English BIP39 recovery phrase and choose a new password.': 'Saisissez votre phrase de récupération BIP39 en anglais et choisissez un nouveau mot de passe.',
+  'Enter the password for this browser wallet.': 'Saisissez le mot de passe de ce portefeuille du navigateur.',
+  'Enter the password to reveal the recovery phrase. Keep it private.': 'Saisissez le mot de passe pour afficher la phrase de récupération. Gardez-la secrète.',
+  'Write down these words offline, then re-enter them below. Copying places them on your clipboard.': 'Notez ces mots hors ligne, puis saisissez-les à nouveau ci-dessous. Les copier les place dans le presse-papiers.',
+  'Passwords do not match.': 'Les mots de passe ne correspondent pas.',
+  'The recovery phrase confirmation does not match.': 'La confirmation de la phrase de récupération ne correspond pas.',
+  'Browser wallet connected.': 'Portefeuille du navigateur connecté.',
+});
+Object.assign(german, {
+  'Browser wallet: create, restore or unlock': 'Browser-Wallet: erstellen, wiederherstellen oder entsperren',
+  "Create a browser wallet if you don't have a WizardConnect wallet, or restore your existing phrase. Back up the recovery phrase offline; anyone with it can spend your funds. The unlocked account key stays in this tab across refreshes until you disconnect or close the tab. Anyone with access to this tab or browser can spend while it is unlocked.": 'Erstelle eine Browser-Wallet, wenn du keine WizardConnect-Wallet hast, oder stelle deine vorhandene Phrase wieder her. Sichere die Wiederherstellungsphrase offline; jeder mit dieser Phrase kann dein Guthaben ausgeben. Der entsperrte Schlüssel bleibt auch nach dem Aktualisieren in diesem Tab, bis du die Verbindung trennst oder den Tab schließt. Jeder mit Zugriff auf diesen Tab oder Browser kann Guthaben ausgeben, solange die Wallet entsperrt ist.',
+  'Create wallet': 'Wallet erstellen', 'Restore from phrase': 'Mit Phrase wiederherstellen',
+  'Unlock wallet': 'Wallet entsperren', 'Show recovery phrase': 'Wiederherstellungsphrase anzeigen',
+  'Remove local wallet': 'Lokale Wallet entfernen', 'Recovery phrase': 'Wiederherstellungsphrase',
+  'Copy recovery phrase': 'Wiederherstellungsphrase kopieren',
+  'Re-enter your recovery phrase to confirm your backup': 'Gib deine Wiederherstellungsphrase zur Bestätigung erneut ein',
+  'Password': 'Passwort', 'Confirm password': 'Passwort bestätigen',
+  'Continue': 'Weiter', 'Cancel': 'Abbrechen', 'Reveal phrase': 'Phrase anzeigen',
+  'Unlock': 'Entsperren', 'Save and connect': 'Speichern und verbinden',
+  'Enter your English BIP39 recovery phrase and choose a new password.': 'Gib deine englische BIP39-Wiederherstellungsphrase ein und wähle ein neues Passwort.',
+  'Enter the password for this browser wallet.': 'Gib das Passwort dieser Browser-Wallet ein.',
+  'Enter the password to reveal the recovery phrase. Keep it private.': 'Gib das Passwort ein, um die Wiederherstellungsphrase anzuzeigen. Halte sie geheim.',
+  'Write down these words offline, then re-enter them below. Copying places them on your clipboard.': 'Notiere diese Wörter offline und gib sie unten erneut ein. Beim Kopieren werden sie in die Zwischenablage gelegt.',
+  'Passwords do not match.': 'Die Passwörter stimmen nicht überein.',
+  'The recovery phrase confirmation does not match.': 'Die Bestätigung der Wiederherstellungsphrase stimmt nicht überein.',
+  'Browser wallet connected.': 'Browser-Wallet verbunden.',
+});
+
 export function translate(text) {
   const dictionary = translations[language];
   if (!dictionary) return text;
   if (dictionary[text]) return dictionary[text];
   const patterns = {
     es: [
+    [/^(\d+) MINA received in (\d+) transactions?$/, '$1 MINA recibidos en $2 transacciones'],
+    [/^(\d+) MINA mining payouts? pending$/, '$1 pagos de minería MINA pendientes'],
     [/^(\d+) token base units$/, '$1 unidades base de tokens'],
     [/^(\d+) base units$/, '$1 unidades base'],
     [/^(\d+) fungible-token (?:category|categories)$/, '$1 categorías de tokens fungibles'],
@@ -976,6 +1012,8 @@ export function translate(text) {
     [/^Recipient must use (.+): for this network\.$/, 'El destinatario debe usar $1: para esta red.'],
     ],
     fr: [
+      [/^(\d+) MINA received in (\d+) transactions?$/, '$1 MINA reçus dans $2 transactions'],
+      [/^(\d+) MINA mining payouts? pending$/, '$1 paiements de minage MINA en attente'],
       [/^(\d+) token base units$/, '$1 unités de base de jetons'],
       [/^(\d+) base units$/, '$1 unités de base'],
       [/^(\d+) fungible-token (?:category|categories)$/, (_, count) => `${count} catégorie${count === '1' ? '' : 's'} de jetons fongibles`],
@@ -989,6 +1027,8 @@ export function translate(text) {
       [/^Recipient must use (.+): for this network\.$/, 'Le destinataire doit utiliser $1 : sur ce réseau.'],
     ],
     de: [
+      [/^(\d+) MINA received in (\d+) transactions?$/, '$1 MINA in $2 Transaktionen erhalten'],
+      [/^(\d+) MINA mining payouts? pending$/, '$1 MINA-Mining-Auszahlungen ausstehend'],
       [/^(\d+) token base units$/, '$1 Token-Basiseinheiten'],
       [/^(\d+) base units$/, '$1 Basiseinheiten'],
       [/^(\d+) fungible-token (?:category|categories)$/, (_, count) => `${count} Kategorie${count === '1' ? '' : 'n'} fungibler Token`],
@@ -1013,7 +1053,7 @@ function translateNode(node) {
     if (['SCRIPT', 'STYLE', 'CODE'].includes(node.parentElement?.tagName)) return;
     const current = node.nodeValue;
     const previous = originals.get(node);
-    const source = previous && current === previous.rendered ? previous.source : current;
+    const source = previous && current === previous.rendered ? previous.source : originalText(current);
     const rendered = source.replace(/\S[\s\S]*\S|\S/, (value) => translate(value.replace(/\s+/g, ' ')));
     originals.set(node, { source, rendered });
     if (current !== rendered) node.nodeValue = rendered;
@@ -1024,10 +1064,27 @@ function translateNode(node) {
     if (!node.hasAttribute(name)) continue;
     let saved = attributes.get(node);
     if (!saved) attributes.set(node, saved = {});
-    if (!(name in saved)) saved[name] = node.getAttribute(name);
-    node.setAttribute(name, translate(saved[name]));
+    const current = node.getAttribute(name);
+    const previous = saved[name];
+    const source = previous && current === previous.rendered ? previous.source : originalText(current);
+    const rendered = translate(source);
+    saved[name] = { source, rendered };
+    if (current !== rendered) node.setAttribute(name, rendered);
   }
   node.childNodes.forEach(translateNode);
+}
+
+const originalStrings = new Map();
+for (const dictionary of Object.values(translations)) {
+  for (const [source, translated] of Object.entries(dictionary)) {
+    if (!originalStrings.has(translated)) originalStrings.set(translated, source);
+  }
+}
+
+function originalText(text) {
+  const trimmed = text.trim();
+  const original = originalStrings.get(trimmed);
+  return original ? text.replace(trimmed, original) : text;
 }
 
 export function setLanguage(value) {

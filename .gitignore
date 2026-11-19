@@ -1,2 +1,5 @@
 .env
 data
+NetCraft/server/target/
+node_modules/
+dist/

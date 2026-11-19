@@ -35,7 +35,9 @@ void main() {
     vec3 light_color = vec3(value * 0.3 + 0.2);
     vec3 ambient = vec3(value * 0.3 + 0.2);
     vec3 light = ambient + light_color * df;
-    color = clamp(color * light * ao, vec3(0.0), vec3(1.0));
+    vec3 lit_color = color * light * ao;
+    float luminance = dot(lit_color, vec3(0.2126, 0.7152, 0.0722));
+    color = clamp(mix(vec3(luminance), lit_color, 1.08), vec3(0.0), vec3(1.0));
     vec3 sky_color = vec3(texture2D(sky_sampler, vec2(timer, fog_height)));
     color = mix(color, sky_color, fog_factor);
     gl_FragColor = vec4(color, 1.0);

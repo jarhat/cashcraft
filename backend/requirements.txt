@@ -4,3 +4,4 @@ uvicorn[standard]
 cashaddress
 httpx
 segno
+Pillow>=10.1,<12
