@@ -33,6 +33,29 @@ PURPLE_FLOWER = 20
 SUN_FLOWER = 21
 WHITE_FLOWER = 22
 BLUE_FLOWER = 23
+COLOR_WHITE = 32
+COLOR_GOLD = 36
+COLOR_CYAN = 41
+COLOR_PURPLE = 42
+COLOR_BLUE = 43
+COLOR_GREEN = 45
+COLOR_RED = 46
+COLOR_BLACK = 47
+
+# Platform and tower coordinates. Keep the platform below the 255-block limit.
+PARK_HALF_WIDTH = 28
+PARK_Z_MIN = -25
+PARK_Z_MAX = 28
+WORLD_HALF_WIDTH = 70
+WORLD_Z_MIN = -70
+WORLD_Z_MAX = 70
+SKY_Y = 180
+TOWER_Z = -12
+DONATION_ADDRESS = ""  # Set a Bitcoin Cash donation address before building the QR.
+DONATION_QR_Z = 24
+TREE_POSITIONS = [(-21, -11), (21, -11), (-21, 14), (21, 14)]
+SPHERE_POSITIONS = [(-58, -4), (-58, 4), (58, -4), (58, 4),
+                    (-5, -58), (5, -58), (-5, 58)]
 
 OFFSETS = [
     (-0.5, -0.5, -0.5),

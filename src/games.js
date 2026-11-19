@@ -1,5 +1,5 @@
 const games = {
-  netcraft: { title: 'Netcraft', url: '/games/netcraft/craftw.html' },
+  netcraft: { title: 'CashCraft', url: '/games/netcraft/craft.html' },
   pk2: { title: 'Pekka Kana 2', url: '/games/pk2/index.html' },
 };
 

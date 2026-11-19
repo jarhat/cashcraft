@@ -112,7 +112,7 @@ class RewardDatabaseError(RuntimeError):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://demo.ctf.cash",
+        "https://ctf.cash",
     ],
     allow_credentials=False,
     allow_methods=["GET", "POST"],
