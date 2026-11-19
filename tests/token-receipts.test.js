@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 import { utxoKey } from '../src/utils.js';
+import { groupMinaReceipts } from '../src/reward-receipts.js';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
@@ -35,15 +36,16 @@ function receiptHarness(stored = new Map(), wallet = 'wallet') {
   };
   const script = source.slice(source.indexOf('let rewardCategory ='), source.indexOf('\nfunction report('));
   const context = {
-    network: 'mainnet', API_BASE_URL: '', localStorage, utxoKey, walletReady: true,
+    network: 'mainnet', API_BASE_URL: '', localStorage, utxoKey, groupMinaReceipts, walletReady: true,
     addressFor: () => wallet, translate: (text) => text,
     $: (id) => elements.get(id), document: { createElement: () => ({
       children: [], append(...children) { this.children.push(...children); },
       get textContent() { return this.text || this.children.map((child) => child.textContent || '').join(''); },
       set textContent(value) { this.text = value; },
     }) },
-    showGambaCelebration(count) { celebrations += count; },
-    playGambaSound() { queuedSounds++; },
+    showMinaCelebration(count) { celebrations += count; },
+    playNotificationSound(kind) { if (kind === 'mining') queuedSounds++; },
+    logger: { warn() {} },
     refreshBalances: () => new Promise(() => {}),
     fetch: async () => ({ ok: true, json: async () => ({ category }) }),
   };
@@ -58,9 +60,22 @@ test('tracks received MINA amounts and transaction IDs across scans', async () =
   const b = { txid: 'b'.repeat(64), vout: 1, token: { category: h.category, amount: 1n } };
   h.api.notifyTokenReceipts([a, b]);
   h.api.notifyTokenReceipts([a, b]);
-  assert.equal(h.elements.get('mina-receipt-count').textContent, '3x MINA received (tracked receipts)');
+  assert.equal(h.elements.get('mina-receipt-count').textContent, '3 MINA received in 2 transactions');
   assert.deepEqual(h.elements.get('mina-receipt-transactions').items.map((item) => item.textContent),
-    [`1x MINA · ${b.txid}`, `2x MINA · ${a.txid}`]);
+    [`1 MINA · ${b.txid}`, `2 MINA · ${a.txid}`]);
+});
+
+test('bundles multiple wallet outputs from the same transaction', async () => {
+  const h = receiptHarness();
+  await h.api.loadRewardCategory();
+  const txid = 'a'.repeat(64);
+  h.api.notifyTokenReceipts([
+    { txid, vout: 0, token: { category: h.category, amount: 2n } },
+    { txid, vout: 1, token: { category: h.category, amount: 3n } },
+  ]);
+  assert.equal(h.elements.get('mina-receipt-count').textContent, '5 MINA received in 1 transaction');
+  assert.deepEqual(h.elements.get('mina-receipt-transactions').items.map((item) => item.textContent),
+    [`5 MINA · ${txid}`]);
 });
 
 test('announces each distinct MINA output once, not other tokens or self-sent change', async () => {
@@ -78,19 +93,14 @@ test('announces each distinct MINA output once, not other tokens or self-sent ch
   h.api.notifyTokenReceipts([other, reward]);
   h.api.notifyTokenReceipts([reward, { ...reward, txid: 'another' }]);
   assert.equal(h.celebrations, 2);
-  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 MINA TOKEN', '1 MINA TOKEN']);
-  const notice = h.elements.get('token-receipt-notifications').items[0];
-  assert.equal(notice.className, 'notification-message gamba-notice');
-  assert.equal(notice.children.length, 2);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, []);
   assert.equal(h.elements.get('notification-indicator').hidden, false);
-  assert.equal(h.elements.get('gamba-sound-controls').hidden, false);
-  assert.equal(notice.children[1].children.length, 1);
 
   const reload = receiptHarness(h.stored);
   await reload.api.loadRewardCategory();
   reload.api.notifyTokenReceipts([reward]);
   assert.equal(reload.celebrations, 0);
-  assert.deepEqual(reload.elements.get('token-receipt-notifications').notices, ['1 MINA TOKEN', '1 MINA TOKEN']);
+  assert.deepEqual(reload.elements.get('token-receipt-notifications').notices, []);
 
   const anotherWallet = receiptHarness(h.stored, 'another-wallet');
   await anotherWallet.api.loadRewardCategory();
@@ -101,21 +111,21 @@ test('announces each distinct MINA output once, not other tokens or self-sent ch
 test('announces a MINA receipt with more than one token', async () => {
   const h = receiptHarness();
   await h.api.loadRewardCategory();
-  h.api.notifyTokenReceipts([{ txid: 'multiple', vout: 0, token: { category: h.category, amount: 2n } }]);
+  h.api.notifyTokenReceipts([{ txid: 'a'.repeat(64), vout: 0, token: { category: h.category, amount: 2n } }]);
   assert.equal(h.celebrations, 1);
-  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['2 MINA TOKENS']);
+  assert.equal(h.elements.get('mina-receipt-count').textContent, '2 MINA received in 1 transaction');
   const reload = receiptHarness(h.stored);
   await reload.api.loadRewardCategory();
   reload.api.notifyTokenReceipts([]);
-  assert.deepEqual(reload.elements.get('token-receipt-notifications').notices, ['2 MINA TOKENS']);
+  assert.equal(reload.elements.get('mina-receipt-count').textContent, '2 MINA received in 1 transaction');
 });
 
 test('announces fungible MINA carried alongside an NFT', async () => {
   const h = receiptHarness();
   await h.api.loadRewardCategory();
-  h.api.notifyTokenReceipts([{ txid: 'mixed', vout: 0, token: { category: h.category, amount: 2n, nft: {} } }]);
+  h.api.notifyTokenReceipts([{ txid: 'a'.repeat(64), vout: 0, token: { category: h.category, amount: 2n, nft: {} } }]);
   assert.equal(h.celebrations, 1);
-  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['2 MINA TOKENS']);
+  assert.equal(h.elements.get('mina-receipt-count').textContent, '2 MINA received in 1 transaction');
 });
 
 test('announces every new MINA output discovered in the same scan', async () => {
@@ -140,8 +150,7 @@ test('migrates existing notices without replaying GAMBA or showing other tokens'
   await h.api.loadRewardCategory();
   h.api.notifyTokenReceipts([{ txid: 'reward', vout: 0, token: { category: h.category, amount: 1n } }]);
   assert.equal(h.celebrations, 0);
-  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 MINA TOKEN']);
-  assert.deepEqual(JSON.parse(stored.values().next().value).messages, ['Received 1 MINA']);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, []);
 });
 
 test('renames tracked GAMBA receipts without replaying them', async () => {
@@ -153,8 +162,7 @@ test('renames tracked GAMBA receipts without replaying them', async () => {
   await h.api.loadRewardCategory();
   h.api.notifyTokenReceipts([{ txid: 'reward', vout: 0, token: { category: h.category, amount: 1n } }]);
   assert.equal(h.celebrations, 0);
-  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, ['1 MINA TOKEN']);
-  assert.deepEqual(JSON.parse(stored.values().next().value).messages, ['Received 1 MINA']);
+  assert.deepEqual(h.elements.get('token-receipt-notifications').notices, []);
 });
 
 test('shows a pending mining payout immediately', () => {
@@ -172,12 +180,12 @@ test('shows a pending mining payout immediately', () => {
   assert.equal(h.queuedSounds, 2);
 });
 
-test('reports an unsuccessful payout without leaving it pending', () => {
+test('reports an unsuccessful payout while it remains pending for retry', () => {
   const h = receiptHarness();
   h.api.queueMinedRewardNotification('wallet');
   h.api.reportMinedRewardFailure('wallet');
   const state = JSON.parse(h.stored.get('ctf-token-receipts:mainnet:wallet'));
-  assert.equal(state.pendingMiningRewards, 0);
+  assert.equal(state.pendingMiningRewards, 1);
   assert.equal(state.unread, true);
   assert.match(state.messages[0], /payout could not be confirmed/);
   assert.match(h.elements.get('token-receipt-notifications').notices[0], /payout could not be confirmed/);
@@ -200,10 +208,32 @@ test('schedules a separate notification sound for each simultaneous receipt', as
     translate: (text) => text, logger: { warn() {} }, setTimeout, clearTimeout,
   };
   runInNewContext(source.slice(start, end), context);
-  context.showGambaCelebration(2);
+  context.showMinaCelebration(2);
   await new Promise(setImmediate);
   assert.equal(starts.length, 6);
   assert.ok(starts[3] > starts[2]);
+});
+
+test('mining and wallet receipt use different tones', async () => {
+  const frequencies = [];
+  class AudioContext {
+    constructor() { this.state = 'running'; this.currentTime = 0; this.destination = {}; }
+    createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; }
+    createOscillator() {
+      const tone = { frequency: {}, connect() {}, stop() {}, start() { frequencies.push(tone.frequency.value); } };
+      return tone;
+    }
+  }
+  const start = source.indexOf('let notificationAudio;');
+  const end = source.indexOf("\n$('view-payment-request')", start);
+  const context = {
+    window: { AudioContext }, $: () => ({ open: false }), document: { addEventListener() {} },
+    notificationsDialog: { open: true }, logger: { warn() {} }, setTimeout, clearTimeout,
+  };
+  runInNewContext(source.slice(start, end), context);
+  await context.playNotificationSound('mining');
+  await context.playNotificationSound('receipt');
+  assert.notDeepEqual(frequencies.slice(0, 3), frequencies.slice(3, 6));
 });
 
 test('does not show an unrecorded celebration if browser storage fails', async () => {
@@ -245,7 +275,7 @@ test('refresh renders the new balance before announcing the reward', async () =>
   assert.equal(context.balanceSatoshis, 1000n);
 });
 
-test('celebration opens notifications and offers sound when autoplay is blocked', async () => {
+test('celebration opens notifications even when autoplay is blocked', async () => {
   const calls = [];
   let canPlay = false;
   class AudioContext {
@@ -273,18 +303,18 @@ test('celebration opens notifications and offers sound when autoplay is blocked'
     notificationsDialog: elements.get('notifications-dialog'),
   };
   runInNewContext(source.slice(start, end), context);
-  context.showGambaCelebration();
+  context.showMinaCelebration();
   assert.equal(elements.get('notifications-dialog').open, true);
   await new Promise((resolve) => setImmediate(resolve));
-  assert.match(elements.get('gamba-sound-status').textContent, /Tap Play sound/);
+  assert.equal(calls.filter((call) => call === 'tone').length, 0);
   canPlay = true;
-  elements.get('gamba-sound').click();
+  context.showMinaCelebration();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(calls.filter((call) => call === 'tone').length, 3);
   assert.equal(elements.get('gamba-sound-status').textContent, '');
 });
 
-test('a prior user gesture unlocks sound before a later GAMBA receipt', async () => {
+test('a prior user gesture unlocks sound before a later MINA receipt', async () => {
   const calls = [];
   class AudioContext {
     constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = {}; calls.push('created'); }
@@ -312,7 +342,7 @@ test('a prior user gesture unlocks sound before a later GAMBA receipt', async ()
   runInNewContext(source.slice(start, end), context);
   listeners.pointerdown();
   await new Promise((resolve) => setImmediate(resolve));
-  context.showGambaCelebration();
+  context.showMinaCelebration();
   assert.equal(calls.filter((call) => call === 'created').length, 1);
   assert.equal(calls.filter((call) => call === 'tone').length, 3);
   assert.equal(elements.get('gamba-sound-status').textContent, '');
@@ -377,7 +407,7 @@ test('a later gesture retries audio unlock after an earlier failure', async () =
   listeners.keydown();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(listeners.pointerdown, undefined);
-  context.showGambaCelebration();
+  context.showMinaCelebration();
   assert.equal(calls.length, 3);
 });
 
@@ -403,7 +433,7 @@ test('a suspended audio context is resumed when a receipt arrives', async () => 
     translate: (text) => text, logger: { warn() {} }, setTimeout, clearTimeout,
   };
   runInNewContext(source.slice(start, end), context);
-  context.showGambaCelebration();
+  context.showMinaCelebration();
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(calls, ['resume', 'tone', 'tone', 'tone']);
   assert.equal(elements.get('gamba-sound-status').textContent, '');

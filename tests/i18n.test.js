@@ -106,3 +106,24 @@ test('unsupported saved languages and unknown strings fall back to English', () 
   assert.equal(translate('Connection'), 'Connection');
   assert.equal(translate('A string without a translation'), 'A string without a translation');
 });
+
+test('switches dynamically translated connection status and attributes while the dialog is open', () => {
+  const text = { nodeType: 3, nodeValue: 'Cartera conectada', parentElement: { tagName: 'P' } };
+  const attrs = new Map([['aria-label', 'Cartera conectada']]);
+  const element = {
+    nodeType: 1, childNodes: [text],
+    hasAttribute(name) { return attrs.has(name); },
+    getAttribute(name) { return attrs.get(name); },
+    setAttribute(name, value) { attrs.set(name, value); },
+  };
+  document.body.childNodes = [element];
+  setLanguage('fr');
+  assert.equal(text.nodeValue, 'Portefeuille connecté');
+  assert.equal(attrs.get('aria-label'), 'Portefeuille connecté');
+  setLanguage('de');
+  assert.equal(text.nodeValue, 'Wallet verbunden');
+  assert.equal(attrs.get('aria-label'), 'Wallet verbunden');
+  setLanguage('en');
+  assert.equal(text.nodeValue, 'Wallet connected');
+  document.body.childNodes = [];
+});

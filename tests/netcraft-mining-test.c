@@ -50,10 +50,16 @@ int main(void) {
     now = 14;
     mining_tick();
     assert(mined == 1);
+    target_x_value = 2;
+    now = 14.1;
+    mining_tick();
+    now = 16.2;
+    mining_tick();
+    assert(mined == 2);
     target = 2;
     now = 100;
     mining_tick();
-    assert(mined == 1);
+    assert(mined == 2);
     mining_stop();
     return 0;
 }

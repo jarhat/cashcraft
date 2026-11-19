@@ -35,4 +35,11 @@ test('invite shares the CashCraft link and shows the donation address', async (t
   assert.deepEqual(shared, {
     title: 'CashCraft', text: 'Come explore CashCraft with me!', url: 'https://example.test/craft',
   });
+  $('invite-dialog').open = false;
+  $('game-frame').src = 'https://example.test/games/pk2/index.html';
+  await $('game-invite').listeners.click();
+  await $('invite-share').listeners.click();
+  assert.deepEqual(shared, {
+    title: 'Pekka Kana 2', text: 'Play Pekka Kana 2 with me!', url: 'https://example.test/?game=pk2',
+  });
 });

@@ -22,13 +22,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN addgroup --system app \
-    && adduser --system --ingroup app app
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app app
 
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/main.py .
+COPY backend/reward_broadcast.py .
 COPY public/craft-preview.png /app/craft-preview.png
 COPY --from=contract-build /artifacts/HodlVault.json /app/artifacts/HodlVault.json
 

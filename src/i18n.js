@@ -616,6 +616,9 @@ const german = {
 };
 
 Object.assign(spanish, {
+  'Wallet and notifications': 'Cartera y notificaciones',
+  'MINA mining payout could not be confirmed. Contact the operator.': 'No se pudo confirmar el pago de minería MINA. Contacta con el operador.',
+  'A payout was requested. The wallet will report the MINA token at zero confirmations once it is sent.': 'Se ha solicitado un pago. La cartera mostrará el token MINA con cero confirmaciones cuando se envíe.',
   'Switching games ends the current session.': 'Cambiar de juego termina la sesión actual.',
   'Choose a game': 'Elige un juego',
   'Disconnect wallet': 'Desconectar cartera',
@@ -656,6 +659,9 @@ Object.assign(spanish, {
   'Loading market prices…': 'Cargando precios…',
 });
 Object.assign(french, {
+  'Wallet and notifications': 'Portefeuille et notifications',
+  'MINA mining payout could not be confirmed. Contact the operator.': 'Le paiement de minage MINA n’a pas pu être confirmé. Contactez l’opérateur.',
+  'A payout was requested. The wallet will report the MINA token at zero confirmations once it is sent.': 'Un paiement a été demandé. Le portefeuille affichera le jeton MINA avec zéro confirmation après son envoi.',
   'Switching games ends the current session.': 'Changer de jeu termine la session actuelle.',
   'Choose a game': 'Choisissez un jeu',
   'Disconnect wallet': 'Déconnecter le portefeuille',
@@ -696,6 +702,9 @@ Object.assign(french, {
   'Loading market prices…': 'Chargement des cours…',
 });
 Object.assign(german, {
+  'Wallet and notifications': 'Wallet und Benachrichtigungen',
+  'MINA mining payout could not be confirmed. Contact the operator.': 'Die MINA-Mining-Auszahlung konnte nicht bestätigt werden. Kontaktiere den Betreiber.',
+  'A payout was requested. The wallet will report the MINA token at zero confirmations once it is sent.': 'Eine Auszahlung wurde angefordert. Nach dem Versand zeigt die Wallet den MINA-Token mit null Bestätigungen an.',
   'Switching games ends the current session.': 'Beim Spielwechsel endet die aktuelle Sitzung.',
   'Choose a game': 'Spiel auswählen',
   'Disconnect wallet': 'Wallet trennen',
@@ -924,12 +933,72 @@ Object.assign(german, {
   'Choose your wallet': 'Wähle deine Wallet',
 });
 
+Object.assign(spanish, {
+  'Browser wallet: create, restore or unlock': 'Cartera del navegador: crear, restaurar o desbloquear',
+  "Create a browser wallet if you don't have a WizardConnect wallet, or restore your existing phrase. Back up the recovery phrase offline; anyone with it can spend your funds. The unlocked account key stays in this tab across refreshes until you disconnect or close the tab. Anyone with access to this tab or browser can spend while it is unlocked.": 'Crea una cartera del navegador si no tienes una cartera WizardConnect o restaura tu frase existente. Guarda una copia de la frase sin conexión; cualquiera que la tenga puede gastar tus fondos. La clave desbloqueada permanece en esta pestaña al actualizar hasta que te desconectes o cierres la pestaña. Cualquiera con acceso a esta pestaña o navegador puede gastar mientras esté desbloqueada.',
+  'Create wallet': 'Crear cartera', 'Restore from phrase': 'Restaurar con frase',
+  'Unlock wallet': 'Desbloquear cartera', 'Show recovery phrase': 'Mostrar frase de recuperación',
+  'Remove local wallet': 'Eliminar cartera local', 'Recovery phrase': 'Frase de recuperación',
+  'Copy recovery phrase': 'Copiar frase de recuperación',
+  'Re-enter your recovery phrase to confirm your backup': 'Vuelve a introducir la frase de recuperación para confirmar tu copia',
+  'Password': 'Contraseña', 'Confirm password': 'Confirmar contraseña',
+  'Continue': 'Continuar', 'Cancel': 'Cancelar', 'Reveal phrase': 'Mostrar frase',
+  'Unlock': 'Desbloquear', 'Save and connect': 'Guardar y conectar',
+  'Enter your English BIP39 recovery phrase and choose a new password.': 'Introduce tu frase de recuperación BIP39 en inglés y elige una contraseña nueva.',
+  'Enter the password for this browser wallet.': 'Introduce la contraseña de esta cartera del navegador.',
+  'Enter the password to reveal the recovery phrase. Keep it private.': 'Introduce la contraseña para mostrar la frase de recuperación. Mantenla privada.',
+  'Write down these words offline, then re-enter them below. Copying places them on your clipboard.': 'Anota estas palabras sin conexión y vuelve a introducirlas abajo. Al copiarlas se guardan en el portapapeles.',
+  'Passwords do not match.': 'Las contraseñas no coinciden.',
+  'The recovery phrase confirmation does not match.': 'La confirmación de la frase de recuperación no coincide.',
+  'Browser wallet connected.': 'Cartera del navegador conectada.',
+});
+Object.assign(french, {
+  'Browser wallet: create, restore or unlock': 'Portefeuille du navigateur : créer, restaurer ou déverrouiller',
+  "Create a browser wallet if you don't have a WizardConnect wallet, or restore your existing phrase. Back up the recovery phrase offline; anyone with it can spend your funds. The unlocked account key stays in this tab across refreshes until you disconnect or close the tab. Anyone with access to this tab or browser can spend while it is unlocked.": 'Créez un portefeuille de navigateur si vous ne possédez pas de portefeuille WizardConnect, ou restaurez votre phrase existante. Sauvegardez la phrase hors ligne ; toute personne qui la possède peut dépenser vos fonds. La clé déverrouillée reste dans cet onglet après actualisation jusqu’à la déconnexion ou la fermeture de l’onglet. Toute personne ayant accès à cet onglet ou navigateur peut dépenser tant qu’il est déverrouillé.',
+  'Create wallet': 'Créer un portefeuille', 'Restore from phrase': 'Restaurer avec une phrase',
+  'Unlock wallet': 'Déverrouiller le portefeuille', 'Show recovery phrase': 'Afficher la phrase de récupération',
+  'Remove local wallet': 'Supprimer le portefeuille local', 'Recovery phrase': 'Phrase de récupération',
+  'Copy recovery phrase': 'Copier la phrase de récupération',
+  'Re-enter your recovery phrase to confirm your backup': 'Saisissez à nouveau votre phrase pour confirmer votre sauvegarde',
+  'Password': 'Mot de passe', 'Confirm password': 'Confirmer le mot de passe',
+  'Continue': 'Continuer', 'Cancel': 'Annuler', 'Reveal phrase': 'Afficher la phrase',
+  'Unlock': 'Déverrouiller', 'Save and connect': 'Enregistrer et connecter',
+  'Enter your English BIP39 recovery phrase and choose a new password.': 'Saisissez votre phrase de récupération BIP39 en anglais et choisissez un nouveau mot de passe.',
+  'Enter the password for this browser wallet.': 'Saisissez le mot de passe de ce portefeuille du navigateur.',
+  'Enter the password to reveal the recovery phrase. Keep it private.': 'Saisissez le mot de passe pour afficher la phrase de récupération. Gardez-la secrète.',
+  'Write down these words offline, then re-enter them below. Copying places them on your clipboard.': 'Notez ces mots hors ligne, puis saisissez-les à nouveau ci-dessous. Les copier les place dans le presse-papiers.',
+  'Passwords do not match.': 'Les mots de passe ne correspondent pas.',
+  'The recovery phrase confirmation does not match.': 'La confirmation de la phrase de récupération ne correspond pas.',
+  'Browser wallet connected.': 'Portefeuille du navigateur connecté.',
+});
+Object.assign(german, {
+  'Browser wallet: create, restore or unlock': 'Browser-Wallet: erstellen, wiederherstellen oder entsperren',
+  "Create a browser wallet if you don't have a WizardConnect wallet, or restore your existing phrase. Back up the recovery phrase offline; anyone with it can spend your funds. The unlocked account key stays in this tab across refreshes until you disconnect or close the tab. Anyone with access to this tab or browser can spend while it is unlocked.": 'Erstelle eine Browser-Wallet, wenn du keine WizardConnect-Wallet hast, oder stelle deine vorhandene Phrase wieder her. Sichere die Wiederherstellungsphrase offline; jeder mit dieser Phrase kann dein Guthaben ausgeben. Der entsperrte Schlüssel bleibt auch nach dem Aktualisieren in diesem Tab, bis du die Verbindung trennst oder den Tab schließt. Jeder mit Zugriff auf diesen Tab oder Browser kann Guthaben ausgeben, solange die Wallet entsperrt ist.',
+  'Create wallet': 'Wallet erstellen', 'Restore from phrase': 'Mit Phrase wiederherstellen',
+  'Unlock wallet': 'Wallet entsperren', 'Show recovery phrase': 'Wiederherstellungsphrase anzeigen',
+  'Remove local wallet': 'Lokale Wallet entfernen', 'Recovery phrase': 'Wiederherstellungsphrase',
+  'Copy recovery phrase': 'Wiederherstellungsphrase kopieren',
+  'Re-enter your recovery phrase to confirm your backup': 'Gib deine Wiederherstellungsphrase zur Bestätigung erneut ein',
+  'Password': 'Passwort', 'Confirm password': 'Passwort bestätigen',
+  'Continue': 'Weiter', 'Cancel': 'Abbrechen', 'Reveal phrase': 'Phrase anzeigen',
+  'Unlock': 'Entsperren', 'Save and connect': 'Speichern und verbinden',
+  'Enter your English BIP39 recovery phrase and choose a new password.': 'Gib deine englische BIP39-Wiederherstellungsphrase ein und wähle ein neues Passwort.',
+  'Enter the password for this browser wallet.': 'Gib das Passwort dieser Browser-Wallet ein.',
+  'Enter the password to reveal the recovery phrase. Keep it private.': 'Gib das Passwort ein, um die Wiederherstellungsphrase anzuzeigen. Halte sie geheim.',
+  'Write down these words offline, then re-enter them below. Copying places them on your clipboard.': 'Notiere diese Wörter offline und gib sie unten erneut ein. Beim Kopieren werden sie in die Zwischenablage gelegt.',
+  'Passwords do not match.': 'Die Passwörter stimmen nicht überein.',
+  'The recovery phrase confirmation does not match.': 'Die Bestätigung der Wiederherstellungsphrase stimmt nicht überein.',
+  'Browser wallet connected.': 'Browser-Wallet verbunden.',
+});
+
 export function translate(text) {
   const dictionary = translations[language];
   if (!dictionary) return text;
   if (dictionary[text]) return dictionary[text];
   const patterns = {
     es: [
+    [/^(\d+) MINA received in (\d+) transactions?$/, '$1 MINA recibidos en $2 transacciones'],
+    [/^(\d+) MINA mining payouts? pending$/, '$1 pagos de minería MINA pendientes'],
     [/^(\d+) token base units$/, '$1 unidades base de tokens'],
     [/^(\d+) base units$/, '$1 unidades base'],
     [/^(\d+) fungible-token (?:category|categories)$/, '$1 categorías de tokens fungibles'],
@@ -943,6 +1012,8 @@ export function translate(text) {
     [/^Recipient must use (.+): for this network\.$/, 'El destinatario debe usar $1: para esta red.'],
     ],
     fr: [
+      [/^(\d+) MINA received in (\d+) transactions?$/, '$1 MINA reçus dans $2 transactions'],
+      [/^(\d+) MINA mining payouts? pending$/, '$1 paiements de minage MINA en attente'],
       [/^(\d+) token base units$/, '$1 unités de base de jetons'],
       [/^(\d+) base units$/, '$1 unités de base'],
       [/^(\d+) fungible-token (?:category|categories)$/, (_, count) => `${count} catégorie${count === '1' ? '' : 's'} de jetons fongibles`],
@@ -956,6 +1027,8 @@ export function translate(text) {
       [/^Recipient must use (.+): for this network\.$/, 'Le destinataire doit utiliser $1 : sur ce réseau.'],
     ],
     de: [
+      [/^(\d+) MINA received in (\d+) transactions?$/, '$1 MINA in $2 Transaktionen erhalten'],
+      [/^(\d+) MINA mining payouts? pending$/, '$1 MINA-Mining-Auszahlungen ausstehend'],
       [/^(\d+) token base units$/, '$1 Token-Basiseinheiten'],
       [/^(\d+) base units$/, '$1 Basiseinheiten'],
       [/^(\d+) fungible-token (?:category|categories)$/, (_, count) => `${count} Kategorie${count === '1' ? '' : 'n'} fungibler Token`],
@@ -980,7 +1053,7 @@ function translateNode(node) {
     if (['SCRIPT', 'STYLE', 'CODE'].includes(node.parentElement?.tagName)) return;
     const current = node.nodeValue;
     const previous = originals.get(node);
-    const source = previous && current === previous.rendered ? previous.source : current;
+    const source = previous && current === previous.rendered ? previous.source : originalText(current);
     const rendered = source.replace(/\S[\s\S]*\S|\S/, (value) => translate(value.replace(/\s+/g, ' ')));
     originals.set(node, { source, rendered });
     if (current !== rendered) node.nodeValue = rendered;
@@ -991,10 +1064,27 @@ function translateNode(node) {
     if (!node.hasAttribute(name)) continue;
     let saved = attributes.get(node);
     if (!saved) attributes.set(node, saved = {});
-    if (!(name in saved)) saved[name] = node.getAttribute(name);
-    node.setAttribute(name, translate(saved[name]));
+    const current = node.getAttribute(name);
+    const previous = saved[name];
+    const source = previous && current === previous.rendered ? previous.source : originalText(current);
+    const rendered = translate(source);
+    saved[name] = { source, rendered };
+    if (current !== rendered) node.setAttribute(name, rendered);
   }
   node.childNodes.forEach(translateNode);
+}
+
+const originalStrings = new Map();
+for (const dictionary of Object.values(translations)) {
+  for (const [source, translated] of Object.entries(dictionary)) {
+    if (!originalStrings.has(translated)) originalStrings.set(translated, source);
+  }
+}
+
+function originalText(text) {
+  const trimmed = text.trim();
+  const original = originalStrings.get(trimmed);
+  return original ? text.replace(trimmed, original) : text;
 }
 
 export function setLanguage(value) {

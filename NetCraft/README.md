@@ -240,8 +240,7 @@ an immediate BCHN transaction for each eligible block; wallet transaction
 creation is serialized to avoid spending the same inputs twice. The wallet
 refreshes after the request and shows a receipt once it sees the zero-confirmation
 output. A request can fail or take longer if the node or network is unavailable.
-The red
-wallet notification indicator is shared between the wallet and game; opening notifications
+The game wallet button turns green for an unread wallet notification; opening notifications
 marks them read. Browsers may require a user gesture before sound can play.
 The HUD counts MINA ore blocks mined during the current game session, including
 placed ore; it is not a token balance or a count of successful payouts. Chat
@@ -251,17 +250,14 @@ that category and BCH for transaction fees. Set
 `NETCRAFT_MINING_REWARDS_ENABLED=false` to stop new rewards and payouts. Back up the
 world database and BCHN wallet together. Run only one payout worker. Set
 `NETCRAFT_REWARD_WAKE_SECRET` to the same long random ASCII secret for both
-services. Mining edits and payout records are committed together; if dispatch
-or transaction creation fails, the player is notified and the operator must
-investigate the unsent record. Previously queued unsigned records are retained
-but are not automatically paid. Signed transactions are stored before
-broadcast and retried unchanged after an uncertain broadcast.
+services. Mining edits and payout records are committed together. Unsent
+records are retried automatically, including after daily limits defer payment.
+Investigate persistent errors. Signed transactions are stored before broadcast
+and retried unchanged after an uncertain broadcast. The wallet can be drained by
+transaction fees and output amounts, so fund and monitor it accordingly.
 The top ticker counts successfully broadcast one-unit payouts for the current
 MINA category recorded in both reward databases, not all on-chain transfers.
-The discontinued bonus is not paid or newly queued. On backend startup,
-unpaid legacy bonus rows are marked cancelled while sent history and signed
-transactions are retained. A previously broadcast transaction cannot be
-reversed by this cancellation.
+Discontinued bonus records are left untouched and are not processed or counted.
 
 BCHN RPC is bound to an isolated Compose network accessible only to the backend
 and to localhost in the BCHN container. The backend's `check_balance()` reads
@@ -315,6 +311,8 @@ gesture; the game panel also has a fullscreen button. The `/craft` path and
 `?c` URL parameter open the panel below the top bar; browser fullscreen still
 requires a user gesture.
 On desktop, click the game view to capture the mouse; Escape releases it.
+On a standard gamepad, the left stick and D-pad move, the right stick looks,
+A jumps, B crouches, and the triggers build and mine.
 If the browser or embedding page blocks gamepad access, keyboard, mouse and
 touch controls remain available.
 The invite button shares `/craft` and displays a donation QR for an address
