@@ -207,6 +207,19 @@ class RewardTests(unittest.TestCase):
              patch.object(backend, "NETCRAFT_DB_PATH", str(Path(self.tmp.name) / "missing.sqlite3")):
             self.assertFalse(backend.process_one_mining_reward())
 
+    def test_missing_mining_database_is_created_automatically(self):
+        path = Path(self.tmp.name) / "missing" / "netcraft.sqlite3"
+        with patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
+             patch.object(backend, "NETCRAFT_DB_PATH", str(path)):
+            self.assertFalse(backend.process_one_mining_reward())
+        self.assertTrue(path.exists())
+        with sqlite3.connect(path) as db:
+            self.assertIsNotNone(
+                db.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'mining_rewards'"
+                ).fetchone()
+            )
+
     def test_daily_mining_limit_persists_across_retries_and_defers_next_payout(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
@@ -275,7 +288,7 @@ class RewardTests(unittest.TestCase):
         with patch.object(backend, "NETCRAFT_DB_PATH", str(path)):
             self.assertEqual(client.get("/api/mina-rewards-sent").json(), {"sent": "2"})
         with patch.object(backend, "NETCRAFT_DB_PATH", str(path) + "-missing"):
-            self.assertEqual(client.get("/api/mina-rewards-sent").status_code, 503)
+            self.assertEqual(client.get("/api/mina-rewards-sent").json(), {"sent": "1"})
 
     def test_chain_status_uses_cached_node_data_and_reports_sync(self):
         info = {
@@ -395,13 +408,14 @@ class RewardTests(unittest.TestCase):
         with sqlite3.connect(backend.DB_PATH) as db:
             self.assertEqual(db.execute("SELECT cash_address FROM token_rewards").fetchall(), [("new",)])
 
-    def test_worker_rejects_missing_or_replaced_database(self):
+    def test_worker_recreates_missing_database_and_rejects_replaced_database(self):
         backend.save_cash_address("recipient", "bitcoincash", 2)
         original = backend.DB_PATH.with_name("original.sqlite3")
         backend.DB_PATH.rename(original)
-        with self.assertRaisesRegex(backend.RewardDatabaseError, "missing"):
-            backend.process_one_reward()
-        self.assertFalse(backend.DB_PATH.exists())
+        self.assertFalse(backend.process_one_reward())
+        self.assertTrue(backend.DB_PATH.exists())
+        replaced = backend.DB_PATH.with_name("replaced.sqlite3")
+        backend.DB_PATH.rename(replaced)
         with sqlite3.connect(backend.DB_PATH) as db:
             db.execute("CREATE TABLE token_rewards (cash_address TEXT)")
         with self.assertRaisesRegex(backend.RewardDatabaseError, "changed since startup"):

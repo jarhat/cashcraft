@@ -91,6 +91,7 @@ reward_wake = threading.Event()
 reward_payout_lock = threading.Lock()
 reward_thread = None
 db_identity = None
+db_state_lock = threading.RLock()
 
 
 class RewardDatabaseError(RuntimeError):
@@ -128,60 +129,61 @@ class CashAddressRequest(BaseModel):
 
 def init_db() -> None:
     global db_identity
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with db_state_lock:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    with sqlite3.connect(DB_PATH) as db:
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS cash_addresses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                cash_address TEXT NOT NULL UNIQUE,
-                network TEXT NOT NULL,
-                prefix TEXT NOT NULL,
-                address_type INTEGER NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS token_rewards (
-                cash_address TEXT PRIMARY KEY,
-                category TEXT NOT NULL,
-                signed_tx TEXT,
-                txid TEXT,
-                sent_at TEXT,
-                FOREIGN KEY (cash_address) REFERENCES cash_addresses(cash_address)
-            )
-        """)
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS short_links (
-                id TEXT PRIMARY KEY,
-                address TEXT NOT NULL,
-                category TEXT NOT NULL,
-                amount TEXT NOT NULL,
-                note TEXT NOT NULL,
-                one_time INTEGER NOT NULL,
-                created_at INTEGER NOT NULL,
-                expires_at INTEGER NOT NULL
-            )
-        """)
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS donation_addresses (
-                network TEXT PRIMARY KEY,
-                address TEXT NOT NULL
-            )
-        """)
-        db.execute("CREATE INDEX IF NOT EXISTS short_links_expires ON short_links (expires_at)")
-    stat = DB_PATH.stat()
-    db_identity = (stat.st_dev, stat.st_ino)
+        with sqlite3.connect(DB_PATH) as db:
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS cash_addresses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    cash_address TEXT NOT NULL UNIQUE,
+                    network TEXT NOT NULL,
+                    prefix TEXT NOT NULL,
+                    address_type INTEGER NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS token_rewards (
+                    cash_address TEXT PRIMARY KEY,
+                    category TEXT NOT NULL,
+                    signed_tx TEXT,
+                    txid TEXT,
+                    sent_at TEXT,
+                    FOREIGN KEY (cash_address) REFERENCES cash_addresses(cash_address)
+                )
+            """)
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS short_links (
+                    id TEXT PRIMARY KEY,
+                    address TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    amount TEXT NOT NULL,
+                    note TEXT NOT NULL,
+                    one_time INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    expires_at INTEGER NOT NULL
+                )
+            """)
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS donation_addresses (
+                    network TEXT PRIMARY KEY,
+                    address TEXT NOT NULL
+                )
+            """)
+            db.execute("CREATE INDEX IF NOT EXISTS short_links_expires ON short_links (expires_at)")
+        stat = DB_PATH.stat()
+        db_identity = (stat.st_dev, stat.st_ino)
 
 
 @contextmanager
 def open_db(timeout: int) -> Iterator[sqlite3.Connection]:
+    if db_identity is None or not DB_PATH.exists():
+        init_db()
     try:
         stat = DB_PATH.stat()
     except FileNotFoundError as exc:
-        raise RewardDatabaseError(
-            f"Database {DB_PATH} is missing; restore the original database and restart auth."
-        ) from exc
+        raise RewardDatabaseError(f"Database {DB_PATH} is unavailable.") from exc
     if db_identity is None or (stat.st_dev, stat.st_ino) != db_identity:
         raise RewardDatabaseError(
             f"Database {DB_PATH} changed since startup; restore the original database and restart auth."
@@ -191,9 +193,7 @@ def open_db(timeout: int) -> Iterator[sqlite3.Connection]:
         try:
             stat = DB_PATH.stat()
         except FileNotFoundError as exc:
-            raise RewardDatabaseError(
-                f"Database {DB_PATH} is missing; restore the original database and restart auth."
-            ) from exc
+            raise RewardDatabaseError(f"Database {DB_PATH} is unavailable.") from exc
         if (stat.st_dev, stat.st_ino) != db_identity:
             raise RewardDatabaseError(
                 f"Database {DB_PATH} changed since startup; restore the original database and restart auth."
@@ -210,6 +210,27 @@ def open_db(timeout: int) -> Iterator[sqlite3.Connection]:
             yield db
     finally:
         db.close()
+
+
+def open_netcraft_db(timeout: int) -> sqlite3.Connection:
+    if not NETCRAFT_DB_PATH:
+        raise RuntimeError("Mining payouts are disabled.")
+    path = Path(NETCRAFT_DB_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(path.resolve().as_uri() + "?mode=rwc", uri=True, timeout=timeout)
+    db.execute("""CREATE TABLE IF NOT EXISTS mining_rewards (
+        id INTEGER PRIMARY KEY,
+        cash_address TEXT,
+        category TEXT,
+        signed_tx TEXT,
+        txid TEXT,
+        sent_at TEXT
+    )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS mining_payout_reservations (
+        reward_id INTEGER NOT NULL, day TEXT NOT NULL, PRIMARY KEY (reward_id, day)
+    )""")
+    db.execute("CREATE INDEX IF NOT EXISTS mining_payout_reservations_day ON mining_payout_reservations (day)")
+    return db
 
 
 @app.on_event("startup")
@@ -774,9 +795,7 @@ def ensure_no_pending_signed_payout() -> None:
         ).fetchone():
             raise RuntimeError("A signed wallet payout requires recovery.")
     if NETCRAFT_MINING_REWARDS_ENABLED == "true" and NETCRAFT_DB_PATH:
-        with sqlite3.connect(
-            Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro", uri=True, timeout=10
-        ) as db:
+        with open_netcraft_db(timeout=10) as db:
             if db.execute(
                 "SELECT 1 FROM mining_rewards WHERE signed_tx IS NOT NULL AND sent_at IS NULL LIMIT 1"
             ).fetchone():
@@ -886,15 +905,7 @@ def process_one_reward() -> bool:
 def process_one_mining_reward(reward_id: int | None = None) -> bool:
     if NETCRAFT_MINING_REWARDS_ENABLED != "true" or not NETCRAFT_DB_PATH:
         return False
-    with sqlite3.connect(
-        Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=rw",
-        uri=True,
-        timeout=10,
-    ) as db:
-        db.execute("""CREATE TABLE IF NOT EXISTS mining_payout_reservations (
-            reward_id INTEGER NOT NULL, day TEXT NOT NULL, PRIMARY KEY (reward_id, day)
-        )""")
-        db.execute("CREATE INDEX IF NOT EXISTS mining_payout_reservations_day ON mining_payout_reservations (day)")
+    with open_netcraft_db(timeout=10) as db:
         if reward_id is not None:
             existing = db.execute(
                 "SELECT sent_at FROM mining_rewards WHERE id = ?", (reward_id,)
@@ -1033,9 +1044,7 @@ def mina_rewards_sent() -> dict:
                 (BCH_REWARD_CATEGORY,),
             ).fetchone()[0]
         if NETCRAFT_DB_PATH:
-            with sqlite3.connect(
-                Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro", uri=True, timeout=5
-            ) as db:
+            with open_netcraft_db(timeout=5) as db:
                 total += db.execute(
                     "SELECT COUNT(*) FROM mining_rewards WHERE category = ? AND sent_at IS NOT NULL",
                     (BCH_REWARD_CATEGORY,),
