@@ -204,8 +204,8 @@ green pickaxe that reduces breakable block mining time to one quarter. It return
 pickaxe when the wallet disconnects or a balance scan no longer qualifies.
 
 The loading screen shows available download progress and fades after the first
-frame is rendered. Its background and mining-button icon are served by the
-frontend as `/craft-loading.webp` and `/pickaxe.svg`; deploy the updated
+frame is rendered. Its background and touch-button icons are served by the
+frontend as `/craft-loading.webp`, `/pickaxe.svg`, and `/grass-block.svg`; deploy the updated
 frontend alongside the rebuilt client.
 Graphics and runtime errors are reported separately from the server connection, which can
 remain connected even if rendering fails. Check the browser console for the

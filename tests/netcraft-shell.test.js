@@ -10,7 +10,7 @@ test('mining button and browser favicon use the pickaxe artwork', async () => {
   const index = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   const artwork = await readFile(new URL('../public/pickaxe.svg', import.meta.url), 'utf8');
   assert.match(shell, /id="mobile-mine"[^>]*>\s*<img src="\/pickaxe\.svg" alt="" aria-hidden="true">/);
-  assert.match(shell, /id="mobile-build"[^>]*>\s*<img src="\/pickaxe\.svg" alt="" aria-hidden="true">/);
+  assert.match(shell, /id="mobile-build"[^>]*>\s*<img src="\/grass-block\.svg" alt="" aria-hidden="true">/);
   assert.match(index, /rel="icon" href="\/pickaxe\.svg"/);
   assert.match(index, /rel="alternate icon" href="\/pickaxe-192\.png"/);
   assert.match(artwork, /viewBox="0 0 16 16"/);
@@ -330,6 +330,10 @@ test('touch block cycling invokes the game without adding a separate chat interf
   const strip = $('block-scroll-strip');
   strip.listeners.touchstart({ preventDefault() {}, touches: [{ clientY: 100 }] });
   strip.listeners.touchmove({ preventDefault() {}, touches: [{ clientY: 60 }] });
+  assert.equal(calls.length, 0);
+  strip.listeners.touchmove({ preventDefault() {}, touches: [{ clientY: 44 }] });
   assert.deepEqual(calls, [['touch_scroll_items', [1]]]);
+  strip.listeners.touchmove({ preventDefault() {}, touches: [{ clientY: 100 }] });
+  assert.deepEqual(calls.at(-1), ['touch_scroll_items', [-1]]);
   assert.doesNotMatch(shell, /id="mobile-chat"|id="touch-chat"/);
 });
