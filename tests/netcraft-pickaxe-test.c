@@ -37,12 +37,14 @@ int main(void) {
         }
     }
     assert(different_color);
-    const float *head = pixel_at(standard, count, 6, 2);
-    const float *blade = pixel_at(standard, count, 3, 10);
+    const float *head = pixel_at(mina, count, 6, 2);
+    const float *blade = pixel_at(mina, count, 3, 10);
     const float *handle = pixel_at(standard, count, 13, 12);
     assert(head && blade && handle);
-    assert(head[3] > head[2] && head[4] > head[2]);
-    assert(blade[3] > blade[2] && blade[4] > blade[2]);
+    assert(head[3] > head[2] && head[3] > head[4]);
+    assert(blade[3] > blade[2] && blade[3] > blade[4]);
+    const float *regular = pixel_at(standard, count, 6, 2);
+    assert(regular && fabsf(regular[2] - regular[3]) < .1f);
     assert(handle[2] > handle[3] && handle[3] > handle[4]);
     assert(!pixel_at(standard, count, 9, 10));
     for (int i = 0; i < count; i += 3) {

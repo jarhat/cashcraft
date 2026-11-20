@@ -326,6 +326,11 @@ fn open_database(path: &str) -> rusqlite::Result<Connection> {
            id INTEGER PRIMARY KEY, x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL,
            cash_address TEXT NOT NULL, category TEXT NOT NULL, signed_tx TEXT, txid TEXT, sent_at TEXT, player_name TEXT,
            UNIQUE(x,y,z)
+         );
+         CREATE TABLE IF NOT EXISTS mina_mining_progress (
+           cash_address TEXT NOT NULL, category TEXT NOT NULL,
+           blocks INTEGER NOT NULL CHECK(blocks >= 0 AND blocks < 10),
+           PRIMARY KEY(cash_address, category)
          );",
     )?;
     let columns = {
@@ -595,10 +600,29 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
                 player.reward_address.as_ref(),
                 server.reward_categories.get(&default),
             ) {
-                if transaction.execute(
-                    "INSERT OR IGNORE INTO mining_rewards (x,y,z,cash_address,category,player_name) VALUES (?1,?2,?3,?4,?5,?6)",
-                    params![x, y, z, address, category, player.name],
-                )? > 0 {
+                let mut qualifies = true;
+                if default == MINA_ORE {
+                    transaction.execute(
+                        "INSERT INTO mina_mining_progress (cash_address,category,blocks) VALUES (?1,?2,0)
+                         ON CONFLICT(cash_address,category) DO NOTHING",
+                        params![address, category],
+                    )?;
+                    let blocks: i64 = transaction.query_row(
+                        "SELECT blocks FROM mina_mining_progress WHERE cash_address=?1 AND category=?2",
+                        params![address, category],
+                        |row| row.get(0),
+                    )?;
+                    qualifies = blocks == 9;
+                    transaction.execute(
+                        "UPDATE mina_mining_progress SET blocks=?3 WHERE cash_address=?1 AND category=?2",
+                        params![address, category, if qualifies { 0 } else { blocks + 1 }],
+                    )?;
+                }
+                if qualifies {
+                    transaction.execute(
+                        "INSERT INTO mining_rewards (x,y,z,cash_address,category,player_name) VALUES (?1,?2,?3,?4,?5,?6)",
+                        params![x, y, z, address, category, player.name],
+                    )?;
                     reward_id = Some(transaction.last_insert_rowid());
                 }
             }
@@ -1236,16 +1260,20 @@ mod tests {
         move_to(&server, ores[1]);
         block_edit(&server, 1, x, y, z, 0).unwrap();
         let state = server.state.lock().unwrap();
-        let (count, recipient): (i64, String) = state
+        let count: i64 = state
+            .db
+            .query_row("SELECT count(*) FROM mining_rewards", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+        let progress: i64 = state
             .db
             .query_row(
-                "SELECT count(*), cash_address FROM mining_rewards",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
+                "SELECT blocks FROM mina_mining_progress WHERE cash_address=?1",
+                [address],
+                |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(count, 1);
-        assert_eq!(recipient, address);
+        assert_eq!(progress, 1);
         assert!(state.players.contains_key(&1));
     }
 
@@ -1265,15 +1293,22 @@ mod tests {
             "unexpected ore density: {}",
             ores.len()
         );
-        let (x, y, z) = ores[0];
-        move_to(&server, ores[0]);
+        for &(x, y, z) in &ores[..9] {
+            move_to(&server, (x, y, z));
+            block_edit(&server, 1, x, y, z, 0).unwrap();
+            assert!(wakes.try_recv().is_err());
+        }
+        handle_command(&server, 1, "W,").unwrap();
+        handle_command(&server, 1, &format!("W,{address}")).unwrap();
+        let (x, y, z) = ores[9];
+        move_to(&server, ores[9]);
         block_edit(&server, 1, x, y, z, 0).unwrap();
         let player_messages = _first.try_iter().flatten().collect::<Vec<_>>();
         let player_messages = String::from_utf8(player_messages).unwrap();
         assert!(player_messages.contains(&format!("Q,{address}\n")));
         assert!(wakes.try_recv().is_ok());
         let update = String::from_utf8(second.try_recv().unwrap()).unwrap();
-        assert!(update.contains(&format!("B,0,0,{x},{y},{z},0\n")));
+        assert!(update.contains("B,0,0,"));
         block_edit(&server, 1, x, y, z, MINA_ORE).unwrap();
         block_edit(&server, 1, x, y, z, 0).unwrap();
         assert!(wakes.try_recv().is_err());
@@ -1305,10 +1340,22 @@ mod tests {
         let address = "bitcoincash:zqyx49mu0kkn9ftfj6hje6g2wfer34yfnqnpwfwhlf";
         handle_command(&server, 1, &format!("W,{address}")).unwrap();
         let ores = ore_positions(&server);
-        assert!(ores.len() >= 4);
-        for &(x, y, z) in &ores[..4] {
+        assert!(ores.len() >= 20);
+        for (index, &(x, y, z)) in ores[..20].iter().enumerate() {
             move_to(&server, (x, y, z));
             block_edit(&server, 1, x, y, z, 0).unwrap();
+            let count: i64 = server
+                .state
+                .lock()
+                .unwrap()
+                .db
+                .query_row(
+                    "SELECT count(*) FROM mining_rewards WHERE cash_address = ?1",
+                    [address],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(count, ((index + 1) / 10) as i64);
         }
         let state = server.state.lock().unwrap();
         let count: i64 = state
@@ -1319,7 +1366,61 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(count, 4);
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn mina_progress_is_isolated_by_address_and_survives_database_reopen() {
+        let path = env::temp_dir().join(format!(
+            "netcraft-mina-progress-{}-{}.sqlite3",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let (server, _, _) = setup();
+        server.state.lock().unwrap().db = open_database(path.to_str().unwrap()).unwrap();
+        let a = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz";
+        let b = "bitcoincash:zqyx49mu0kkn9ftfj6hje6g2wfer34yfnqnpwfwhlf";
+        let ores = ore_positions(&server);
+        assert!(ores.len() >= 11);
+        handle_command(&server, 1, &format!("W,{a}")).unwrap();
+        for &(x, y, z) in &ores[..9] {
+            move_to(&server, (x, y, z));
+            block_edit(&server, 1, x, y, z, 0).unwrap();
+        }
+        handle_command(&server, 1, &format!("W,{b}")).unwrap();
+        let (x, y, z) = ores[9];
+        move_to(&server, ores[9]);
+        block_edit(&server, 1, x, y, z, 0).unwrap();
+        server.state.lock().unwrap().db = open_database(path.to_str().unwrap()).unwrap();
+        handle_command(&server, 1, &format!("W,{a}")).unwrap();
+        let (x, y, z) = ores[10];
+        move_to(&server, ores[10]);
+        block_edit(&server, 1, x, y, z, 0).unwrap();
+        let state = server.state.lock().unwrap();
+        let rewards: i64 = state
+            .db
+            .query_row(
+                "SELECT count(*) FROM mining_rewards WHERE cash_address=?1",
+                [a],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let progress: i64 = state
+            .db
+            .query_row(
+                "SELECT blocks FROM mina_mining_progress WHERE cash_address=?1",
+                [b],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(rewards, 1);
+        assert_eq!(progress, 1);
+        drop(state);
+        drop(server);
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

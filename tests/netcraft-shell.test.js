@@ -10,6 +10,7 @@ test('mining button and browser favicon use the pickaxe artwork', async () => {
   const index = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   const artwork = await readFile(new URL('../public/pickaxe.svg', import.meta.url), 'utf8');
   assert.match(shell, /id="mobile-mine"[^>]*>\s*<img src="\/pickaxe\.svg" alt="" aria-hidden="true">/);
+  assert.match(shell, /id="mobile-build"[^>]*>\s*<img src="\/pickaxe\.svg" alt="" aria-hidden="true">/);
   assert.match(index, /rel="icon" href="\/pickaxe\.svg"/);
   assert.match(index, /rel="alternate icon" href="\/pickaxe-192\.png"/);
   assert.match(artwork, /viewBox="0 0 16 16"/);
@@ -238,7 +239,7 @@ test('touch fallback tracks the initiating finger and releases held mining', () 
   const context = { document, window, Date, Math, console };
   runInNewContext(script, context);
   const calls = [];
-  context.Module._touch_set_move = context.Module._touch_set_mine = true;
+  context.Module._touch_set_move = context.Module._touch_set_mine = context.Module._touch_set_build = true;
   context.Module.ccall = (name, _result, _types, args) => calls.push([name, Array.from(args)]);
   const event = (id, x, y) => ({
     cancelable: true, preventDefault() {},
@@ -252,6 +253,12 @@ test('touch fallback tracks the initiating finger and releases held mining', () 
   $('mobile-mine').listeners.touchend(event(4, 0, 0));
   $('mobile-mine').listeners.touchend(event(3, 0, 0));
   assert.deepEqual(calls.slice(-2), [['touch_set_mine', [1]], ['touch_set_mine', [0]]]);
+  $('mobile-build').listeners.touchstart(event(5, 0, 0));
+  assert.deepEqual(calls.at(-1), ['touch_set_build', [1]]);
+  $('mobile-build').listeners.touchend(event(6, 0, 0));
+  assert.deepEqual(calls.at(-1), ['touch_set_build', [1]]);
+  $('mobile-build').listeners.touchend(event(5, 0, 0));
+  assert.deepEqual(calls.at(-1), ['touch_set_build', [0]]);
   $('mobile-stick').listeners.touchcancel(event(1, 60, 20));
   assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);
 });

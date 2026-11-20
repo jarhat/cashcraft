@@ -1428,18 +1428,14 @@ async function refreshBalances({ quiet = false } = {}) {
       if (walletReady && manager === scanManager) {
         const mina = utxos.reduce((sum, utxo) => utxo.token &&
           String(utxo.token.category).toLowerCase() === rewardCategory
-          ? sum + BigInt(utxo.token.amount || 0) : sum, 0n).toString();
-        $('mina-balance').textContent = mina;
-        $('notification-mina').textContent = mina;
-        const addressMina = utxos.reduce((sum, utxo) => utxo.pathIndex === 0 &&
-          utxo.addressIndex === 0 && utxo.token &&
-          String(utxo.token.category).toLowerCase() === rewardCategory
           ? sum + BigInt(utxo.token.amount || 0) : sum, 0n);
+        $('mina-balance').textContent = mina.toString();
+        $('notification-mina').textContent = mina.toString();
         const rewardAddress = registeredRewardAddress;
         if (!walletReady || manager !== scanManager || registeredRewardAddress !== rewardAddress) {
           throw new Error('Wallet or reward address changed during the balance scan.');
         }
-        minaPickaxe = !!rewardAddress && addressMina >= 1n;
+        minaPickaxe = !!rewardAddress && mina >= 2n;
         updateGameRewardAddress(registeredRewardAddress);
         notifyTokenReceipts(utxos);
       }

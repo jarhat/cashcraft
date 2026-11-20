@@ -10,7 +10,7 @@ import { normalizeUtxo, utxoKey } from '../src/utils.js';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
-test('MINA pickaxe requires a connected registered address holding at least one MINA', async () => {
+test('MINA pickaxe requires a connected registered wallet holding at least two MINA', async () => {
   const start = source.indexOf('async function refreshBalances(');
   const end = source.indexOf('\nfunction validateRecipient', start);
   const elements = new Map();
@@ -32,11 +32,13 @@ test('MINA pickaxe requires a connected registered address holding at least one 
   const token = (category, amount, pathIndex = 0, addressIndex = 0) =>
     ({ satoshis: 1, pathIndex, addressIndex, token: { category, amount } });
   for (const [utxos, expected] of [
-    [[token('mina', 1), token('other', 100)], true],
-    [[token('MINA', 1)], true],
+    [[token('mina', 1), token('other', 100)], false],
+    [[token('MINA', 1)], false],
+    [[token('MINA', 1), token('mina', 1)], true],
     [[token('MINA', 0)], false],
-    [[token('mina', 0), token('mina', 10, 1)], false],
-    [[token('mina', 0), token('mina', 10, 0, 1)], false],
+    [[token('mina', 1), token('mina', 1, 1)], true],
+    [[token('mina', 1), token('mina', 1, 0, 1)], true],
+    [[token('mina', 0), token('mina', 1, 1)], false],
   ]) {
     context.nextUtxos = utxos;
     await context.refreshBalances({ quiet: true });
