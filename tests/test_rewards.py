@@ -40,6 +40,40 @@ class RewardTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 backend.check_balance()
 
+    def test_payout_balance_reports_errors_and_satoshis(self):
+        client = TestClient(backend.app)
+        with patch.object(backend, "check_balance", return_value=12345):
+            self.assertEqual(client.get("/api/payout-balance").json(), {"satoshis": "12345"})
+        with patch.object(backend, "check_balance", side_effect=RuntimeError("offline")):
+            self.assertEqual(client.get("/api/payout-balance").status_code, 503)
+
+    def test_mining_ranking_counts_only_sent_current_category_and_legacy_rows(self):
+        path = Path(self.tmp.name) / "netcraft.sqlite3"
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE mining_rewards (category TEXT, sent_at TEXT, player_name TEXT)")
+            db.executemany("INSERT INTO mining_rewards VALUES (?, ?, ?)", [
+                ("b" * 64, "now", "Alice"), ("b" * 64, "now", "Alice"),
+                ("b" * 64, "now", "Bob"), ("b" * 64, "now", None),
+                ("b" * 64, None, "Bob"), ("a" * 64, "now", "Bob"),
+            ])
+        client = TestClient(backend.app)
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path)):
+            self.assertEqual(client.get("/api/mina-ranking").json(), {"players": [
+                {"name": "Alice", "rewards": 2}, {"name": "Bob", "rewards": 1},
+                {"name": "Unknown player", "rewards": 1},
+            ]})
+        legacy = Path(self.tmp.name) / "legacy.sqlite3"
+        with sqlite3.connect(legacy) as db:
+            db.execute("CREATE TABLE mining_rewards (category TEXT, sent_at TEXT)")
+            db.execute("INSERT INTO mining_rewards VALUES (?, ?)", ("b" * 64, "now"))
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(legacy)):
+            self.assertEqual(client.get("/api/mina-ranking").json(),
+                             {"players": [{"name": "Unknown player", "rewards": 1}]})
+        missing = Path(self.tmp.name) / "missing.sqlite3"
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(missing)):
+            self.assertEqual(client.get("/api/mina-ranking").status_code, 503)
+            self.assertFalse(missing.exists())
+
     def test_craft_social_preview_uses_artwork_without_a_donation_qr(self):
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
         client = TestClient(backend.app)

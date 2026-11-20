@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchChainStatus, fetchMinaRewardsSent, setupChainTicker } from '../src/chain-ticker.js';
+import { fetchChainStatus, fetchMinaRewardsSent, fetchPayoutBalance, setupChainTicker } from '../src/chain-ticker.js';
 
 const status = {
   network: 'mainnet', blocks: 800000, headers: 800002,
@@ -25,6 +25,15 @@ test('MINA totals require a nonnegative integer string', async (t) => {
   await assert.rejects(fetchMinaRewardsSent(), /Invalid MINA/);
 });
 
+test('payout balance preserves exact satoshis and rejects invalid values', async (t) => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ satoshis: '100000001' }) });
+  assert.equal(await fetchPayoutBalance(), '1.00000001 BCH');
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ satoshis: '-1' }) });
+  await assert.rejects(fetchPayoutBalance(), /Invalid payout balance/);
+});
+
 test('chain ticker renders node and payout data independently', async (t) => {
   const original = { fetch: globalThis.fetch, document: globalThis.document, setInterval: globalThis.setInterval };
   t.after(() => Object.assign(globalThis, original));
@@ -40,7 +49,7 @@ test('chain ticker renders node and payout data independently', async (t) => {
     createElement: () => new Element(),
     addEventListener(_type, callback) { visibility = callback; },
   };
-  globalThis.fetch = async (url) => ({ ok: true, json: async () => url.includes('mina-rewards') ? { sent: '1234' } : status });
+  globalThis.fetch = async (url) => ({ ok: true, json: async () => url.includes('mina-rewards') ? { sent: '1234' } : url.includes('payout-balance') ? { satoshis: '120000000' } : status });
   globalThis.setInterval = (callback, delay) => { refresh = callback; interval = delay; };
   const container = new Element();
   setupChainTicker(container, { warn() {} });
@@ -53,6 +62,7 @@ test('chain ticker renders node and payout data independently', async (t) => {
   assert.equal(first.children[5].children[0].textContent, 'Headers');
   assert.equal(first.children[6].children[0].textContent, 'MINA rewards sent');
   assert.equal(first.children[6].children[1].textContent, (1234).toLocaleString());
+  assert.equal(first.children[7].children[1].textContent, '1.20000000 BCH');
   assert.equal(duplicate.attributes['aria-hidden'], 'true');
   globalThis.fetch = async () => ({ ok: false, status: 503 });
   await refresh();

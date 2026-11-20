@@ -2926,6 +2926,15 @@ void parse_command(const char *buffer, bool forward) {
     }
 }
 
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE void touch_send_chat(const char *text) {
+    if (!text || !*text || strlen(text) >= MAX_TEXT_LENGTH ||
+        strchr(text, '\n') || strchr(text, '\r')) return;
+    if (text[0] == '/') parse_command(text, true);
+    else client_talk(text);
+}
+#endif
+
 void on_light() {
     State *s = &g->players->state;
     int hx, hy, hz;
@@ -3357,6 +3366,9 @@ void on_file_drop(GLFWwindow *window, int count, const char **paths) {
 #ifdef __EMSCRIPTEN__
 EMSCRIPTEN_KEEPALIVE void touch_next_item(void) {
     on_key(g->window, CRAFT_KEY_ITEM_NEXT, 0, GLFW_PRESS, 0);
+}
+EMSCRIPTEN_KEEPALIVE void touch_prev_item(void) {
+    on_key(g->window, CRAFT_KEY_ITEM_PREV, 0, GLFW_PRESS, 0);
 }
 #endif
 

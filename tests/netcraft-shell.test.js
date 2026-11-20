@@ -176,38 +176,6 @@ test('touch controls recover from unavailable pointer capture and release outsid
       getBoundingClientRect() { return { left: 0, top: 0, width: 100 }; },
     });
 
-    test('touch fallback tracks the initiating finger and releases held mining', () => {
-      const elements = new Map();
-      const $ = (id) => {
-        if (!elements.has(id)) elements.set(id, {
-          style: {}, value: '', listeners: {}, classList: { add() {} },
-          addEventListener(type, fn) { this.listeners[type] = fn; },
-          setAttribute() {}, getBoundingClientRect() { return { left: 10, top: 20, width: 100, height: 200 }; },
-        });
-        return elements.get(id);
-      };
-      const window = { addEventListener() {} };
-      const document = { getElementById: $, querySelector: () => $('controls'), addEventListener() {} };
-      const context = { document, window, Date, Math, console };
-      runInNewContext(script, context);
-      const calls = [];
-      context.Module._touch_set_move = context.Module._touch_set_mine = true;
-      context.Module.ccall = (name, _result, _types, args) => calls.push([name, Array.from(args)]);
-      const event = (id, x, y) => ({
-        cancelable: true, preventDefault() {},
-        changedTouches: [{ identifier: id, clientX: x, clientY: y }],
-      });
-      $('mobile-stick').listeners.touchstart(event(1, 60, 120));
-      $('mobile-stick').listeners.touchmove(event(2, 60, 20));
-      $('mobile-stick').listeners.touchmove(event(1, 60, 20));
-      assert.deepEqual(calls.at(-1), ['touch_set_move', [0, -1]]);
-      $('mobile-mine').listeners.touchstart(event(3, 0, 0));
-      $('mobile-mine').listeners.touchend(event(4, 0, 0));
-      $('mobile-mine').listeners.touchend(event(3, 0, 0));
-      assert.deepEqual(calls.slice(-2), [['touch_set_mine', [1]], ['touch_set_mine', [0]]]);
-      $('mobile-stick').listeners.touchcancel(event(1, 60, 20));
-      assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);
-    });
     return elements.get(id);
   };
   const document = { getElementById: $, querySelector: () => $('controls'), addEventListener() {} };
@@ -226,12 +194,75 @@ test('touch controls recover from unavailable pointer capture and release outsid
   $('mobile-mine').listeners.pointerdown({ pointerId: 8 });
   windowListeners.blur.forEach((fn) => fn());
   $('mobile-stick').listeners.pointerdown({ pointerId: 9, clientX: 100, clientY: 50 });
-  windowListeners.pointermove.forEach((fn) => fn({ pointerId: 9, clientX: 50, clientY: 0 }));
+  assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);
+  windowListeners.pointermove.forEach((fn) => fn({ pointerId: 9, clientX: 100, clientY: 0 }));
   assert.deepEqual(calls.at(-1), ['touch_set_move', [0, -1]]);
-  windowListeners.pointermove.forEach((fn) => fn({ pointerId: 9, clientX: 50, clientY: 100 }));
+  windowListeners.pointermove.forEach((fn) => fn({ pointerId: 9, clientX: 100, clientY: 100 }));
   assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 1]]);
   windowListeners.pointercancel.forEach((fn) => fn({ pointerId: 9 }));
   assert.deepEqual(calls.filter(([name]) => name === 'touch_set_mine').map(([, args]) => args[0]), [1, 0, 1, 0, 0]);
   assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);
   assert.equal(warnings.length, 3);
+});
+
+test('touch fallback tracks the initiating finger and releases held mining', () => {
+  const elements = new Map();
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      style: {}, value: '', listeners: {}, classList: { add() {} },
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      setAttribute() {}, getBoundingClientRect() { return { left: 10, top: 20, width: 100, height: 200 }; },
+    });
+    return elements.get(id);
+  };
+  const window = { addEventListener() {} };
+  const document = { getElementById: $, querySelector: () => $('controls'), addEventListener() {} };
+  const context = { document, window, Date, Math, console };
+  runInNewContext(script, context);
+  const calls = [];
+  context.Module._touch_set_move = context.Module._touch_set_mine = true;
+  context.Module.ccall = (name, _result, _types, args) => calls.push([name, Array.from(args)]);
+  const event = (id, x, y) => ({
+    cancelable: true, preventDefault() {},
+    changedTouches: [{ identifier: id, clientX: x, clientY: y }],
+  });
+  $('mobile-stick').listeners.touchstart(event(1, 60, 120));
+  $('mobile-stick').listeners.touchmove(event(2, 60, 20));
+  $('mobile-stick').listeners.touchmove(event(1, 60, 20));
+  assert.deepEqual(calls.at(-1), ['touch_set_move', [0, -1]]);
+  $('mobile-mine').listeners.touchstart(event(3, 0, 0));
+  $('mobile-mine').listeners.touchend(event(4, 0, 0));
+  $('mobile-mine').listeners.touchend(event(3, 0, 0));
+  assert.deepEqual(calls.slice(-2), [['touch_set_mine', [1]], ['touch_set_mine', [0]]]);
+  $('mobile-stick').listeners.touchcancel(event(1, 60, 20));
+  assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);
+});
+
+test('touch block cycling and chat invoke the game with the entered message', () => {
+  const elements = new Map();
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      listeners: {}, style: {}, value: '', classList: { add() {} },
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      setAttribute() {}, focus() { this.focused = true; },
+    });
+    return elements.get(id);
+  };
+  const document = { getElementById: $, querySelector: () => $('controls'), addEventListener() {} };
+  const window = { PointerEvent: function() {}, addEventListener() {} };
+  const context = { document, window, Date, Math, console };
+  runInNewContext(script, context);
+  const calls = [];
+  context.Module._touch_next_item = context.Module._touch_prev_item = context.Module._touch_send_chat = true;
+  context.Module.ccall = (name, _result, _types, args) => calls.push([name, Array.from(args)]);
+  $('mobile-next').listeners.pointerdown({});
+  $('mobile-prev').listeners.pointerdown({});
+  $('mobile-chat').listeners.click();
+  assert.equal($('touch-chat-input').focused, true);
+  $('touch-chat-input').value = ' /nick Alice ';
+  $('touch-chat').listeners.submit({ preventDefault() {} });
+  assert.deepEqual(calls, [
+    ['touch_next_item', []], ['touch_prev_item', []], ['touch_send_chat', ['/nick Alice']],
+  ]);
+  assert.equal($('touch-chat').hidden, true);
 });
