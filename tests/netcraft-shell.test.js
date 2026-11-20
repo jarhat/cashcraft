@@ -13,6 +13,7 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
       listeners: {}, style: {}, value: '', hidden: false,
       addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute(name, value) { this[name] = value; },
+      classList: { add(name) { this.name = name; } },
       setPointerCapture() {},
       getBoundingClientRect() { return { left: 0, top: 0, width: 100 }; },
     });
@@ -51,8 +52,16 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
   assert.match($('game-error').textContent, /Connecting to game server/);
   assert.equal($('connection-status').textContent, 'Connecting');
   assert.equal($('connection-status').hidden, false);
+  context.Module.setStatus.last.time = 0;
+  context.Module.setStatus('Downloading... (25/100)');
+  assert.equal($('loading-progress').hidden, false);
+  assert.equal($('loading-progress').value, 25);
+  assert.equal($('loading-progress').max, 100);
+  context.Module.setStatus('Preparing world');
+  assert.equal($('loading-progress').hidden, true);
   context.Module.setGameReady();
-  assert.equal($('loading-screen').hidden, true);
+  assert.equal($('loading-screen').classList.name, 'is-ready');
+  assert.equal($('loading-screen')['aria-hidden'], 'true');
   context.Module.setConnectionStatus('');
   assert.equal($('connection-status').hidden, true);
 });
@@ -63,6 +72,7 @@ test('NetCraft reports renderer errors separately from server connection state',
     if (!elements.has(id)) elements.set(id, {
       style: {}, value: '', hidden: false,
       addEventListener() {}, setAttribute() {},
+      classList: { add() {} },
     });
     return elements.get(id);
   };

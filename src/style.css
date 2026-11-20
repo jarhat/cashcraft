@@ -3027,6 +3027,9 @@ body::before { content: none; display: none; }
 .game-switcher[hidden], #game-pk2[hidden] { display: none; }
 .game-switcher [aria-pressed="true"] { border-color: var(--ice); color: var(--ice); }
 .game-stage { position: relative; overflow: hidden; border: 1px solid var(--glass-border); border-radius: 12px; background: #080e17; -webkit-touch-callout: none; }
+.game-wallet-prompt { position: absolute; z-index: 2; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; width: min(90%, 520px); padding: 10px 12px; border: 1px solid #43ed94; border-radius: 12px; background: rgba(3, 35, 22, .94); color: #fff; text-align: center; font-size: .85rem; }
+.game-wallet-prompt[hidden] { display: none; }
+.game-wallet-prompt button { min-height: 36px; padding: 6px 12px; border: 1px solid #87ffc1; border-radius: 8px; background: #087c45; color: #fff; cursor: pointer; font: inherit; font-weight: 700; }
 .game-wallet-actions { position: absolute; top: 12px; left: 12px; z-index: 1; }
 .game-wallet-actions .quick-action { min-height: 44px; }
 @media (max-width: 520px) {
@@ -3045,9 +3048,10 @@ body::before { content: none; display: none; }
 .game-dialog.is-fullscreen #game-close, .game-dialog.is-fullscreen .game-share { display: none; }
 .game-share svg { width: 20px; height: 20px; }
 .game-controls button { position: relative; }
-#game-notifications:has(#game-notification-indicator:not([hidden])) {
-  background: #087c45; border-color: #43ed94;
+#game-notifications {
+  background: #087c45; border-color: #87ffc1; box-shadow: 0 0 0 2px rgb(67 237 148 / 35%);
 }
+#game-notifications:has(#game-notification-indicator:not([hidden])) { box-shadow: 0 0 0 3px #43ed94; }
 body.cashcraft-playing .topbar #notifications-toggle { display: none; }
 .topbar { background: var(--page-base); isolation: isolate; }
 #browser-wallet-section { margin: 14px 0; }
@@ -3088,3 +3092,4 @@ body:not(.wallet-connected) .dashboard { padding-bottom: 0; }
   background: color-mix(in srgb, var(--page-base) 90%, white);
 }
 .topbar .wizard-toggle::after { content: none; }
+.topbar #wizard-toggle { border-color: #43ed94; box-shadow: 0 0 0 2px rgb(67 237 148 / 35%); }

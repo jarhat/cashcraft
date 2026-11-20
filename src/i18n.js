@@ -790,6 +790,10 @@ Object.assign(spanish, wikiTranslations.es);
 Object.assign(french, wikiTranslations.fr);
 Object.assign(german, wikiTranslations.de);
 Object.assign(spanish, {
+  'No wallet?': '¿Sin cartera?',
+  'No wallet? Open wizard help': '¿Sin cartera? Abrir ayuda del asistente',
+  'Connect or create a wallet before mining to receive MINA rewards.': 'Conecta o crea una cartera antes de minar para recibir recompensas MINA.',
+  'Connect or create wallet': 'Conectar o crear cartera',
   'One-time links are deleted on first open, or after 1 week if unused.': 'Los enlaces de un solo uso se eliminan al abrirse o después de una semana si no se usan.',
   'One-time link: it is deleted after the first time it is opened or after 1 week.': 'Enlace de un solo uso: se elimina al abrirse o después de una semana.',
   'PAYMENT REQUEST': 'SOLICITUD DE PAGO',
@@ -801,6 +805,10 @@ Object.assign(spanish, {
   'Game build unavailable. Check the server mount.': 'Juego no disponible. Comprueba el montaje del servidor.',
 });
 Object.assign(french, {
+  'No wallet?': 'Pas de portefeuille ?',
+  'No wallet? Open wizard help': 'Pas de portefeuille ? Ouvrir l’aide de l’assistant',
+  'Connect or create a wallet before mining to receive MINA rewards.': 'Connectez ou créez un portefeuille avant de miner pour recevoir des récompenses MINA.',
+  'Connect or create wallet': 'Connecter ou créer un portefeuille',
   'One-time links are deleted on first open, or after 1 week if unused.': 'Les liens à usage unique sont supprimés à leur première ouverture ou après une semaine sans utilisation.',
   'One-time link: it is deleted after the first time it is opened or after 1 week.': 'Lien à usage unique : supprimé à la première ouverture ou après une semaine.',
   'PAYMENT REQUEST': 'DEMANDE DE PAIEMENT',
@@ -812,6 +820,10 @@ Object.assign(french, {
   'Game build unavailable. Check the server mount.': 'Jeu indisponible. Vérifiez le montage du serveur.',
 });
 Object.assign(german, {
+  'No wallet?': 'Keine Wallet?',
+  'No wallet? Open wizard help': 'Keine Wallet? Assistentenhilfe öffnen',
+  'Connect or create a wallet before mining to receive MINA rewards.': 'Verbinde oder erstelle vor dem Mining eine Wallet, um MINA-Belohnungen zu erhalten.',
+  'Connect or create wallet': 'Wallet verbinden oder erstellen',
   'One-time links are deleted on first open, or after 1 week if unused.': 'Einmal-Links werden beim ersten Öffnen oder nach einer Woche ohne Nutzung gelöscht.',
   'One-time link: it is deleted after the first time it is opened or after 1 week.': 'Einmal-Link: Wird beim ersten Öffnen oder nach einer Woche gelöscht.',
   'PAYMENT REQUEST': 'ZAHLUNGSANFORDERUNG',

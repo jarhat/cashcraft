@@ -13,10 +13,13 @@
         overflow: hidden;
       }
       body > a, #spinner, #status, #progress, #output { display: none !important; }
-      #loading-screen { display: grid !important; position: fixed; inset: 0; z-index: 40; place-content: center; justify-items: center; gap: 18px; background: linear-gradient(#07151077, #071510bb), url('/craft-preview.png') center / cover no-repeat #101e1b; color: #fff; font: 600 16px system-ui, sans-serif; text-align: center; text-shadow: 0 2px 6px #000; }
+      #loading-screen { display: grid !important; position: fixed; inset: 0; z-index: 40; place-content: center; justify-items: center; gap: 18px; background: linear-gradient(#07151077, #071510bb), url('/craft-loading.webp') center / cover no-repeat #101e1b; color: #fff; font: 600 16px system-ui, sans-serif; text-align: center; text-shadow: 0 2px 6px #000; transition: opacity .3s ease, visibility 0s linear .3s; }
+      #loading-screen.is-ready { opacity: 0; visibility: hidden; pointer-events: none; }
       #loading-screen[hidden] { display: none !important; }
       .loading-circle { width: 48px; height: 48px; border: 5px solid #ffffff66; border-top-color: #fff; border-radius: 50%; animation: rotation .8s linear infinite; }
-      @media (prefers-reduced-motion: reduce) { .loading-circle { animation: none; } }
+      #loading-progress { width: min(240px, 70vw); height: 6px; accent-color: #8ce2a8; }
+      #loading-progress[hidden] { display: none; }
+      @media (prefers-reduced-motion: reduce) { .loading-circle { animation: none; } #loading-screen { transition: none; } }
 
       .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
       div.emscripten { text-align: center; }      
@@ -1244,6 +1247,7 @@
     <div id="loading-screen" role="status" aria-live="polite">
       <div class="loading-circle" aria-hidden="true"></div>
       <span id="loading-message">Preparing your world...</span>
+      <progress id="loading-progress" aria-label="Game download progress" hidden></progress>
     </div>
     <div id="connection-status" role="status" hidden></div>
     <div id="game-error" role="alert" hidden></div>
@@ -1289,7 +1293,9 @@
         },
         setGameReady: function() {
           Module.gameReady = true;
-          document.getElementById('loading-screen').hidden = true;
+          var loading = document.getElementById('loading-screen');
+          loading.setAttribute('aria-hidden', 'true');
+          loading.classList.add('is-ready');
         },
         onAbort: function(reason) {
           Module.reportGameError('Game stopped: ' + String(reason).slice(0, 200) + '. Reload the game.');
@@ -1330,6 +1336,7 @@
           return canvas;
         })(),
         setStatus: function(text) {
+          var loadingProgress = document.getElementById('loading-progress');
           if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
           if (text === Module.setStatus.last.text) return;
           var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
@@ -1342,10 +1349,14 @@
             progressElement.max = parseInt(m[4])*100;
             progressElement.hidden = false;
             spinnerElement.hidden = false;
+            loadingProgress.value = Number(m[2]);
+            loadingProgress.max = Number(m[4]);
+            loadingProgress.hidden = false;
           } else {
             progressElement.value = null;
             progressElement.max = null;
             progressElement.hidden = true;
+            loadingProgress.hidden = true;
             if (!text) spinnerElement.style.display = 'none';
           }
           statusElement.textContent = text;

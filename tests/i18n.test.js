@@ -99,6 +99,30 @@ test('landing privacy message is translated in each supported language', () => {
   }
 });
 
+test('wallet wizard and mining prompt follow language changes', () => {
+  const text = { nodeType: 3, nodeValue: 'No wallet?', parentElement: { tagName: 'SPAN' } };
+  const attrs = new Map([['aria-label', 'No wallet? Open wizard help']]);
+  const element = {
+    nodeType: 1, childNodes: [text],
+    hasAttribute(name) { return attrs.has(name); },
+    getAttribute(name) { return attrs.get(name); },
+    setAttribute(name, value) { attrs.set(name, value); },
+  };
+  document.body.childNodes = [element];
+  for (const language of ['es', 'fr', 'de']) {
+    setLanguage(language);
+    assert.equal(text.nodeValue, translate('No wallet?'));
+    assert.equal(attrs.get('aria-label'), translate('No wallet? Open wizard help'));
+    assert.notEqual(translate('Connect or create a wallet before mining to receive MINA rewards.'),
+      'Connect or create a wallet before mining to receive MINA rewards.');
+    assert.notEqual(translate('Connect or create wallet'), 'Connect or create wallet');
+  }
+  setLanguage('en');
+  assert.equal(text.nodeValue, 'No wallet?');
+  assert.equal(attrs.get('aria-label'), 'No wallet? Open wizard help');
+  document.body.childNodes = [];
+});
+
 test('unsupported saved languages and unknown strings fall back to English', () => {
   setLanguage('xx');
   assert.equal(document.documentElement.lang, 'en');

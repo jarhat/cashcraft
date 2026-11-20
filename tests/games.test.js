@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { encodeCashAddress } from '@bitauth/libauth';
+import { hash160 } from '@cashscript/utils';
 import { setupGames } from '../src/games.js';
+import { BrowserWallet } from '../src/browser-wallet.js';
 
 test('game buttons minimize and restore without unloading the active game', async (t) => {
   const originalFetch = globalThis.fetch;
@@ -22,8 +25,9 @@ test('game buttons minimize and restore without unloading the active game', asyn
     return elements.get(id);
   };
   let url;
-  globalThis.fetch = async (target) => {
+  globalThis.fetch = async (target, options) => {
     url = target;
+    assert.equal(options.cache, 'no-cache');
     return { ok: true, headers: { get: () => 'text/html' }, text: async () => '<html>game</html>' };
   };
   const documentListeners = {};
@@ -64,6 +68,11 @@ test('game buttons minimize and restore without unloading the active game', asyn
   assert.equal(url, '/games/netcraft/craftw.html');
   assert.equal($('game-frame').src, url);
   assert.equal($('game-frame').title, 'CashCraft');
+  assert.equal($('game-wallet-prompt').hidden, false);
+  $('game-notifications').click = $('game-notifications').listeners.click;
+  $('game-wallet-prompt-connect').listeners.click();
+  assert.equal($('browser-wallet-section').open, true);
+  assert.equal(wallet, 2);
   $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); };
   await $('game-fullscreen').listeners.click();
   await $('game-close').listeners.click();
@@ -78,6 +87,8 @@ test('game buttons minimize and restore without unloading the active game', asyn
   assert.equal($('top-send').parentNode, $('game-wallet-actions'));
   assert.equal($('game-frame').src, url);
   address = 'bitcoincash:ztest';
+  $('game-frame').listeners.load();
+  assert.equal($('game-wallet-prompt').hidden, true);
   let notifications = 0;
   $('notifications-toggle').click = () => { notifications++; };
   await $('game-notifications').listeners.click();
@@ -88,6 +99,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   $('game-restore').listeners.click();
   await $('game-pk2').listeners.click();
   assert.equal(url, '/games/pk2/index.html');
+  assert.equal($('game-wallet-prompt').hidden, true);
   await $('switch-netcraft').listeners.click();
   assert.equal($('game-frame').src, '/games/netcraft/craftw.html');
   assert.equal($('switch-netcraft')['aria-pressed'], 'true');
@@ -136,22 +148,31 @@ test('NetCraft receives the connected token address when launched', async (t) =>
     return elements.get(id);
   };
   globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
-  let address = 'bitcoincash:ztest';
+  const browserWallet = new BrowserWallet('abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
+  t.after(() => browserWallet.destroy());
+  const browserAddress = encodeCashAddress({
+    prefix: 'bitcoincash', type: 'p2pkhWithTokens', payload: hash160(browserWallet.getPubkey(0, 0)),
+  }).address;
+  let address = browserAddress;
   const messages = [];
   $('game-frame').contentWindow = { postMessage: (message, origin) => messages.push({ message, origin }) };
   const update = setupGames($, { translate: (text) => text, getRewardAddress: () => address });
   await $('game-netcraft').listeners.click();
-  assert.equal($('game-frame').src, '/games/netcraft/craftw.html#-+4080+bitcoincash%3Aztest');
+  assert.equal($('game-frame').src, `/games/netcraft/craftw.html#-+4080+${encodeURIComponent(browserAddress)}`);
+  assert.equal($('game-wallet-prompt').hidden, true);
   address = null;
   update(address);
   $('game-frame').listeners.load();
   assert.equal($('game-notifications')['aria-label'], 'Connect wallet');
+  assert.equal($('game-wallet-prompt').hidden, false);
   assert.deepEqual(messages, [
+    { message: { type: 'netcraft-reward-address', address: browserAddress }, origin: '*' },
     { message: { type: 'netcraft-reward-address', address: '' }, origin: '*' },
     { message: { type: 'netcraft-reward-address', address: '' }, origin: '*' },
   ]);
   update('bitcoincash:zother');
-  assert.equal(messages[2].message.address, 'bitcoincash:zother');
+  assert.equal(messages[3].message.address, 'bitcoincash:zother');
+  assert.equal($('game-wallet-prompt').hidden, true);
   assert.equal($('game-notifications')['aria-label'], 'Wallet and notifications');
   assert.equal($('game-notifications')['aria-controls'], 'notifications-dialog');
 });

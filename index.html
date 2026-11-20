@@ -558,6 +558,10 @@
     <p id="game-dialog-status" class="fine" role="status"></p>
     <div id="game-stage" class="game-stage">
       <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen; gamepad *" allowfullscreen></iframe>
+      <div id="game-wallet-prompt" class="game-wallet-prompt" role="status" hidden>
+        <span>Connect or create a wallet before mining to receive MINA rewards.</span>
+        <button id="game-wallet-prompt-connect" type="button">Connect or create wallet</button>
+      </div>
       <nav id="game-wallet-actions" class="game-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
       <div class="game-controls game-controls-right" aria-label="CashCraft controls">
         <button id="game-invite" type="button" aria-label="Invite to CashCraft" title="Invite to CashCraft" aria-haspopup="dialog" aria-controls="invite-dialog">

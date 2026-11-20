@@ -91,7 +91,7 @@ class RewardTests(unittest.TestCase):
                 self.assertTrue(backend.process_one_mining_reward())
                 rpc.assert_called_once_with("sendrawtransaction", ["abcd"])
             self.assertFalse(backend.process_one_mining_reward())
-            build.assert_called_once_with(address, "a" * 64)
+            build.assert_called_once_with(address, "a" * 64, mining=True)
 
     def test_worker_retries_unsigned_mining_reward_for_saved_address(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
@@ -133,7 +133,7 @@ class RewardTests(unittest.TestCase):
             headers = {"Authorization": "Bearer test-secret"}
             self.assertEqual(client.post("/api/internal/netcraft-mining-reward/1", headers=headers).status_code, 204)
             self.assertEqual(client.post("/api/internal/netcraft-mining-reward/1", headers=headers).status_code, 204)
-            build.assert_called_once_with(address, "a" * 64)
+            build.assert_called_once_with(address, "a" * 64, mining=True)
             rpc.assert_called_once_with("sendrawtransaction", ["abcd"])
 
     def test_distinct_ores_for_same_address_broadcast_separate_transactions(self):
@@ -179,7 +179,7 @@ class RewardTests(unittest.TestCase):
                 backend.process_one_mining_reward(1)
             build.assert_not_called()
 
-    def test_immediate_payout_ignores_daily_limits_for_requested_reward_id(self):
+    def test_immediate_payout_attempts_each_requested_reward_id(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
         with sqlite3.connect(path) as db:
@@ -192,8 +192,6 @@ class RewardTests(unittest.TestCase):
         with patch.object(backend, "NETCRAFT_DB_PATH", str(path)), \
              patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
              patch.object(backend, "NETCRAFT_REWARD_WAKE_SECRET", "test-secret"), \
-             patch.object(backend, "NETCRAFT_DAILY_PAYOUT_LIMIT", 1), \
-             patch.object(backend, "NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT", 1), \
              patch.object(backend, "build_reward_transaction", return_value=("abcd", "c" * 64)) as build, \
              patch.object(backend, "bch_rpc", return_value="c" * 64):
             client = TestClient(backend.app)
@@ -229,7 +227,7 @@ class RewardTests(unittest.TestCase):
                     (1, 2, 3, "another", "a" * 64),
                 )
 
-    def test_daily_mining_limit_persists_across_retries_and_defers_next_payout(self):
+    def test_mining_retries_do_not_defer_subsequent_rewards(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
         with sqlite3.connect(path) as db:
@@ -242,23 +240,17 @@ class RewardTests(unittest.TestCase):
                 (2, address, "a" * 64, "ef01", "d" * 64),
             ])
         with patch.object(backend, "NETCRAFT_DB_PATH", str(path)), \
-             patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
-             patch.object(backend, "NETCRAFT_DAILY_PAYOUT_LIMIT", 1):
+             patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"):
             with patch.object(backend, "bch_rpc", side_effect=[RuntimeError("timeout"), RuntimeError("unavailable")]):
                 with self.assertRaises(RuntimeError):
                     backend.process_one_mining_reward()
             with patch.object(backend, "bch_rpc", return_value="c" * 64):
                 self.assertTrue(backend.process_one_mining_reward())
-            with patch.object(backend, "bch_rpc") as rpc:
-                self.assertFalse(backend.process_one_mining_reward())
-                rpc.assert_not_called()
-            with sqlite3.connect(path) as db:
-                self.assertEqual(db.execute("SELECT COUNT(*) FROM mining_payout_reservations").fetchone()[0], 1)
-                db.execute("UPDATE mining_payout_reservations SET day = date('now', '-1 day')")
             with patch.object(backend, "bch_rpc", return_value="d" * 64):
                 self.assertTrue(backend.process_one_mining_reward())
+            self.assertFalse(backend.process_one_mining_reward())
 
-    def test_address_limit_does_not_block_another_address(self):
+    def test_mining_rewards_for_multiple_addresses_are_processed(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
         with sqlite3.connect(path) as db:
             db.execute("""CREATE TABLE mining_rewards (
@@ -272,14 +264,13 @@ class RewardTests(unittest.TestCase):
             ])
         with patch.object(backend, "NETCRAFT_DB_PATH", str(path)), \
              patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
-             patch.object(backend, "NETCRAFT_DAILY_PAYOUT_LIMIT", 2), \
-             patch.object(backend, "NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT", 1), \
              patch.object(backend, "validate_token_aware_cashaddr"), \
-             patch.object(backend, "bch_rpc", side_effect=["1" * 64, "3" * 64]) as rpc:
+             patch.object(backend, "bch_rpc", side_effect=["1" * 64, "2" * 64, "3" * 64]) as rpc:
+            self.assertTrue(backend.process_one_mining_reward())
             self.assertTrue(backend.process_one_mining_reward())
             self.assertTrue(backend.process_one_mining_reward())
             self.assertFalse(backend.process_one_mining_reward())
-            self.assertEqual([call.args[1] for call in rpc.call_args_list], [["01"], ["03"]])
+            self.assertEqual([call.args[1] for call in rpc.call_args_list], [["01"], ["02"], ["03"]])
 
     def test_mina_total_counts_only_sent_rewards_in_current_category(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
@@ -504,6 +495,23 @@ class RewardTests(unittest.TestCase):
             self.assertEqual(client.get("/api/donation-address").json(), {"network": "mainnet", "address": address})
             rpc.assert_called_once_with("getnewaddress", ["cashcraft donations"], wallet=True)
 
+    def test_mining_recipient_uses_minimum_standard_token_dust(self):
+        scripts = [
+            ("76a914" + "00" * 20 + "88ac", 651),
+            ("a914" + "00" * 20 + "87", 645),
+            ("aa20" + "00" * 32 + "87", 681),
+        ]
+        for script, expected in scripts:
+            with self.subTest(script=script), \
+                 patch.object(backend, "bch_rpc", return_value={"isvalid": True, "scriptPubKey": script}) as rpc:
+                self.assertEqual(backend.mining_recipient_dust("recipient"), expected)
+                rpc.assert_called_once_with("validateaddress", ["recipient"])
+        for invalid in [{"isvalid": False}, {"isvalid": True, "scriptPubKey": "zz"},
+                        {"isvalid": True, "scriptPubKey": "6a"}]:
+            with self.subTest(invalid=invalid), patch.object(backend, "bch_rpc", return_value=invalid):
+                with self.assertRaises(RuntimeError):
+                    backend.mining_recipient_dust("recipient")
+
     def test_unconfirmed_inputs_and_token_change_are_preserved(self):
         calls = []
         token = {"txid": "1" * 64, "vout": 1, "amount": 0.00001, "spendable": True, "confirmations": 0, "tokenData": {"category": "b" * 64, "amount": "5"}}
@@ -513,6 +521,8 @@ class RewardTests(unittest.TestCase):
             calls.append((method, params, wallet))
             if method == "listunspent":
                 return [nft, token, bch]
+            if method == "validateaddress":
+                return {"isvalid": True, "scriptPubKey": "76a914" + "00" * 20 + "88ac"}
             if method == "getrawchangeaddress":
                 return f"change{sum(m == method for m, _, _ in calls)}"
             if method == "createrawtransaction":
@@ -523,12 +533,13 @@ class RewardTests(unittest.TestCase):
                 return {"txid": "4" * 64}
             raise AssertionError(method)
         with patch.object(backend, "bch_rpc", side_effect=rpc):
-            signed, txid = backend.build_reward_transaction("recipient", "b" * 64)
+            signed, txid = backend.build_reward_transaction("recipient", "b" * 64, mining=True)
         self.assertEqual((signed, txid), ("01" * 250, "4" * 64))
         self.assertEqual(calls[0], ("listunspent", [0, 9999999, [], True, {"includeTokens": True}], True))
         inputs, outputs = next(params for method, params, _ in calls if method == "createrawtransaction")
         self.assertEqual([item["txid"] for item in inputs], ["1" * 64, "3" * 64])
         self.assertEqual(outputs[0]["recipient"]["tokenData"]["amount"], "1")
+        self.assertEqual(outputs[0]["recipient"]["amount"], "0.00000651")
         self.assertEqual(outputs[1]["change1"]["tokenData"]["amount"], "4")
 
     def test_ambiguous_broadcast_reuses_persisted_transaction(self):

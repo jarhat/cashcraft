@@ -63,13 +63,6 @@ DB_PATH = Path(os.getenv("CASHADDR_DB_PATH", "/data/cash-addresses.sqlite3"))
 NETCRAFT_DB_PATH = os.getenv("NETCRAFT_DB_PATH", "").strip()
 NETCRAFT_MINING_REWARDS_ENABLED = os.getenv("NETCRAFT_MINING_REWARDS_ENABLED", "false")
 NETCRAFT_REWARD_WAKE_SECRET = os.getenv("NETCRAFT_REWARD_WAKE_SECRET", "")
-try:
-    NETCRAFT_DAILY_PAYOUT_LIMIT = int(os.getenv("NETCRAFT_DAILY_PAYOUT_LIMIT", "1000"))
-    NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT = int(os.getenv("NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT", "100"))
-except ValueError as exc:
-    raise RuntimeError("Mining payout limits must be positive integers.") from exc
-if NETCRAFT_DAILY_PAYOUT_LIMIT <= 0 or NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT <= 0:
-    raise RuntimeError("Mining payout limits must be positive integers.")
 if NETCRAFT_MINING_REWARDS_ENABLED not in ("true", "false"):
     raise RuntimeError("NETCRAFT_MINING_REWARDS_ENABLED must be true or false.")
 
@@ -230,10 +223,6 @@ def open_netcraft_db(timeout: int) -> sqlite3.Connection:
         sent_at TEXT,
         UNIQUE(x, y, z)
     )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS mining_payout_reservations (
-        reward_id INTEGER NOT NULL, day TEXT NOT NULL, PRIMARY KEY (reward_id, day)
-    )""")
-    db.execute("CREATE INDEX IF NOT EXISTS mining_payout_reservations_day ON mining_payout_reservations (day)")
     return db
 
 
@@ -806,7 +795,26 @@ def ensure_no_pending_signed_payout() -> None:
                 raise RuntimeError("A signed mining payout requires recovery.")
 
 
-def build_reward_transaction(address: str, category: str) -> tuple[str, str]:
+def mining_recipient_dust(address: str) -> int:
+    result = bch_rpc("validateaddress", [address])
+    script_hex = result.get("scriptPubKey") if isinstance(result, dict) and result.get("isvalid") is True else None
+    try:
+        script = bytes.fromhex(script_hex)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("BCHN returned an invalid reward address.") from exc
+    standard = (
+        len(script) == 25 and script[:3] == b"\x76\xa9\x14" and script[-2:] == b"\x88\xac"
+        or len(script) == 23 and script[:2] == b"\xa9\x14" and script[-1:] == b"\x87"
+        or len(script) == 35 and script[:2] == b"\xaa\x20" and script[-1:] == b"\x87"
+    )
+    if not standard:
+        raise RuntimeError("BCHN returned a nonstandard reward address script.")
+    # One fungible token uses a 35-byte token prefix, followed by the locking script.
+    output_size = 8 + 1 + 35 + len(script)
+    return 3 * (output_size + 148)
+
+
+def build_reward_transaction(address: str, category: str, *, mining: bool = False) -> tuple[str, str]:
     utxos = bch_rpc(
         "listunspent", [0, 9999999, [], True, {"includeTokens": True}], wallet=True
     )
@@ -827,7 +835,8 @@ def build_reward_transaction(address: str, category: str) -> tuple[str, str]:
     inputs = [token_input]
     total = _satoshis(token_input["amount"])
     token_change = token_amount - 1
-    output_value = 1000 * (1 + bool(token_change))
+    recipient_value = mining_recipient_dust(address) if mining else 1000
+    output_value = recipient_value + 1000 * bool(token_change)
     bch_inputs = [u for u in spendable if "tokenData" not in u]
     for utxo in bch_inputs:
         if total >= output_value + 1000 + 200 * len(inputs):
@@ -839,7 +848,7 @@ def build_reward_transaction(address: str, category: str) -> tuple[str, str]:
         raise RuntimeError("Insufficient BCH for the reward transaction.")
 
     outputs = [{
-        address: {"amount": _bch_amount(1000), "tokenData": {"category": category, "amount": "1"}}
+        address: {"amount": _bch_amount(recipient_value), "tokenData": {"category": category, "amount": "1"}}
     }]
     if token_change:
         change_address = bch_rpc("getrawchangeaddress", [], wallet=True)
@@ -925,24 +934,8 @@ def process_one_mining_reward(reward_id: int | None = None) -> bool:
             ).fetchone()
         else:
             row = db.execute(
-                """WITH daily_address_counts AS (
-                       SELECT m.cash_address, COUNT(*) AS count
-                       FROM mining_payout_reservations r
-                       JOIN mining_rewards m ON m.id = r.reward_id
-                       WHERE r.day = date('now') GROUP BY m.cash_address
-                   )
-                   SELECT id, cash_address, category, signed_tx, txid FROM mining_rewards m
-                   WHERE sent_at IS NULL
-                   AND (
-                       EXISTS (SELECT 1 FROM mining_payout_reservations r
-                               WHERE r.reward_id = m.id AND r.day = date('now'))
-                       OR (
-                           (SELECT COUNT(*) FROM mining_payout_reservations WHERE day = date('now')) < ?
-                           AND COALESCE((SELECT count FROM daily_address_counts c
-                                         WHERE c.cash_address = m.cash_address), 0) < ?
-                       )
-                   ) ORDER BY signed_tx IS NULL, id LIMIT 1""",
-                (NETCRAFT_DAILY_PAYOUT_LIMIT, NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT),
+                """SELECT id, cash_address, category, signed_tx, txid FROM mining_rewards
+                   WHERE sent_at IS NULL ORDER BY signed_tx IS NULL, id LIMIT 1"""
             ).fetchone()
         if not row:
             return False
@@ -950,34 +943,9 @@ def process_one_mining_reward(reward_id: int | None = None) -> bool:
         validate_token_aware_cashaddr(address)
         if not CATEGORY_RE.fullmatch(category):
             raise RuntimeError("Invalid mining reward category.")
-        if requested_reward_id is None:
-            db.execute("BEGIN IMMEDIATE")
-            day = db.execute("SELECT date('now')").fetchone()[0]
-            reserved = db.execute(
-                "SELECT 1 FROM mining_payout_reservations WHERE reward_id = ? AND day = ?",
-                (reward_id, day),
-            ).fetchone()
-            if not reserved:
-                count = db.execute(
-                    "SELECT COUNT(*) FROM mining_payout_reservations WHERE day = ?", (day,)
-                ).fetchone()[0]
-                address_count = db.execute(
-                    """SELECT COUNT(*) FROM mining_payout_reservations r
-                       JOIN mining_rewards m ON m.id = r.reward_id
-                       WHERE r.day = ? AND m.cash_address = ?""",
-                    (day, address),
-                ).fetchone()[0]
-                if count >= NETCRAFT_DAILY_PAYOUT_LIMIT or address_count >= NETCRAFT_ADDRESS_DAILY_PAYOUT_LIMIT:
-                    db.rollback()
-                    return False
-                db.execute(
-                    "INSERT INTO mining_payout_reservations (reward_id, day) VALUES (?, ?)",
-                    (reward_id, day),
-                )
-            db.commit()
         if not signed_tx:
             ensure_no_pending_signed_payout()
-            signed_tx, txid = build_reward_transaction(address, category)
+            signed_tx, txid = build_reward_transaction(address, category, mining=True)
             db.execute(
                 """UPDATE mining_rewards SET signed_tx = ?, txid = ?
                    WHERE id = ? AND signed_tx IS NULL AND sent_at IS NULL""",
