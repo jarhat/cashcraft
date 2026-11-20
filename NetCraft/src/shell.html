@@ -112,26 +112,34 @@
       .mobile-controls { display: none; position: fixed; inset: 0; z-index: 20; pointer-events: none; -webkit-touch-callout: none; }
       .mobile-controls button, .mobile-stick {
         pointer-events: auto; touch-action: none; user-select: none;
-        background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.5);
-        color: white; border-radius: 50%;
+        background: rgba(15, 32, 38, .82); border: 1px solid #a8e4ff;
+        color: #e9f4ff; border-radius: 50%; box-shadow: 0 3px 8px #0006;
       }
-      .mobile-stick { position: absolute; left: 16px; bottom: 20px; width: 140px; height: 140px; }
-      .mobile-stick-knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: rgba(255,255,255,.35); }
-      .mobile-controls button { position: absolute; width: 68px; height: 68px; font-size: 15px; }
-      #mobile-mine { right: 92px; bottom: 70px; background: radial-gradient(circle at 35% 25%, #856948, #392d22 70%); border: 2px solid #d5be8d; box-shadow: inset 0 2px 6px #ffffff38, 0 4px 10px #0009; }
+      .mobile-stick { position: absolute; left: max(20px, env(safe-area-inset-left)); bottom: max(28px, env(safe-area-inset-bottom)); width: 124px; height: 124px; background: rgba(222,231,237,.6); }
+      .mobile-stick::before { content: ""; position: absolute; inset: -12px; }
+      .mobile-stick-knob { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px; border-radius: 50%; background: #617683; pointer-events: none; }
+      .mobile-controls button { position: absolute; width: 60px; height: 60px; font-size: 15px; }
+      #mobile-mine { right: 16px; bottom: 20px; }
       #mobile-mine:active { transform: scale(.92) rotate(-8deg); }
-      #mobile-build { right: 16px; bottom: 20px; }
-      #mobile-jump { right: 16px; bottom: 100px; }
-      #mobile-next { right: 168px; bottom: 20px; }
+      #mobile-build { right: 88px; bottom: 20px; }
+      #mobile-jump { right: 16px; bottom: 92px; }
+      #mobile-next { right: 16px; bottom: 164px; }
+      #mobile-prev { right: 88px; bottom: 164px; }
       .mobile-controls svg, #sound-toggle svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-      #sound-toggle { display: grid !important; place-items: center; position: fixed; right: 168px; top: 12px; z-index: 25; width: 44px; height: 44px; padding: 9px; border: 1px solid rgba(255,255,255,.5); border-radius: 50%; background: rgba(0,0,0,.55); color: white; cursor: pointer; }
+      #sound-toggle { display: grid !important; place-items: center; position: fixed; right: 12px; top: 68px; z-index: 25; width: 48px; height: 48px; padding: 9px; border: 1px solid #a8e4ff; border-radius: 50%; background: rgba(15, 32, 38, .82); color: #e9f4ff; cursor: pointer; }
       #sound-toggle[aria-pressed="true"] .sound-muted { display: none; }
       #connection-status { display: block !important; position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 26; max-width: 90%; padding: 8px 12px; background: rgba(0,0,0,.8); color: white; text-align: center; }
       #connection-status[hidden] { display: none !important; }
       #game-error { display: block !important; position: fixed; top: 110px; left: 50%; transform: translateX(-50%); z-index: 41; width: min(90%, 600px); padding: 14px; background: #351c1c; color: white; font: 14px system-ui, sans-serif; text-align: center; overflow-wrap: anywhere; }
       #game-error[hidden] { display: none !important; }
       @media (any-pointer: coarse) { .mobile-controls { display: block !important; } }
-      @media (max-width: 360px) { #sound-toggle { left: 12px; right: auto; top: 68px; } }
+      @media (max-height: 400px) {
+        .mobile-stick { width: 100px; height: 100px; }
+        .mobile-controls button { width: 48px; height: 48px; }
+        #mobile-build, #mobile-prev { right: 72px; }
+        #mobile-jump { bottom: 76px; }
+        #mobile-prev, #mobile-next { bottom: 132px; }
+      }
       .mobile-controls.touch-enabled { display: block !important; }
     </style>
   </head>
@@ -1256,10 +1264,11 @@
     </button>
     <div class="mobile-controls" aria-label="Touch controls">
       <div id="mobile-stick" class="mobile-stick" aria-label="Move"><div id="mobile-stick-knob" class="mobile-stick-knob"></div></div>
-      <button id="mobile-mine" type="button" aria-label="Mine" title="Hold to mine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 17 7m-5-4c3-1 7 0 9 4l-3 1-3-3-3-2ZM3 19l2 2"/></svg></button>
+      <button id="mobile-mine" type="button" aria-label="Mine" title="Hold to mine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21 15 8M3 9c4-5 12-8 18-3-5-1-8 1-11 5M3 9l2 2m14-5 2 2"/></svg></button>
       <button id="mobile-build" type="button" aria-label="Build" title="Build"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4v10l-8 4-8-4V7zM4 7l8 4 8-4m-8 4v10"/></svg></button>
       <button id="mobile-jump" type="button" aria-label="Jump" title="Jump"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6M5 21h14"/></svg></button>
       <button id="mobile-next" type="button" aria-label="Next block" title="Next block"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-5-5 5 5-5 5M4 5h4v4H4zM4 15h4v4H4z"/></svg></button>
+      <button id="mobile-prev" type="button" aria-label="Previous block" title="Previous block"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H5m5-5-5 5 5 5M16 5h4v4h-4zM16 15h4v4h-4z"/></svg></button>
     </div>
 
     <script type='text/javascript'>
@@ -1489,6 +1498,8 @@
           var stick = document.getElementById('mobile-stick');
           var knob = document.getElementById('mobile-stick-knob');
           var stickPointer = null;
+          var stickOrigin = null;
+          var stickTouch = false;
           window.addEventListener('pointerdown', function(event) {
             if (event.pointerType === 'touch') controls.classList.add('touch-enabled');
           });
@@ -1501,8 +1512,8 @@
           function move(event) {
             var rect = stick.getBoundingClientRect();
             var radius = rect.width / 2;
-            var x = (event.clientX - rect.left - rect.width / 2) / (rect.width / 2);
-            var z = (event.clientY - rect.top - (rect.height || rect.width) / 2) / ((rect.height || rect.width) / 2);
+            var x = (event.clientX - stickOrigin.x) / (rect.width / 2);
+            var z = (event.clientY - stickOrigin.y) / ((rect.height || rect.width) / 2);
             var length = Math.hypot(x, z);
             if (length > 1) { x /= length; z /= length; }
             knob.style.transform = 'translate(' + (x * radius * .55) + 'px,' + (z * radius * .55) + 'px)';
@@ -1511,6 +1522,9 @@
           }
           function releaseStick() {
             stickPointer = null;
+            stickOrigin = null;
+            stickTouch = false;
+            stick.style.transform = '';
             knob.style.transform = '';
             call('touch_set_move', [0, 0]);
           }
@@ -1525,28 +1539,37 @@
           function startStick(event) {
             if (stickPointer !== null) return;
             if (event.cancelable) event.preventDefault();
+            document.getElementById('canvas').focus({ preventScroll: true });
+            var rect = stick.getBoundingClientRect();
             stickPointer = event.pointerId;
+            stickTouch = Boolean(event.touchFallback);
+            stickOrigin = { x: event.clientX, y: event.clientY };
+            stick.style.transform = 'translate(' + (event.clientX - rect.left - rect.width / 2) +
+              'px,' + (event.clientY - rect.top - (rect.height || rect.width) / 2) + 'px)';
             if (!event.touchFallback) capturePointer(stick, event.pointerId);
             move(event);
           }
-          stick.addEventListener('pointerdown', startStick);
+          stick.addEventListener('pointerdown', function(event) {
+            if (event.pointerType !== 'touch') startStick(event);
+          });
           window.addEventListener('pointermove', function(event) {
-            if (event.pointerId === stickPointer) {
+            if (!stickTouch && event.pointerId === stickPointer) {
               if (event.cancelable) event.preventDefault();
               move(event);
             }
           }, { passive: false });
           ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(type) {
-            stick.addEventListener(type, function(event) { if (event.pointerId === stickPointer) releaseStick(); });
+            stick.addEventListener(type, function(event) { if (!stickTouch && event.pointerId === stickPointer) releaseStick(); });
           });
           ['pointerup', 'pointercancel'].forEach(function(type) {
-            window.addEventListener(type, function(event) { if (event.pointerId === stickPointer) releaseStick(); });
+            window.addEventListener(type, function(event) { if (!stickTouch && event.pointerId === stickPointer) releaseStick(); });
           });
           function hold(id, name) {
             var button = document.getElementById(id);
             var pointer = null;
+            var keyboardHeld = false;
             function start(event) {
-              if (pointer !== null) return;
+              if (pointer !== null || keyboardHeld) return;
               if (event.cancelable) event.preventDefault();
               pointer = event.pointerId;
               if (!event.touchFallback) capturePointer(button, pointer);
@@ -1562,7 +1585,29 @@
               button.addEventListener(type, release);
             });
             ['pointerup', 'pointercancel'].forEach(function(type) { window.addEventListener(type, release); });
-            window.addEventListener('blur', function() { if (pointer !== null) release({ pointerId: pointer }); });
+            button.addEventListener('keydown', function(event) {
+              if ((event.key === ' ' || event.key === 'Enter') && !keyboardHeld && pointer === null) {
+                event.preventDefault();
+                keyboardHeld = true;
+                call(name, [1]);
+              }
+            });
+            function releaseKeyboard() {
+              if (!keyboardHeld) return;
+              keyboardHeld = false;
+              call(name, [0]);
+            }
+            button.addEventListener('keyup', function(event) {
+              if (event.key === ' ' || event.key === 'Enter') {
+                event.preventDefault();
+                releaseKeyboard();
+              }
+            });
+            button.addEventListener('blur', releaseKeyboard);
+            window.addEventListener('blur', function() {
+              if (pointer !== null) release({ pointerId: pointer });
+              releaseKeyboard();
+            });
             if (!window.PointerEvent) touchFallback(button, start, null, release);
           }
           function touchFallback(element, start, drag, end) {
@@ -1579,15 +1624,24 @@
                 }, { passive: false });
               });
           }
-          if (!window.PointerEvent) {
-            touchFallback(stick, startStick,
-              function(event) { if (event.pointerId === stickPointer) move(event); },
-              function(event) { if (event.pointerId === stickPointer) releaseStick(); });
-          }
+          touchFallback(stick, startStick,
+            function(event) { if (event.pointerId === stickPointer) move(event); },
+            function(event) { if (event.pointerId === stickPointer) releaseStick(); });
           hold('mobile-mine', 'touch_set_mine');
           hold('mobile-jump', 'touch_set_jump');
-          document.getElementById('mobile-build').addEventListener('pointerdown', function() { call('touch_build', []); });
-          document.getElementById('mobile-next').addEventListener('pointerdown', function() { call('touch_next_item', []); });
+          function tap(id, name) {
+            var button = document.getElementById(id);
+            function activate(event) {
+              if (event.cancelable) event.preventDefault();
+              call(name, []);
+            }
+            button.addEventListener('pointerdown', activate);
+            button.addEventListener('click', function(event) { if (event.detail === 0) activate(event); });
+            if (!window.PointerEvent) touchFallback(button, activate, null, null);
+          }
+          tap('mobile-build', 'touch_build');
+          tap('mobile-next', 'touch_next_item');
+          tap('mobile-prev', 'touch_prev_item');
           ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function(type) {
             controls.addEventListener(type, function(event) { event.stopPropagation(); }, { passive: true });
           });

@@ -40,31 +40,59 @@ class RewardTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 backend.check_balance()
 
-    def test_craft_social_preview_contains_donation_qr(self):
+    def test_payout_balance_reports_errors_and_satoshis(self):
+        client = TestClient(backend.app)
+        with patch.object(backend, "check_balance", return_value=12345):
+            self.assertEqual(client.get("/api/payout-balance").json(), {"satoshis": "12345"})
+        with patch.object(backend, "check_balance", side_effect=RuntimeError("offline")):
+            self.assertEqual(client.get("/api/payout-balance").status_code, 503)
+
+    def test_mining_ranking_counts_only_sent_current_category_and_legacy_rows(self):
+        path = Path(self.tmp.name) / "netcraft.sqlite3"
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE mining_rewards (category TEXT, sent_at TEXT, player_name TEXT)")
+            db.executemany("INSERT INTO mining_rewards VALUES (?, ?, ?)", [
+                ("b" * 64, "now", "Alice"), ("b" * 64, "now", "Alice"),
+                ("b" * 64, "now", "Bob"), ("b" * 64, "now", None),
+                ("b" * 64, None, "Bob"), ("a" * 64, "now", "Bob"),
+            ])
+        client = TestClient(backend.app)
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path)):
+            self.assertEqual(client.get("/api/mina-ranking").json(), {"players": [
+                {"name": "Alice", "rewards": 2}, {"name": "Bob", "rewards": 1},
+                {"name": "Unknown player", "rewards": 1},
+            ]})
+        legacy = Path(self.tmp.name) / "legacy.sqlite3"
+        with sqlite3.connect(legacy) as db:
+            db.execute("CREATE TABLE mining_rewards (category TEXT, sent_at TEXT)")
+            db.execute("INSERT INTO mining_rewards VALUES (?, ?)", ("b" * 64, "now"))
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(legacy)):
+            self.assertEqual(client.get("/api/mina-ranking").json(),
+                             {"players": [{"name": "Unknown player", "rewards": 1}]})
+        missing = Path(self.tmp.name) / "missing.sqlite3"
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(missing)):
+            self.assertEqual(client.get("/api/mina-ranking").status_code, 503)
+            self.assertFalse(missing.exists())
+
+    def test_craft_social_preview_uses_artwork_without_a_donation_qr(self):
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
         client = TestClient(backend.app)
         with sqlite3.connect(backend.DB_PATH) as db:
             db.execute("INSERT INTO donation_addresses (network, address) VALUES (?, ?)", ("mainnet", address))
         with patch.object(backend, "bch_rpc", side_effect=AssertionError("preview must not call BCHN")):
-            response = client.get("/api/craft-preview.png")
+            with patch.object(backend.segno, "make", side_effect=AssertionError("preview must not generate a QR")):
+                response = client.get("/api/craft-preview.png")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-type"], "image/png")
+        self.assertEqual(response.headers["cache-control"], "public, max-age=300")
         with Image.open(io.BytesIO(response.content)) as image:
             self.assertEqual(image.size, (1200, 675))
-            qr = list(backend.segno.make(address, error="h").matrix)
-            scale = min(image.size) // (3 * (len(qr) + 8))
-            left = image.width - (len(qr) + 8) * scale - 28
-            top = image.height - (len(qr) + 8) * scale - 74
-            for y, row in enumerate(qr):
-                for x, dark in enumerate(row):
-                    pixel = image.getpixel((left + (x + 4) * scale, top + (y + 4) * scale))
-                    self.assertEqual(pixel, (0, 0, 0) if dark else (255, 255, 255))
 
-    def test_craft_social_preview_without_donation_address_still_serves_dragon(self):
+    def test_craft_social_preview_does_not_depend_on_donation_address(self):
         with patch.object(backend, "bch_rpc", side_effect=AssertionError("preview must not call BCHN")):
             response = TestClient(backend.app).get("/api/craft-preview.png")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.headers["cache-control"], "public, max-age=30")
+        self.assertEqual(response.headers["cache-control"], "public, max-age=300")
         with Image.open(io.BytesIO(response.content)) as image:
             self.assertEqual(image.size, (1200, 675))
 

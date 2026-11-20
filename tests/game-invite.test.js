@@ -1,6 +1,26 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { setupGameInvite } from '../src/game-invite.js';
+import { setupGameInvite, loadDonation } from '../src/game-invite.js';
+
+test('donation QR validates the network and reports service errors', async (t) => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const elements = new Map();
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, {});
+    return elements.get(id);
+  };
+  const deps = async () => ({
+    QRCode: { toCanvas: async () => {} }, decodeCashAddress: () => ({ prefix: 'bitcoincash' }),
+  });
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ address: 'address', network: 'mainnet' }) });
+  await loadDonation($, 'mainnet', deps, 'donate');
+  assert.equal($('donate-address').textContent, 'address');
+  assert.equal($('donate-qr').hidden, false);
+  await loadDonation($, 'chipnet', deps, 'donate');
+  assert.equal($('donate-qr').hidden, true);
+  assert.match($('donate-status').textContent, /network/);
+});
 
 test('invite shares the CashCraft link and shows the donation address', async (t) => {
   const original = { window: globalThis.window, navigator: globalThis.navigator, fetch: globalThis.fetch };
@@ -33,7 +53,7 @@ test('invite shares the CashCraft link and shows the donation address', async (t
   assert.equal(qrAddress, 'bitcoincash:test');
   assert.equal($('donation-qr').hidden, false);
   assert.deepEqual(shared, {
-    title: 'CashCraft', text: 'Come explore CashCraft with me!', url: 'https://example.test/craft',
+    title: 'CashCraft', text: 'Come explore CashCraft with me!', url: 'https://example.test/?game=cashcraft',
   });
   $('invite-dialog').open = false;
   $('game-frame').src = 'https://example.test/games/pk2/index.html';

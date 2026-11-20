@@ -1,36 +1,39 @@
+export async function loadDonation($, network, loadDependencies, prefix, statusId = `${prefix}-status`) {
+  $(`${prefix}-qr`).hidden = true;
+  $(`${prefix}-address`).textContent = '';
+  $(statusId).textContent = 'Loading donation address…';
+  try {
+    const [response, { QRCode, decodeCashAddress }] = await Promise.all([
+      fetch('/api/donation-address'), loadDependencies(),
+    ]);
+    if (!response.ok) throw new Error('Donation address unavailable. Please try again later.');
+    const result = await response.json();
+    const decoded = decodeCashAddress(result.address);
+    const expectedPrefix = network === 'mainnet' ? 'bitcoincash' : 'bchtest';
+    if (result.network !== network || typeof decoded === 'string' || decoded.prefix !== expectedPrefix) {
+      throw new Error('Donation address does not match the current network.');
+    }
+    await QRCode.toCanvas($(`${prefix}-qr`), result.address, { width: 200, margin: 2 });
+    $(`${prefix}-address`).textContent = result.address;
+    $(`${prefix}-qr`).hidden = false;
+    $(statusId).textContent = '';
+  } catch (error) {
+    $(statusId).textContent = error.message || 'Donation address unavailable. Please try again later.';
+  }
+}
+
 export function setupGameInvite($, network, loadDependencies) {
   const dialog = $('invite-dialog');
-  let url = new URL('/craft', window.location.origin).href;
+  let url = new URL('/?game=cashcraft', window.location.origin).href;
   $('invite-url').textContent = url;
   const status = (message) => { $('invite-status').textContent = message; };
 
   $('game-invite').addEventListener('click', async () => {
     const isPk2 = $('game-frame').src?.includes('/games/pk2/');
-    url = new URL(isPk2 ? '/?game=pk2' : '/craft', window.location.origin).href;
+    url = new URL(isPk2 ? '/?game=pk2' : '/?game=cashcraft', window.location.origin).href;
     $('invite-url').textContent = url;
     if (!dialog.open) dialog.showModal();
-    status('Loading donation address…');
-    $('donation-qr').hidden = true;
-    $('donation-address').textContent = '';
-    try {
-      const [response, { QRCode, decodeCashAddress }] = await Promise.all([
-        fetch('/api/donation-address'),
-        loadDependencies(),
-      ]);
-      if (!response.ok) throw new Error('Donation address unavailable. Please try again later.');
-      const result = await response.json();
-      const decoded = decodeCashAddress(result.address);
-      const prefix = network === 'mainnet' ? 'bitcoincash' : 'bchtest';
-      if (result.network !== network || typeof decoded === 'string' || decoded.prefix !== prefix) {
-        throw new Error('Donation address does not match the current network.');
-      }
-      await QRCode.toCanvas($('donation-qr'), result.address, { width: 200, margin: 2 });
-      $('donation-address').textContent = result.address;
-      $('donation-qr').hidden = false;
-      status('');
-    } catch (error) {
-      status(error.message || 'Donation address unavailable. Please try again later.');
-    }
+    await loadDonation($, network, loadDependencies, 'donation', 'invite-status');
   });
   $('invite-close').addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => {
