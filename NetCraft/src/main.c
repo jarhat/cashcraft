@@ -1210,7 +1210,6 @@ void light_fill(
 
 void compute_chunk(WorkerItem *item) {
     char *opaque = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
-    char *light = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
     short *highest = (short *)calloc(XZ_SIZE * XZ_SIZE, sizeof(short));
 
     int ox = item->p * CHUNK_SIZE - CHUNK_SIZE - 1;
@@ -1229,6 +1228,7 @@ void compute_chunk(WorkerItem *item) {
             }
         }
     }
+    char *light = has_light ? (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char)) : NULL;
 
     // populate opaque array
     for (int a = 0; a < 3; a++) {
@@ -1344,10 +1344,10 @@ void compute_chunk(WorkerItem *item) {
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dz = -1; dz <= 1; dz++) {
                     neighbors[index] = opaque[XYZ(x + dx, y + dy, z + dz)];
-                    lights[index] = light[XYZ(x + dx, y + dy, z + dz)];
+                    lights[index] = has_light ? light[XYZ(x + dx, y + dy, z + dz)] : 0;
                     shades[index] = 0;
                     if (y + dy <= highest[XZ(x + dx, z + dz)]) {
-                        for (int oy = 0; oy < 8; oy++) {
+                        for (int oy = 0; oy < 8 && y + dy + oy < Y_SIZE; oy++) {
                             if (opaque[XYZ(x + dx, y + dy + oy, z + dz)]) {
                                 shades[index] = 1.0 - oy * 0.125;
                                 break;
@@ -2236,7 +2236,7 @@ int render_chunks(Attrib *attrib, Player *player) {
     for (int i = 0; i < g->chunk_count; i++) {
         Chunk *chunk = g->chunks + i;
 #ifdef __EMSCRIPTEN__
-        if (!chunk_is_ready(chunk) || chunk->dirty) continue;
+        if (!chunk->buffer) continue;
 #endif
         if (chunk_distance(chunk, p, q) > g->render_radius) {
             continue;
@@ -2269,7 +2269,7 @@ void render_signs(Attrib *attrib, Player *player) {
     for (int i = 0; i < g->chunk_count; i++) {
         Chunk *chunk = g->chunks + i;
 #ifdef __EMSCRIPTEN__
-        if (!chunk_is_ready(chunk) || chunk->dirty) continue;
+        if (!chunk->buffer) continue;
 #endif
         if (chunk_distance(chunk, p, q) > g->sign_radius) {
             continue;
@@ -2379,10 +2379,15 @@ void render_cover(Attrib *attrib, Player *player) {
 
     int w = RC(0, 0) + mining_stage;
 
-    GLuint buffer = gen_cube_buffer_faces(target_x, target_y, target_z, 0.501, w, w, w, w, w, w);
+    GLuint buffer = gen_cube_buffer_faces(target_x, target_y, target_z, 0.5, w, w, w, w, w, w);
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_DST_COLOR, GL_ZERO, GL_ZERO, GL_ONE);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(-1, -1);
     draw_cube(attrib, buffer);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     del_buffer(buffer);
 }
@@ -2401,7 +2406,6 @@ void on_mining_swing(void) {
 }
 
 static void render_pickaxe(Attrib *attrib) {
-    if (!mining_has_pickaxe()) return;
     int mina = mining_has_pickaxe() ? 1 : 0;
     if (!pickaxe_buffers[mina]) {
         float vertices[PICKAXE_MAX_VERTICES * PICKAXE_VERTEX_COMPONENTS];

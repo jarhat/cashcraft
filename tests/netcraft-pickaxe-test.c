@@ -1,10 +1,21 @@
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include "../NetCraft/src/pickaxe.h"
 
 static bool near(float a, float b) {
     return fabsf(a - b) < .01f;
+}
+
+static const float *pixel_at(float *vertices, int count, int x, int y) {
+    for (int i = 0; i < count; i += 6) {
+        float *vertex = vertices + i * PICKAXE_VERTEX_COMPONENTS;
+        if (near(vertex[0], x / 16.0f) && near(vertex[1], (15 - y) / 16.0f)) {
+            return vertex;
+        }
+    }
+    return NULL;
 }
 
 int main(void) {
@@ -26,6 +37,16 @@ int main(void) {
         }
     }
     assert(different_color);
+    const float *head = pixel_at(mina, count, 6, 2);
+    const float *blade = pixel_at(mina, count, 3, 10);
+    const float *handle = pixel_at(standard, count, 13, 12);
+    assert(head && blade && handle);
+    assert(head[3] > head[2] && head[3] > head[4]);
+    assert(blade[3] > blade[2] && blade[3] > blade[4]);
+    const float *regular = pixel_at(standard, count, 6, 2);
+    assert(regular && fabsf(regular[2] - regular[3]) < .1f);
+    assert(handle[2] > handle[3] && handle[3] > handle[4]);
+    assert(!pixel_at(standard, count, 9, 10));
     for (int i = 0; i < count; i += 3) {
         int a = i * PICKAXE_VERTEX_COMPONENTS;
         int b = a + PICKAXE_VERTEX_COMPONENTS;
@@ -43,8 +64,8 @@ int main(void) {
         PickaxePose back = pickaxe_pose(width, height, true, .135);
         PickaxePose returned = pickaxe_pose(width, height, true, .18);
         assert(near(rest.size, fminf(width * .4f, height * .65f)));
-        assert(near(rest.x, 0));
-        assert(near(rest.y, 0));
+        assert(near(rest.x, width - rest.size));
+        assert(near(rest.y, height * .06f));
         assert(near(rest.x, start.x) && near(rest.y, start.y));
         assert(near(returned.x, rest.x) && near(returned.y, rest.y));
         assert(near(forward.x, rest.x) && near(back.x, rest.x));

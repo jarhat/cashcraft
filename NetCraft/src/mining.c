@@ -133,5 +133,6 @@ void building_tick() {
 
 void building_start() {
     holding_build_button = true;
-    building_progress = BLOCK_BUILD_TIME; // place first instantly
+    building_progress = 0;
+    on_build();
 }

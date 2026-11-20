@@ -198,15 +198,15 @@ game's wallet button blink green until the wallet is opened.
 Browser wallet creation requires a password and confirmation of the recovery
 phrase backup. The wallet scans receive and change addresses, rescans after
 registration, and refreshes periodically while connected.
-Players with at least 3 MINA on their registered reward address, including at
-least three paid mining rewards, equip a green pixel pickaxe in the lower-left
-corner. It swings while mining and reduces breakable block mining time to one
-quarter. The pickaxe disappears when the wallet disconnects or a balance scan
-no longer qualifies.
+Players have a regular pixel pickaxe in the lower-right corner. Players with a
+registered wallet holding at least 2 MINA across its scanned addresses equip a
+green pickaxe that reduces breakable block mining time to one quarter. It returns to the regular
+pickaxe when the wallet disconnects or a balance scan no longer qualifies.
 
 The loading screen shows available download progress and fades after the first
-frame is rendered. Its background is served by the frontend as
-`/craft-loading.webp`; deploy the updated frontend alongside the rebuilt client.
+frame is rendered. Its background and touch-button icons are served by the
+frontend as `/craft-loading.webp`, `/pickaxe.svg`, and `/grass-block.svg`; deploy the updated
+frontend alongside the rebuilt client.
 Graphics and runtime errors are reported separately from the server connection, which can
 remain connected even if rendering fails. Check the browser console for the
 underlying error; a lost WebGL context requires reloading the game. After
@@ -245,13 +245,15 @@ positions are skipped, so existing edits may leave gaps or obstruct paths.
 Restart the server to load the changes; do not run the builder while it runs.
 
 Compose enables mining rewards by default. A connected token-aware address
-receives one base unit for naturally generated, previously unedited green MINA
-ore. Deposits currently appear on roughly one in 32 terrain columns; placed or
+receives one base unit for every ten naturally generated, previously unedited
+green MINA ore blocks mined while connected. Progress is saved per registered
+address and token category, starting at zero when this rule is deployed; earlier
+paid rewards are unchanged. Deposits currently appear on roughly one in 32 terrain columns; placed or
 previously mined blocks do not earn another reward. Offline play and disconnected edits
 cannot create rewards; a connected player must supply a valid token-aware
 wallet address. The interface calls the default reward MINA; the configured
 CashToken category is unchanged by that display name. The game server requests
-an immediate BCHN transaction for each eligible block; wallet transaction
+an immediate BCHN transaction for each ten eligible blocks; wallet transaction
 creation is serialized to avoid spending the same inputs twice. The wallet
 refreshes after the request and shows a receipt once it sees the zero-confirmation
 output. A request can fail or take longer if the node or network is unavailable.
@@ -280,7 +282,7 @@ script (651 satoshis for P2PKH); zero-satoshi token outputs are not normally rel
 The top ticker counts successfully broadcast one-unit payouts for the current
 MINA category recorded in both reward databases, not all on-chain transfers.
 The ranking counts broadcast mining payouts in the world database for the
-current category. It records the player's in-game name when each ore is mined;
+current category. It records the player's in-game name when each payout is queued;
 older rows without a name appear as "Unknown player". Names are not authenticated
 and can be reused or changed, so the ranking is not proof of identity.
 The ticker publicly displays the payout wallet's BCH balance.

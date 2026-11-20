@@ -111,6 +111,10 @@ EMSCRIPTEN_KEEPALIVE void touch_build(void) {
     on_build();
 }
 
+EMSCRIPTEN_KEEPALIVE void touch_set_build(int active) {
+    if (active) building_start(); else building_stop();
+}
+
 void init_touch_callbacks(GLFWwindow *w) {
     emscripten_set_touchstart_callback("#canvas", NULL, EM_FALSE, on_touchstart);
     emscripten_set_touchmove_callback("#canvas", NULL, EM_FALSE, on_touchmove);

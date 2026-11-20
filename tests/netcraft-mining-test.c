@@ -8,6 +8,7 @@ static int target = 1;
 static int target_x_value;
 static int mined;
 static int swings;
+static int builds;
 
 double glfwGetTime(void) { return now; }
 float is_hardness(int block) { return block == 2 ? INFINITY : 2.0f; }
@@ -17,7 +18,7 @@ int get_targeted_block(int *x, int *y, int *z, int *face) {
     return target;
 }
 void on_mine(void) { mined++; }
-void on_build(void) {}
+void on_build(void) { builds++; }
 void on_mining_swing(void) { swings++; }
 
 static void check_rate(double step) {
@@ -38,6 +39,15 @@ static void check_rate(double step) {
 }
 
 int main(void) {
+    building_start();
+    assert(builds == 1);
+    for (int i = 0; i < BLOCK_BUILD_TIME; i++) building_tick();
+    assert(builds == 1);
+    building_tick();
+    assert(builds == 2);
+    building_stop();
+    for (int i = 0; i < BLOCK_BUILD_TIME * 2; i++) building_tick();
+    assert(builds == 2);
     check_rate(1.0 / 20);
     check_rate(1.0 / 120);
     now = 5;

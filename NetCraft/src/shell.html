@@ -116,18 +116,19 @@
         color: #e9f4ff; border-radius: 50%; box-shadow: 0 3px 8px #0006;
       }
       .mobile-stick { position: absolute; left: max(20px, env(safe-area-inset-left)); bottom: max(28px, env(safe-area-inset-bottom)); width: 150px; height: 150px; background: rgba(222,231,237,.6); }
-      .mobile-stick-icon { position: absolute; left: 22px; top: 22px; width: calc(100% - 44px); height: calc(100% - 44px); pointer-events: none; color: #2c3e48; opacity: .75; }
+      .mobile-controls .mobile-stick-icon { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 70%; height: 70%; pointer-events: none; color: #2c3e48; opacity: .75; }
       .mobile-stick::before { content: ""; position: absolute; inset: -12px; }
       .block-scroll-strip { position: absolute; right: 0; top: 18%; height: 40%; width: 64px; pointer-events: auto; touch-action: none; user-select: none; background: rgba(15, 32, 38, .18); border-left: 1px dashed #a8e4ff88; }
       .mobile-stick-knob { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px; border-radius: 50%; background: #617683; pointer-events: none; }
-      .mobile-controls button { position: absolute; width: 72px; height: 72px; font-size: 15px; }
-      #mobile-mine { right: 16px; bottom: 20px; width: 84px; height: 84px; }
+      .mobile-controls button { position: absolute; width: 80px; height: 80px; font-size: 15px; }
+      .mobile-controls button::before { content: ""; position: absolute; inset: -10px; }
+      #mobile-mine { right: 16px; bottom: 20px; width: 92px; height: 92px; }
       #mobile-mine:active { transform: scale(.92) rotate(-8deg); }
-      #mobile-build { right: 112px; bottom: 20px; }
-      #mobile-jump { right: 22px; bottom: 116px; }
+      #mobile-build { right: 130px; bottom: 20px; }
+      #mobile-jump { right: 22px; bottom: 134px; }
       .mobile-controls svg, #sound-toggle svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-      #mobile-mine svg { width: 36px; height: 36px; }
-      #sound-toggle { display: grid !important; place-items: center; position: fixed; right: 12px; top: 68px; z-index: 25; width: 48px; height: 48px; padding: 9px; border: 1px solid #a8e4ff; border-radius: 50%; background: rgba(15, 32, 38, .82); color: #e9f4ff; cursor: pointer; }
+      #mobile-mine img, #mobile-build img { width: 44px; height: 44px; image-rendering: pixelated; pointer-events: none; }
+      #sound-toggle { display: grid !important; place-items: center; position: fixed; right: 12px; top: 68px; z-index: 25; width: 54px; height: 54px; padding: 9px; border: 1px solid #a8e4ff; border-radius: 50%; background: rgba(15, 32, 38, .82); color: #e9f4ff; cursor: pointer; }
       #sound-toggle[aria-pressed="true"] .sound-muted { display: none; }
       #connection-status { display: block !important; position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 26; max-width: 90%; padding: 8px 12px; background: rgba(0,0,0,.8); color: white; text-align: center; }
       #connection-status[hidden] { display: none !important; }
@@ -135,17 +136,22 @@
       #game-error[hidden] { display: none !important; }
       @media (any-pointer: coarse) { .mobile-controls { display: block !important; } }
       @media (max-width: 420px) {
-        .mobile-controls button { width: 64px; height: 64px; }
-        #mobile-mine { width: 76px; height: 76px; }
-        #mobile-build { right: 104px; }
-        #mobile-jump { bottom: 108px; }
+        .mobile-stick { left: max(12px, env(safe-area-inset-left)); width: 108px; height: 108px; }
+        .mobile-controls button { width: 72px; height: 72px; }
+        #mobile-mine { width: 84px; height: 84px; }
+        #mobile-build { right: 122px; }
+        #mobile-jump { bottom: 126px; }
+      }
+      @media (max-width: 360px) {
+        .mobile-stick { width: 96px; height: 96px; }
+        .mobile-stick::before { inset: -4px; }
       }
       @media (max-height: 400px) {
-        .mobile-stick { width: 116px; height: 116px; }
-        .mobile-controls button { width: 56px; height: 56px; }
-        #mobile-mine { width: 64px; height: 64px; }
-        #mobile-build { right: 92px; }
-        #mobile-jump { bottom: 96px; }
+        .mobile-stick { width: 108px; height: 108px; }
+        .mobile-controls button { width: 64px; height: 64px; }
+        #mobile-mine { width: 72px; height: 72px; }
+        #mobile-build { right: 110px; }
+        #mobile-jump { bottom: 114px; }
       }
       .mobile-controls.touch-enabled { display: block !important; }
     </style>
@@ -1272,8 +1278,8 @@
     <div class="mobile-controls" aria-label="Touch controls">
       <div id="block-scroll-strip" class="block-scroll-strip" aria-label="Drag up or down to change block"></div>
       <div id="mobile-stick" class="mobile-stick" aria-label="Move"><svg class="mobile-stick-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20M12 2l-3 3m3-3 3 3M12 22l-3-3m3 3 3-3M2 12l3-3m-3 3 3 3M22 12l-3-3m3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><div id="mobile-stick-knob" class="mobile-stick-knob"></div></div>
-      <button id="mobile-mine" type="button" aria-label="Mine" title="Hold to mine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21 15 8M3 9c4-5 12-8 18-3-5-1-8 1-11 5M3 9l2 2m14-5 2 2"/></svg></button>
-      <button id="mobile-build" type="button" aria-label="Build" title="Build"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4v10l-8 4-8-4V7zM4 7l8 4 8-4m-8 4v10"/></svg></button>
+      <button id="mobile-mine" type="button" aria-label="Mine" title="Hold to mine"><img src="/pickaxe.svg" alt="" aria-hidden="true"></button>
+      <button id="mobile-build" type="button" aria-label="Build" title="Build"><img src="/grass-block.svg" alt="" aria-hidden="true"></button>
       <button id="mobile-jump" type="button" aria-label="Jump" title="Jump"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6M5 21h14"/></svg></button>
     </div>
 
@@ -1641,21 +1647,11 @@
             function(event) { if (event.pointerId === stickPointer) releaseStick(); });
           hold('mobile-mine', 'touch_set_mine');
           hold('mobile-jump', 'touch_set_jump');
-          function tap(id, name) {
-            var button = document.getElementById(id);
-            function activate(event) {
-              if (event.cancelable) event.preventDefault();
-              call(name, []);
-            }
-            button.addEventListener('pointerdown', activate);
-            button.addEventListener('click', function(event) { if (event.detail === 0) activate(event); });
-            if (!window.PointerEvent) touchFallback(button, activate, null, null);
-          }
-          tap('mobile-build', 'touch_build');
+          hold('mobile-build', 'touch_set_build');
           var scrollStrip = document.getElementById('block-scroll-strip');
           var scrollY = null;
           var scrollRemainder = 0;
-          var SCROLL_STEP_PX = 28;
+          var SCROLL_STEP_PX = 56;
           scrollStrip.addEventListener('touchstart', function(event) {
             event.preventDefault();
             scrollY = event.touches[0].clientY;
@@ -1683,6 +1679,7 @@
             releaseStick();
             call('touch_set_mine', [0]);
             call('touch_set_jump', [0]);
+            call('touch_set_build', [0]);
           });
         })();
     </script>
