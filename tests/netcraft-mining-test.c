@@ -80,14 +80,17 @@ int main(void) {
     target_x_value = 0;
     now = 200;
     mining_set_pickaxe(1);
+    assert(mining_has_pickaxe());
     mining_start();
     now = 200.99;
+    assert(fabs(mining_swing_elapsed() - .99) < .0001);
     mining_tick();
     assert(mined == 2);
     now = 201;
     mining_tick();
     assert(mined == 3);
     mining_set_pickaxe(0);
+    assert(!mining_has_pickaxe());
     now = 202.01;
     mining_tick();
     assert(mined == 3);

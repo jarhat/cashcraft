@@ -198,10 +198,11 @@ game's wallet button blink green until the wallet is opened.
 Browser wallet creation requires a password and confirmation of the recovery
 phrase backup. The wallet scans receive and change addresses, rescans after
 registration, and refreshes periodically while connected.
-Players with at least 2 MINA in their scanned wallet automatically equip a
-green pixel pickaxe that halves block mining time. It is removed when the
-wallet disconnects or a subsequent balance scan no longer qualifies. The
-pickaxe swings toward the targeted block while mining.
+Players carry a pixel pickaxe that swings toward the targeted block while
+mining. Players with at least 2 MINA in their scanned wallet automatically
+equip a green pickaxe that halves block mining time. It returns to the standard
+pickaxe when the wallet disconnects or a subsequent balance scan no longer
+qualifies.
 
 The loading screen shows available download progress and fades after the first
 frame is rendered. Its background is served by the frontend as

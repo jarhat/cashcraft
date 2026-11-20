@@ -40,16 +40,10 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
   window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: '', pickaxe: false } });
   assert.equal(updates.length, 0);
   context.Module.applyPendingRewardAddress();
-  assert.equal($('mina-pickaxe').hidden, true);
   window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: 'new', pickaxe: true } });
-  assert.equal($('mina-pickaxe').hidden, false);
   assert.deepEqual(updates, [['netcraft_set_reward_address', ''], ['mining_set_pickaxe', 0], ['netcraft_set_reward_address', 'new'], ['mining_set_pickaxe', 1]]);
-  context.Module.setPickaxeMining(1);
-  assert.equal($('mina-pickaxe').classList.mining, true);
-  context.Module.setPickaxeMining(0);
-  assert.equal($('mina-pickaxe').classList.mining, false);
   window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: '', pickaxe: false } });
-  assert.equal($('mina-pickaxe').hidden, true);
+  assert.deepEqual(updates.at(-1), ['mining_set_pickaxe', 0]);
   assert.ok(context.Module.websocket);
   assert.equal(typeof $('mobile-mine').listeners.pointerdown, 'function');
   assert.equal(typeof window.listeners.pointermove, 'function');
