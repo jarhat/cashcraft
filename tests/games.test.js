@@ -5,10 +5,16 @@ import { hash160 } from '@cashscript/utils';
 import { setupGames } from '../src/games.js';
 import { BrowserWallet } from '../src/browser-wallet.js';
 
+const guestId = 'a'.repeat(64);
+globalThis.window = { addEventListener() {} };
+globalThis.localStorage = { getItem: () => guestId };
+
 test('game buttons minimize and restore without unloading the active game', async (t) => {
   const originalFetch = globalThis.fetch;
   const originalDocument = globalThis.document;
-  t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; });
+  const originalRaf = globalThis.requestAnimationFrame;
+  t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; globalThis.requestAnimationFrame = originalRaf; });
+  globalThis.requestAnimationFrame = () => {};
   const elements = new Map();
   const $ = (id) => {
     if (!elements.has(id)) elements.set(id, {
@@ -34,7 +40,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   const documentListeners = {};
   let gameToolbarSelected = false;
   globalThis.document = {
-    body: { classList: { toggle() {} } }, fullscreenElement: null,
+    documentElement: { classList: { remove() {} } }, body: { classList: { toggle() {} } }, fullscreenElement: null,
     querySelector(selector) { gameToolbarSelected = selector === '.game-toolbar'; return { after() {} }; },
     addEventListener(type, fn) { documentListeners[type] = fn; },
     async exitFullscreen() { this.fullscreenElement = null; documentListeners.fullscreenchange(); },
@@ -142,7 +148,7 @@ test('NetCraft starts online without a wallet and accepts a registered address l
   const originalFetch = globalThis.fetch;
   const originalDocument = globalThis.document;
   t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; });
-  globalThis.document = { body: { classList: { toggle() {} } }, addEventListener() {}, querySelector() { return { after() {} }; } };
+  globalThis.document = { documentElement: { classList: { remove() {} } }, body: { classList: { toggle() {} } }, addEventListener() {}, querySelector() { return { after() {} }; } };
   const elements = new Map();
   const $ = (id) => {
     if (!elements.has(id)) elements.set(id, {
@@ -164,7 +170,7 @@ test('NetCraft starts online without a wallet and accepts a registered address l
   assert.equal($('game-frame').src, '/games/netcraft/craftw.html#-+4080');
   address = 'bitcoincash:ztest';
   update(address);
-  assert.deepEqual(messages.at(-1), { type: 'netcraft-reward-address', address, pickaxe: false });
+  assert.deepEqual(messages.at(-1), { type: 'netcraft-reward-address', address, pickaxe: false, connected: true, guestId });
   pickaxe = true;
   update(address);
   assert.equal(messages.at(-1).pickaxe, true);
@@ -176,7 +182,7 @@ test('NetCraft starts online without a wallet and accepts a registered address l
 test('game gem opens connected wallet notifications even while reward registration is pending', (t) => {
   const originalDocument = globalThis.document;
   t.after(() => { globalThis.document = originalDocument; });
-  globalThis.document = { body: { classList: { toggle() {} } }, addEventListener() {}, querySelector() { return { after() {} }; } };
+  globalThis.document = { documentElement: { classList: { remove() {} } }, body: { classList: { toggle() {} } }, addEventListener() {}, querySelector() { return { after() {} }; } };
   const elements = new Map();
   const $ = (id) => {
     if (!elements.has(id)) elements.set(id, {
@@ -201,7 +207,7 @@ test('NetCraft receives the connected token address when launched', async (t) =>
   const originalFetch = globalThis.fetch;
   const originalDocument = globalThis.document;
   t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; });
-  globalThis.document = { body: { classList: { toggle() {} } }, addEventListener() {}, querySelector() { return { after() {} }; } };
+  globalThis.document = { documentElement: { classList: { remove() {} } }, body: { classList: { toggle() {} } }, addEventListener() {}, querySelector() { return { after() {} }; } };
   const elements = new Map();
   const $ = (id) => {
     if (!elements.has(id)) elements.set(id, {
@@ -230,9 +236,9 @@ test('NetCraft receives the connected token address when launched', async (t) =>
   $('game-frame').listeners.load();
   assert.equal($('game-notifications')['aria-label'], 'Connect wallet');
   assert.deepEqual(messages, [
-    { message: { type: 'netcraft-reward-address', address: browserAddress, pickaxe: false }, origin: '*' },
-    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false }, origin: '*' },
-    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: browserAddress, pickaxe: false, connected: true, guestId }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false, connected: false, guestId }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false, connected: false, guestId }, origin: '*' },
   ]);
   update('bitcoincash:zother');
   assert.equal(messages[3].message.address, 'bitcoincash:zother');
@@ -259,17 +265,20 @@ test('fullscreen game regains keyboard focus without stealing focus from other d
         appendChild(child) { child.parentNode = this; }, insertBefore(child) { child.parentNode = this; },
         classList: { add: (value) => classes.add(value), remove: (value) => classes.delete(value), contains: (value) => classes.has(value), toggle: (value, force) => force ? classes.add(value) : classes.delete(value) },
         show() { this.open = true; document.activeElement = $('game-close'); },
+        close() { this.open = false; this.listeners.close(); },
         focus() { document.activeElement = this; },
       });
     }
     return elements.get(id);
   };
   globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
-  globalThis.document = { body: { classList: { toggle() {} } }, fullscreenElement: null, activeElement: null, addEventListener() {}, querySelector() { return { after() {} }; } };
+  globalThis.document = { documentElement: { classList: { remove() {} } }, body: { classList: { toggle() {} } }, fullscreenElement: null, activeElement: null, addEventListener() {}, querySelector() { return { after() {} }; } };
   globalThis.requestAnimationFrame = (fn) => callbacks.push(fn);
   setupGames($, { translate: (text) => text, getRewardAddress: () => 'bitcoincash:ztest' });
   $('game-dialog').classList.add('game-auto-open');
   await $('game-netcraft').listeners.click();
+  $('game-guide').close();
+  callbacks.length = 0;
   assert.equal(document.activeElement, $('game-close'));
   $('game-frame').listeners.load();
   assert.equal(document.activeElement, $('game-frame'));

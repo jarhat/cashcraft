@@ -7,6 +7,7 @@ import { setupMesh } from './mesh.js';
 import { setupPairingReminder } from './pairing-reminder.js';
 import { fetchTokenMetadata, fetchCauldronSpot } from './portfolio-data.js';
 import { loadTokenLogo } from './token-logo.js';
+import { updateCategoryIcon } from './category-icon.js';
 import { inspectNft } from './nft-inspection.js';
 import { setupMarketTicker } from './market-ticker.js';
 import { setupChainTicker } from './chain-ticker.js';
@@ -98,6 +99,7 @@ function fillFromUrl(params = new URLSearchParams(window.location.search), note 
 
   $('category-select').disabled =
     !walletReady || $('category').readOnly || $('category-select').options.length < 2;
+  refreshCategoryIcon('category');
 }
 
 const mainnet = network === 'mainnet';
@@ -112,14 +114,10 @@ setupMediaSlideshow($);
 
 const updateReceiveToken = () => {
   $('receive-pusd').hidden = !mainnet || $('receive-category').value.trim().toLowerCase() !== PUSD_CATEGORY;
+  refreshCategoryIcon('receive-category');
 };
+const refreshCategoryIcon = (id) => updateCategoryIcon($(id), $(`${id}-icon`), { mainnet, loadTokenLogo, logger });
 updateReceiveToken();
-if (mainnet) {
-  loadTokenLogo(PUSD_CATEGORY).then((image) => {
-    image.alt = '';
-    $('receive-pusd-logo').replaceChildren(image);
-  }).catch((error) => logger.warn('ParyonUSD logo unavailable:', error));
-}
 for (const field of ['receive-address', 'receive-category']) {
   $(`edit-${field}`).addEventListener('click', () => {
     $(field).readOnly = false;
@@ -411,9 +409,14 @@ function setTheme(theme) {
     button.setAttribute('aria-pressed', String(button.dataset.themeOption === theme));
   });
 }
-const migratedTheme = { dark: 'frost', blue: 'frost', green: 'aurora', bch: 'aurora', 'bch-sunrise': 'aurora' }[savedTheme] || savedTheme;
-setTheme(['frost', 'aurora', 'miami'].includes(migratedTheme) ? migratedTheme : 'aurora');
+const migratedTheme = { dark: 'frost', blue: 'frost' }[savedTheme] || savedTheme;
+setTheme(migratedTheme === 'frost' ? 'frost' : 'voxel');
 
+document.querySelector('.topbar-tools-left').append(
+  $('games-toggle').parentElement,
+  $('language-toggle').parentElement,
+  $('theme-toggle').parentElement,
+);
 for (const name of ['theme', 'language', 'games']) {
   const toggle = $(`${name}-toggle`);
   const menu = $(`${name}-menu`);
@@ -1204,6 +1207,7 @@ function renderBalances(scannedUtxos, prefetchedLogos = new Map()) {
       $('category').value = category;
       selector.value = category;
       $('token-options').open = false;
+      refreshCategoryIcon('category');
       updateAmountHelp();
     });
     if (spendableAmount > 0n) optionList.append(option);
@@ -1945,7 +1949,7 @@ async function connectBrowserWallet(phrase, isCurrent = () => true, session = nu
     $('status').textContent = 'Browser wallet connected · checking balances…';
     if ($('connection-dialog').open) $('connection-dialog').close();
   } catch (error) {
-    sessionStorage.removeItem(`cashcraft:browser-wallet-session:v1:${network}`);
+    if (!session) sessionStorage.removeItem(`cashcraft:browser-wallet-session:v1:${network}`);
     manager = null;
     walletReady = false;
     await wallet.destroy();
@@ -2289,6 +2293,7 @@ if (document.readyState === 'loading') {
 }
 $('category-select').addEventListener('change', () => {
   if (!$('category').readOnly) $('category').value = $('category-select').value;
+  refreshCategoryIcon('category');
   updateAmountHelp();
 });
 $('category').addEventListener('input', () => {
@@ -2297,6 +2302,7 @@ $('category').addEventListener('input', () => {
     [...$('category-select').options].some((option) => option.value === value)
       ? value
       : '';
+  refreshCategoryIcon('category');
   updateAmountHelp();
 });
 $('amount').addEventListener('input', updateAmountHelp);
@@ -2398,19 +2404,23 @@ function loadCraftingConfig() {
 }
 loadCraftingConfig().then(({ address }) => {
   $('game-crafting').hidden = !address;
+  $('mining-prompt-craft').hidden = !address;
 }).catch(() => {});
+$('mining-prompt-craft').addEventListener('click', () => {
+  $('mining-prompt').close();
+  $('game-crafting').click();
+});
 $('game-crafting').addEventListener('click', async () => {
   try {
     const [{ address, returnCategory }, category] = await Promise.all([loadCraftingConfig(), loadRewardCategory()]);
     $('game-close').click();
     setTransferTab('send');
-    for (const [id, value] of [['recipient', address], ['category', category], ['amount', '2']]) {
+    for (const [id, value] of [['recipient', address], ['category', category], ['amount', '10']]) {
       $(id).value = value;
       $(id).dispatchEvent(new Event('input', { bubbles: true }));
     }
-    $('crafting-note').textContent = returnCategory
-      ? `Crafting sends 2 MINA and returns CashTokens in a different category (${returnCategory}).`
-      : 'Crafting sends 2 MINA to the crafting address and returns CashTokens in a different category.';
+    $('crafting-note').textContent = translate('Review the 10 MINA transfer and crafting terms before approving. Returns depend on the crafting service.') +
+      (returnCategory ? ` ${returnCategory}` : '');
     $('crafting-note').hidden = false;
     $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (!walletReady) showFundingDialog('Connect a compatible wallet before crafting.');
@@ -2826,18 +2836,16 @@ const restoreSession = async () => {
       await startConnection({ restoring: true });
     }
   } catch (error) {
-    sessionStorage.removeItem(`cashcraft:browser-wallet-session:v1:${network}`);
-    logger.warn('Could not restore previous WizardConnect session:', error);
+    logger.warn('Could not restore previous wallet session:', error);
     $('status').textContent = 'Wallet session could not be restored. Open the wallet dialog to reconnect.';
   }
 };
-void restoreSession().finally(() => {
-  const params = new URLSearchParams(window.location.search);
-  const game = params.get('game');
-  if (game === 'pk2' || game === 'cashcraft') {
-    $(game === 'pk2' ? 'game-pk2' : 'game-netcraft').click();
-  }
-});
+void restoreSession();
+const gameLink = new URLSearchParams(window.location.search).get('game');
+if (gameLink === 'pk2' || gameLink === 'cashcraft') {
+  $('game-dialog').classList.add('game-auto-open');
+  $(gameLink === 'pk2' ? 'game-pk2' : 'game-netcraft').click();
+}
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

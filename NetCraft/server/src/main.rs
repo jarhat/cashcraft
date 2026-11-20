@@ -78,6 +78,7 @@ struct Player {
     name: String,
     position: [f64; 5],
     reward_address: Option<String>,
+    guest_id: Option<String>,
     inventory: [u32; 256],
 }
 
@@ -331,6 +332,18 @@ fn open_database(path: &str) -> rusqlite::Result<Connection> {
            cash_address TEXT NOT NULL, category TEXT NOT NULL,
            blocks INTEGER NOT NULL CHECK(blocks >= 0 AND blocks < 10),
            PRIMARY KEY(cash_address, category)
+         );
+         CREATE TABLE IF NOT EXISTS guest_mining_progress (
+           guest_id TEXT NOT NULL, category TEXT NOT NULL,
+           blocks INTEGER NOT NULL CHECK(blocks >= 0 AND blocks < 10),
+           unlocked INTEGER NOT NULL DEFAULT 0,
+           last_x INTEGER, last_y INTEGER, last_z INTEGER,
+           PRIMARY KEY(guest_id, category)
+         );
+         CREATE TABLE IF NOT EXISTS guest_mining_rewards (
+           guest_id TEXT NOT NULL, category TEXT NOT NULL,
+           x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL, player_name TEXT,
+           UNIQUE(x,y,z)
          );",
     )?;
     let columns = {
@@ -590,6 +603,7 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
         }
     }
     let mut reward_id = None;
+    let mut guest_progress = None;
     if w == 0 {
         transaction.execute(
             "DELETE FROM sign WHERE x=?1 AND y=?2 AND z=?3",
@@ -617,6 +631,18 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
                         "UPDATE mina_mining_progress SET blocks=?3 WHERE cash_address=?1 AND category=?2",
                         params![address, category, if qualifies { 0 } else { blocks + 1 }],
                     )?;
+                    if let Some(guest) = player.guest_id.as_deref() {
+                        transaction.execute(
+                            "INSERT INTO guest_mining_progress (guest_id,category,blocks,unlocked) VALUES (?1,?2,0,?3)
+                             ON CONFLICT(guest_id,category) DO UPDATE SET unlocked=MAX(unlocked,excluded.unlocked)",
+                            params![guest, category, qualifies],
+                        )?;
+                        let unlocked: bool = transaction.query_row(
+                            "SELECT unlocked FROM guest_mining_progress WHERE guest_id=?1 AND category=?2",
+                            params![guest, category], |row| row.get(0),
+                        )?;
+                        guest_progress = Some((if qualifies { 0 } else { blocks + 1 }, unlocked));
+                    }
                 }
                 if qualifies {
                     transaction.execute(
@@ -624,6 +650,37 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
                         params![x, y, z, address, category, player.name],
                     )?;
                     reward_id = Some(transaction.last_insert_rowid());
+                }
+            } else if default == MINA_ORE && player.reward_address.is_none() {
+                if let (Some(guest), Some(category)) = (
+                    player.guest_id.as_ref(),
+                    server.reward_categories.get(&MINA_ORE),
+                ) {
+                    transaction.execute(
+                        "INSERT INTO guest_mining_progress (guest_id,category,blocks) VALUES (?1,?2,0)
+                         ON CONFLICT(guest_id,category) DO NOTHING",
+                        params![guest, category],
+                    )?;
+                    let (blocks, unlocked): (i64, bool) = transaction.query_row(
+                        "SELECT blocks,unlocked FROM guest_mining_progress WHERE guest_id=?1 AND category=?2",
+                        params![guest, category],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )?;
+                    let qualifies = blocks == 9;
+                    let blocks = if qualifies { 0 } else { blocks + 1 };
+                    let unlocked = unlocked || qualifies;
+                    transaction.execute(
+                        "UPDATE guest_mining_progress SET blocks=?3,unlocked=?4,last_x=?5,last_y=?6,last_z=?7
+                         WHERE guest_id=?1 AND category=?2",
+                        params![guest, category, blocks, unlocked, x, y, z],
+                    )?;
+                    if qualifies {
+                        transaction.execute(
+                            "INSERT INTO guest_mining_rewards (guest_id,category,x,y,z,player_name) VALUES (?1,?2,?3,?4,?5,?6)",
+                            params![guest, category, x, y, z, player.name],
+                        )?;
+                    }
+                    guest_progress = Some((blocks, unlocked));
                 }
             }
         }
@@ -639,6 +696,9 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
             inventory[previous as usize] = inventory[previous as usize].saturating_add(1);
         }
         send(&player, format!("I,{previous}\n"));
+        if let Some((blocks, unlocked)) = guest_progress {
+            send(&player, format!("G,{blocks},{}\n", i32::from(unlocked)));
+        }
         if reward_id.is_some() && default == MINA_ORE {
             if let Some(address) = player.reward_address.as_deref() {
                 send(&player, format!("Q,{address}\n"));
@@ -741,6 +801,130 @@ fn sign_edit(
         Some(id),
         &format!("S,{p},{q},{x},{y},{z},{face},{text}\n"),
     );
+    Ok(())
+}
+
+fn sync_guest_rewards(server: &Server, id: u32) -> rusqlite::Result<()> {
+    let mut state = server.state.lock().unwrap();
+    let Some(player) = state.players.get(&id).cloned() else {
+        return Ok(());
+    };
+    let Some(guest) = player.guest_id.as_deref() else {
+        return Ok(());
+    };
+    let mut rewards = Vec::new();
+    let transaction = state.db.transaction()?;
+    if let Some(address) = player.reward_address.as_deref() {
+        let pending = {
+            let mut query = transaction.prepare(
+                "SELECT category,x,y,z,player_name FROM guest_mining_rewards WHERE guest_id=?1",
+            )?;
+            let rows = query
+                .query_map([guest], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, i32>(1)?,
+                        r.get::<_, i32>(2)?,
+                        r.get::<_, i32>(3)?,
+                        r.get::<_, Option<String>>(4)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows
+        };
+        for (category, x, y, z, name) in pending {
+            transaction.execute(
+                "INSERT INTO mining_rewards (x,y,z,cash_address,category,player_name) VALUES (?1,?2,?3,?4,?5,?6)",
+                params![x, y, z, address, category, name],
+            )?;
+            rewards.push(transaction.last_insert_rowid());
+        }
+        transaction.execute(
+            "DELETE FROM guest_mining_rewards WHERE guest_id=?1",
+            [guest],
+        )?;
+        let progress = {
+            let mut query = transaction.prepare(
+                "SELECT category,blocks,last_x,last_y,last_z FROM guest_mining_progress WHERE guest_id=?1 AND blocks>0"
+            )?;
+            let rows = query
+                .query_map([guest], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, i32>(2)?,
+                        r.get::<_, i32>(3)?,
+                        r.get::<_, i32>(4)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows
+        };
+        for (category, blocks, x, y, z) in progress {
+            transaction.execute(
+                "INSERT INTO mina_mining_progress (cash_address,category,blocks) VALUES (?1,?2,0)
+                 ON CONFLICT(cash_address,category) DO NOTHING",
+                params![address, category],
+            )?;
+            let previous: i64 = transaction.query_row(
+                "SELECT blocks FROM mina_mining_progress WHERE cash_address=?1 AND category=?2",
+                params![address, category],
+                |r| r.get(0),
+            )?;
+            let total = previous + blocks;
+            transaction.execute(
+                "UPDATE mina_mining_progress SET blocks=?3 WHERE cash_address=?1 AND category=?2",
+                params![address, category, total % 10],
+            )?;
+            if total >= 10 {
+                transaction.execute(
+                    "INSERT INTO mining_rewards (x,y,z,cash_address,category,player_name) VALUES (?1,?2,?3,?4,?5,?6)",
+                    params![x, y, z, address, category, player.name],
+                )?;
+                rewards.push(transaction.last_insert_rowid());
+            }
+            transaction.execute(
+                "UPDATE guest_mining_progress SET blocks=0,unlocked=CASE WHEN ?3 THEN 1 ELSE unlocked END
+                 WHERE guest_id=?1 AND category=?2",
+                params![guest, category, total >= 10],
+            )?;
+        }
+    }
+    let progress =
+        if let Some(category) = server.reward_categories.get(&MINA_ORE) {
+            let guest_progress = transaction.query_row(
+            "SELECT blocks,unlocked FROM guest_mining_progress WHERE guest_id=?1 AND category=?2",
+            params![guest, category], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, bool>(1)?)),
+        ).optional()?.unwrap_or((0, false));
+            if let Some(address) = player.reward_address.as_deref() {
+                let blocks = transaction.query_row(
+                "SELECT blocks FROM mina_mining_progress WHERE cash_address=?1 AND category=?2",
+                params![address, category], |r| r.get::<_, i64>(0),
+            ).optional()?.unwrap_or(0);
+                (blocks, guest_progress.1)
+            } else {
+                guest_progress
+            }
+        } else {
+            (0, false)
+        };
+    transaction.commit()?;
+    drop(state);
+    send(
+        &player,
+        format!("G,{},{}\n", progress.0, i32::from(progress.1)),
+    );
+    if let Some(address) = player.reward_address.as_deref() {
+        for reward in rewards {
+            send(&player, format!("Q,{address}\n"));
+            if server.reward_wake.as_ref().map_or(true, |sender| {
+                sender.try_send((reward, player.clone())).is_err()
+            }) {
+                eprintln!("Could not dispatch mining reward {reward}; check the payout backend");
+                send(&player, format!("F,{address}\n"));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -852,6 +1036,28 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
             }
         }
         "A" => {}
+        "G" if args.len() == 1
+            && args[0].len() == 64
+            && args[0]
+                .bytes()
+                .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) =>
+        {
+            {
+                let mut state = server.state.lock().unwrap();
+                if let Some(player) = state.players.get_mut(&id) {
+                    if player
+                        .guest_id
+                        .as_deref()
+                        .map_or(true, |saved| saved == args[0])
+                    {
+                        player.guest_id = Some(args[0].to_owned());
+                    } else {
+                        return Ok(false);
+                    }
+                }
+            }
+            sync_guest_rewards(server, id)?;
+        }
         "W" if args.len() == 1 => {
             let address = args[0].to_ascii_lowercase();
             if address.is_empty() {
@@ -861,6 +1067,8 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                         send(player, b"T,Mining reward address disconnected.\n".to_vec());
                     }
                 }
+                drop(state);
+                sync_guest_rewards(server, id)?;
             } else if valid_reward_address(&address, &server.address_prefix) && args[0] == address {
                 let mut state = server.state.lock().unwrap();
                 if let Some(player) = state.players.get_mut(&id) {
@@ -869,6 +1077,8 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                         send(player, b"T,Mining reward address connected.\n".to_vec());
                     }
                 }
+                drop(state);
+                sync_guest_rewards(server, id)?;
             } else {
                 let state = server.state.lock().unwrap();
                 if let Some(player) = state.players.get(&id) {
@@ -920,6 +1130,7 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
             name: format!("guest{id}"),
             position: [0.0; 5],
             reward_address: None,
+            guest_id: None,
             inventory: [0; 256],
         };
         let now = SystemTime::now()
@@ -1114,6 +1325,7 @@ mod tests {
                     name: format!("guest{id}"),
                     position: [0.0, 1.0, 0.0, 0.0, 0.0],
                     reward_address: None,
+                    guest_id: None,
                     inventory: [0; 256],
                 },
             );
@@ -1242,6 +1454,172 @@ mod tests {
             )
             .unwrap();
         assert_eq!(edits, 0);
+    }
+
+    #[test]
+    fn guest_mining_unlocks_pickaxe_and_claims_reward_once_after_connecting() {
+        let (mut server, first, _second) = setup();
+        let (wake, wakes) = mpsc::sync_channel(4);
+        server.reward_wake = Some(wake);
+        let guest = "a".repeat(64);
+        let address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz";
+        handle_command(&server, 1, &format!("G,{guest}")).unwrap();
+        let ores = ore_positions(&server);
+        for &(x, y, z) in &ores[..10] {
+            move_to(&server, (x, y, z));
+            block_edit(&server, 1, x, y, z, 0).unwrap();
+        }
+        let messages = String::from_utf8(first.try_iter().flatten().collect()).unwrap();
+        assert!(messages.contains("G,9,0\n"));
+        assert!(messages.contains("G,0,1\n"));
+        assert!(wakes.try_recv().is_err());
+        {
+            let state = server.state.lock().unwrap();
+            assert_eq!(
+                state
+                    .db
+                    .query_row("SELECT count(*) FROM guest_mining_rewards", [], |r| r
+                        .get::<_, i64>(0))
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                state
+                    .db
+                    .query_row("SELECT count(*) FROM mining_rewards", [], |r| r
+                        .get::<_, i64>(0))
+                    .unwrap(),
+                0
+            );
+        }
+        handle_command(&server, 1, &format!("W,{address}")).unwrap();
+        assert!(wakes.try_recv().is_ok());
+        handle_command(&server, 1, &format!("W,{address}")).unwrap();
+        assert!(wakes.try_recv().is_err());
+        let state = server.state.lock().unwrap();
+        assert_eq!(
+            state
+                .db
+                .query_row("SELECT count(*) FROM guest_mining_rewards", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            state
+                .db
+                .query_row(
+                    "SELECT count(*) FROM mining_rewards WHERE cash_address=?1",
+                    [address],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            1
+        );
+        drop(state);
+        handle_command(&server, 2, &format!("G,{guest}")).unwrap();
+        assert!(String::from_utf8(_second.try_iter().flatten().collect())
+            .unwrap()
+            .contains("G,0,1\n"));
+    }
+
+    #[test]
+    fn guest_identity_is_validated_and_cannot_change_mid_connection() {
+        let (server, _first, _second) = setup();
+        handle_command(&server, 1, "G,invalid").unwrap();
+        assert!(server.state.lock().unwrap().players[&1].guest_id.is_none());
+        let guest = "a".repeat(64);
+        assert!(handle_command(&server, 1, &format!("G,{guest}")).unwrap());
+        assert!(!handle_command(&server, 1, &format!("G,{}", "b".repeat(64))).unwrap());
+        assert_eq!(server.state.lock().unwrap().players[&1].guest_id.as_deref(), Some(guest.as_str()));
+    }
+
+    #[test]
+    fn guest_partial_progress_merges_with_wallet_progress_once() {
+        let (server, _first, _second) = setup();
+        let guest = "b".repeat(64);
+        let address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz";
+        handle_command(&server, 1, &format!("W,{address}")).unwrap();
+        let ores = ore_positions(&server);
+        for &(x, y, z) in &ores[..7] {
+            move_to(&server, (x, y, z));
+            block_edit(&server, 1, x, y, z, 0).unwrap();
+        }
+        handle_command(&server, 1, "W,").unwrap();
+        handle_command(&server, 1, &format!("G,{guest}")).unwrap();
+        for &(x, y, z) in &ores[7..11] {
+            move_to(&server, (x, y, z));
+            block_edit(&server, 1, x, y, z, 0).unwrap();
+        }
+        handle_command(&server, 1, &format!("W,{address}")).unwrap();
+        handle_command(&server, 1, &format!("W,{address}")).unwrap();
+        let state = server.state.lock().unwrap();
+        assert_eq!(
+            state
+                .db
+                .query_row(
+                    "SELECT blocks FROM mina_mining_progress WHERE cash_address=?1",
+                    [address],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            state
+                .db
+                .query_row("SELECT count(*) FROM mining_rewards", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            state
+                .db
+                .query_row(
+                    "SELECT unlocked FROM guest_mining_progress WHERE guest_id=?1",
+                    [guest],
+                    |r| r.get::<_, bool>(0)
+                )
+                .unwrap(),
+            true
+        );
+    }
+
+    #[test]
+    fn guest_progress_survives_database_reopen_and_reconnect() {
+        let path = env::temp_dir().join(format!(
+            "netcraft-guest-progress-{}-{}.sqlite3",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let (server, _first, _second) = setup();
+        server.state.lock().unwrap().db = open_database(path.to_str().unwrap()).unwrap();
+        let guest = "c".repeat(64);
+        handle_command(&server, 1, &format!("G,{guest}")).unwrap();
+        let ores = ore_positions(&server);
+        for &(x, y, z) in &ores[..9] {
+            move_to(&server, (x, y, z));
+            block_edit(&server, 1, x, y, z, 0).unwrap();
+        }
+        server.state.lock().unwrap().db = open_database(path.to_str().unwrap()).unwrap();
+        handle_command(&server, 2, &format!("G,{guest}")).unwrap();
+        let (x, y, z) = ores[9];
+        server.state.lock().unwrap().players.get_mut(&2).unwrap().position =
+            [x as f64, y as f64, z as f64, 0.0, 0.0];
+        block_edit(&server, 2, x, y, z, 0).unwrap();
+        let state = server.state.lock().unwrap();
+        assert_eq!(
+            state.db.query_row(
+                "SELECT blocks,unlocked FROM guest_mining_progress WHERE guest_id=?1",
+                [guest], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, bool>(1)?))
+            ).unwrap(),
+            (0, true)
+        );
+        assert_eq!(state.db.query_row("SELECT count(*) FROM guest_mining_rewards", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
+        drop(state);
+        drop(server);
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

@@ -13,10 +13,11 @@
         overflow: hidden;
       }
       body > a, #spinner, #status, #progress, #output { display: none !important; }
-      #loading-screen { display: grid !important; position: fixed; inset: 0; z-index: 40; place-content: center; justify-items: center; gap: 18px; background: linear-gradient(#07151077, #071510bb), url('/craft-loading.webp') center / cover no-repeat #101e1b; color: #fff; font: 600 16px system-ui, sans-serif; text-align: center; text-shadow: 0 2px 6px #000; transition: opacity .3s ease, visibility 0s linear .3s; }
+      #loading-screen { display: grid !important; position: fixed; inset: 0; z-index: 40; place-content: center; justify-items: center; gap: 18px; background: #0a1910; color: #b7ffca; font: 700 16px system-ui, sans-serif; text-align: center; letter-spacing: .08em; transition: opacity .3s ease, visibility 0s linear .3s; }
       #loading-screen.is-ready { opacity: 0; visibility: hidden; pointer-events: none; }
       #loading-screen[hidden] { display: none !important; }
-      .loading-circle { width: 48px; height: 48px; border: 5px solid #ffffff66; border-top-color: #fff; border-radius: 50%; animation: rotation .8s linear infinite; }
+      .loading-circle { width: min(300px, 75vw); height: 108px; background: radial-gradient(circle, #4be78a 3px, transparent 4px) 0 0 / 18px 18px; mask-image: linear-gradient(110deg, transparent, #000, transparent); animation: loading-dots 1.2s ease-in-out infinite alternate; }
+      @keyframes loading-dots { from { opacity: .35; transform: translateX(-8px); } to { opacity: 1; transform: translateX(8px); } }
       #loading-progress { width: min(240px, 70vw); height: 6px; accent-color: #8ce2a8; }
       #loading-progress[hidden] { display: none; }
       @media (prefers-reduced-motion: reduce) { .loading-circle { animation: none; } #loading-screen { transition: none; } }
@@ -116,7 +117,7 @@
         color: #e9f4ff; border-radius: 50%; box-shadow: 0 3px 8px #0006;
       }
       .mobile-stick { position: absolute; left: max(20px, env(safe-area-inset-left)); bottom: max(28px, env(safe-area-inset-bottom)); width: 150px; height: 150px; background: rgba(222,231,237,.6); }
-      .mobile-controls .mobile-stick-icon { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 70%; height: 70%; pointer-events: none; color: #2c3e48; opacity: .75; }
+      .mobile-controls .mobile-stick-icon { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 70%; height: 70%; pointer-events: none; color: #44de90; opacity: .9; }
       .mobile-stick::before { content: ""; position: absolute; inset: -12px; }
       .block-scroll-strip { position: absolute; right: 0; top: 18%; height: 40%; width: 64px; pointer-events: auto; touch-action: none; user-select: none; background: rgba(15, 32, 38, .18); border-left: 1px dashed #a8e4ff88; }
       .mobile-stick-knob { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px; border-radius: 50%; background: #617683; pointer-events: none; }
@@ -1392,6 +1393,8 @@
       (function() {
         var pending;
         var pendingPickaxe;
+        var pendingConnected;
+        var pendingGuest;
         var ready = false;
         function notifyUserGesture(event) {
           if (event.isTrusted && !event.repeat && window.parent !== window) {
@@ -1402,6 +1405,10 @@
         document.addEventListener('keydown', notifyUserGesture);
         Module.applyPendingRewardAddress = function() {
           ready = true;
+          if (pendingGuest !== undefined) {
+            Module.ccall('netcraft_set_guest_id', null, ['string'], [pendingGuest]);
+            pendingGuest = undefined;
+          }
           if (pending !== undefined) {
             Module.ccall('netcraft_set_reward_address', null, ['string'], [pending]);
             pending = undefined;
@@ -1410,12 +1417,18 @@
             Module.ccall('mining_set_pickaxe', null, ['number'], [pendingPickaxe ? 1 : 0]);
             pendingPickaxe = undefined;
           }
+          if (pendingConnected !== undefined) {
+            Module.ccall('mining_set_wallet_connected', null, ['number'], [pendingConnected ? 1 : 0]);
+            pendingConnected = undefined;
+          }
         };
         window.addEventListener('message', function(event) {
           if (event.source !== window.parent || !event.data ||
               event.data.type !== 'netcraft-reward-address' || typeof event.data.address !== 'string') return;
           pending = event.data.address;
           pendingPickaxe = event.data.pickaxe === true;
+          pendingConnected = event.data.connected === true;
+          if (typeof event.data.guestId === 'string') pendingGuest = event.data.guestId;
           if (ready) Module.applyPendingRewardAddress();
         });
       })();

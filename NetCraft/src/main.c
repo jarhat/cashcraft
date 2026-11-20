@@ -2602,6 +2602,21 @@ static char username[128] = {0};
 static char access_token[128] = {0};
 #ifdef __EMSCRIPTEN__
 static char reward_address[128] = {0};
+static char guest_id[65] = {0};
+
+EMSCRIPTEN_KEEPALIVE void netcraft_set_guest_id(const char *id) {
+    if (strlen(id) != 64 || strspn(id, "0123456789abcdef") != 64) {
+        fprintf(stderr, "Invalid guest mining identity\n");
+        return;
+    }
+    if (strcmp(guest_id, id) == 0) return;
+    snprintf(guest_id, sizeof(guest_id), "%s", id);
+    if (online_ready) {
+        char message[68];
+        snprintf(message, sizeof(message), "G,%s\n", guest_id);
+        client_send(message);
+    }
+}
 
 EMSCRIPTEN_KEEPALIVE void netcraft_set_reward_address(const char *address) {
     size_t length = strlen(address);
@@ -3768,6 +3783,16 @@ void parse_buffer(char *buffer, int len) {
 #endif
         }
         char mined_reward_address[121];
+        int guest_blocks, guest_unlocked;
+        if (line[0] == 'G' && sscanf(line, "G,%d,%d", &guest_blocks, &guest_unlocked) == 2 &&
+            guest_blocks >= 0 && guest_blocks < 10 && (guest_unlocked == 0 || guest_unlocked == 1)) {
+            mining_set_guest_pickaxe(guest_unlocked);
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({ type: 'netcraft-mining-progress', blocks: $0, unlocked: !!$1 }, '*');
+            }, guest_blocks, guest_unlocked);
+#endif
+        }
         if (line[0] == 'Q' && sscanf(line, "Q,%120[^\n]", mined_reward_address) == 1) {
 #ifdef __EMSCRIPTEN__
             EM_ASM_ARGS({
@@ -4220,6 +4245,11 @@ void client_opened(int fd, void *userData) {
     client_version(1);
     login();
 #ifdef __EMSCRIPTEN__
+    if (guest_id[0]) {
+        char message[68];
+        snprintf(message, sizeof(message), "G,%s\n", guest_id);
+        client_send(message);
+    }
     if (reward_address[0]) {
         char message[160];
         snprintf(message, sizeof(message), "W,%s\n", reward_address);

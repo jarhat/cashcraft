@@ -6,6 +6,8 @@ void mining_stop(void);
 void mining_tick(void);
 void mining_start(void);
 void mining_set_pickaxe(int enabled);
+void mining_set_guest_pickaxe(int enabled);
+void mining_set_wallet_connected(int enabled);
 void building_stop(void);
 void building_tick(void);
 void building_start(void);
