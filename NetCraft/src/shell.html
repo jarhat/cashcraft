@@ -115,16 +115,16 @@
         background: rgba(15, 32, 38, .82); border: 1px solid #a8e4ff;
         color: #e9f4ff; border-radius: 50%; box-shadow: 0 3px 8px #0006;
       }
-      .mobile-stick { position: absolute; left: max(20px, env(safe-area-inset-left)); bottom: max(28px, env(safe-area-inset-bottom)); width: 124px; height: 124px; background: rgba(222,231,237,.6); }
+      .mobile-stick { position: absolute; left: max(20px, env(safe-area-inset-left)); bottom: max(28px, env(safe-area-inset-bottom)); width: 150px; height: 150px; background: rgba(222,231,237,.6); }
+      .mobile-stick-icon { position: absolute; left: 22px; top: 22px; width: calc(100% - 44px); height: calc(100% - 44px); pointer-events: none; color: #2c3e48; opacity: .75; }
       .mobile-stick::before { content: ""; position: absolute; inset: -12px; }
+      .block-scroll-strip { position: absolute; right: 0; top: 18%; height: 40%; width: 64px; pointer-events: auto; touch-action: none; user-select: none; background: rgba(15, 32, 38, .18); border-left: 1px dashed #a8e4ff88; }
       .mobile-stick-knob { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px; border-radius: 50%; background: #617683; pointer-events: none; }
       .mobile-controls button { position: absolute; width: 72px; height: 72px; font-size: 15px; }
       #mobile-mine { right: 16px; bottom: 20px; width: 84px; height: 84px; }
       #mobile-mine:active { transform: scale(.92) rotate(-8deg); }
       #mobile-build { right: 112px; bottom: 20px; }
       #mobile-jump { right: 22px; bottom: 116px; }
-      #mobile-next { right: 22px; bottom: 200px; }
-      #mobile-prev { right: 112px; bottom: 200px; }
       .mobile-controls svg, #sound-toggle svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
       #mobile-mine svg { width: 36px; height: 36px; }
       #sound-toggle { display: grid !important; place-items: center; position: fixed; right: 12px; top: 68px; z-index: 25; width: 48px; height: 48px; padding: 9px; border: 1px solid #a8e4ff; border-radius: 50%; background: rgba(15, 32, 38, .82); color: #e9f4ff; cursor: pointer; }
@@ -153,17 +153,15 @@
       @media (max-width: 420px) {
         .mobile-controls button { width: 64px; height: 64px; }
         #mobile-mine { width: 76px; height: 76px; }
-        #mobile-build, #mobile-prev { right: 104px; }
+        #mobile-build { right: 104px; }
         #mobile-jump { bottom: 108px; }
-        #mobile-prev, #mobile-next { bottom: 184px; }
       }
       @media (max-height: 400px) {
-        .mobile-stick { width: 100px; height: 100px; }
+        .mobile-stick { width: 116px; height: 116px; }
         .mobile-controls button { width: 56px; height: 56px; }
         #mobile-mine { width: 64px; height: 64px; }
-        #mobile-build, #mobile-prev { right: 92px; }
+        #mobile-build { right: 92px; }
         #mobile-jump { bottom: 96px; }
-        #mobile-prev, #mobile-next { bottom: 164px; }
       }
       .mobile-controls.touch-enabled { display: block !important; }
     </style>
@@ -1295,12 +1293,11 @@
       <path fill="#baffd8" d="M5 3h5v1H5z"/>
     </svg>
     <div class="mobile-controls" aria-label="Touch controls">
-      <div id="mobile-stick" class="mobile-stick" aria-label="Move"><div id="mobile-stick-knob" class="mobile-stick-knob"></div></div>
+      <div id="block-scroll-strip" class="block-scroll-strip" aria-label="Drag up or down to change block"></div>
+      <div id="mobile-stick" class="mobile-stick" aria-label="Move"><svg class="mobile-stick-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20M12 2l-3 3m3-3 3 3M12 22l-3-3m3 3 3-3M2 12l3-3m-3 3 3 3M22 12l-3-3m3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><div id="mobile-stick-knob" class="mobile-stick-knob"></div></div>
       <button id="mobile-mine" type="button" aria-label="Mine" title="Hold to mine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21 15 8M3 9c4-5 12-8 18-3-5-1-8 1-11 5M3 9l2 2m14-5 2 2"/></svg></button>
       <button id="mobile-build" type="button" aria-label="Build" title="Build"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4v10l-8 4-8-4V7zM4 7l8 4 8-4m-8 4v10"/></svg></button>
       <button id="mobile-jump" type="button" aria-label="Jump" title="Jump"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6M5 21h14"/></svg></button>
-      <button id="mobile-next" type="button" aria-label="Next block" title="Next block"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-5-5 5 5-5 5M4 5h4v4H4zM4 15h4v4H4z"/></svg></button>
-      <button id="mobile-prev" type="button" aria-label="Previous block" title="Previous block"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H5m5-5-5 5 5 5M16 5h4v4h-4zM16 15h4v4h-4z"/></svg></button>
     </div>
 
     <script type='text/javascript'>
@@ -1682,8 +1679,30 @@
             if (!window.PointerEvent) touchFallback(button, activate, null, null);
           }
           tap('mobile-build', 'touch_build');
-          tap('mobile-next', 'touch_next_item');
-          tap('mobile-prev', 'touch_prev_item');
+          var scrollStrip = document.getElementById('block-scroll-strip');
+          var scrollY = null;
+          var scrollRemainder = 0;
+          var SCROLL_STEP_PX = 28;
+          scrollStrip.addEventListener('touchstart', function(event) {
+            event.preventDefault();
+            scrollY = event.touches[0].clientY;
+            scrollRemainder = 0;
+          }, { passive: false });
+          scrollStrip.addEventListener('touchmove', function(event) {
+            event.preventDefault();
+            if (scrollY === null) return;
+            var y = event.touches[0].clientY;
+            scrollRemainder += scrollY - y;
+            scrollY = y;
+            var steps = Math.trunc(scrollRemainder / SCROLL_STEP_PX);
+            if (steps) {
+              scrollRemainder -= steps * SCROLL_STEP_PX;
+              call('touch_scroll_items', [steps]);
+            }
+          }, { passive: false });
+          ['touchend', 'touchcancel'].forEach(function(type) {
+            scrollStrip.addEventListener(type, function() { scrollY = null; });
+          });
           ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function(type) {
             controls.addEventListener(type, function(event) { event.stopPropagation(); }, { passive: true });
           });

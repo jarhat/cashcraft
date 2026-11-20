@@ -58,6 +58,13 @@ if not BCH_WALLET:
 if not CATEGORY_RE.fullmatch(BCH_REWARD_CATEGORY):
     raise RuntimeError("Set BCH_REWARD_CATEGORY to a 64-character category ID.")
 
+CRAFTING_ADDRESS = os.getenv("CRAFTING_ADDRESS", "").strip()
+CRAFTING_RETURN_CATEGORY = os.getenv("CRAFTING_RETURN_CATEGORY", "").strip().lower()
+if CRAFTING_ADDRESS and not CRAFTING_ADDRESS.startswith("bitcoincash:z"):
+    raise RuntimeError("Set CRAFTING_ADDRESS to a token-aware CashAddr (bitcoincash:z…).")
+if CRAFTING_RETURN_CATEGORY and not CATEGORY_RE.fullmatch(CRAFTING_RETURN_CATEGORY):
+    raise RuntimeError("Set CRAFTING_RETURN_CATEGORY to a 64-character category ID or leave it empty.")
+
 
 DB_PATH = Path(os.getenv("CASHADDR_DB_PATH", "/data/cash-addresses.sqlite3"))
 NETCRAFT_DB_PATH = os.getenv("NETCRAFT_DB_PATH", "").strip()
@@ -399,6 +406,13 @@ def health() -> dict[str, str]:
 @app.get("/api/token-reward")
 def token_reward() -> dict[str, str]:
     return {"category": BCH_REWARD_CATEGORY}
+
+
+@app.get("/api/crafting")
+def crafting() -> dict[str, str | None]:
+    if not CRAFTING_ADDRESS:
+        return {"address": None, "returnCategory": None}
+    return {"address": CRAFTING_ADDRESS, "returnCategory": CRAFTING_RETURN_CATEGORY or None}
 
 
 @app.get("/api/donation-address")

@@ -2379,6 +2379,41 @@ $('top-receive').addEventListener('click', () => {
   setTransferTab('receive');
   $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
+let craftingConfigPromise = null;
+function loadCraftingConfig() {
+  craftingConfigPromise ??= fetch(`${API_BASE_URL}/api/crafting`)
+    .then((response) => {
+      if (!response.ok) throw new Error(`Crafting API error (${response.status})`);
+      return response.json();
+    })
+    .catch((error) => {
+      craftingConfigPromise = null;
+      throw error;
+    });
+  return craftingConfigPromise;
+}
+loadCraftingConfig().then(({ address }) => {
+  $('game-crafting').hidden = !address;
+}).catch(() => {});
+$('game-crafting').addEventListener('click', async () => {
+  try {
+    const [{ address, returnCategory }, category] = await Promise.all([loadCraftingConfig(), loadRewardCategory()]);
+    $('game-close').click();
+    setTransferTab('send');
+    for (const [id, value] of [['recipient', address], ['category', category], ['amount', '2']]) {
+      $(id).value = value;
+      $(id).dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    $('crafting-note').textContent = returnCategory
+      ? `Crafting sends 2 MINA and returns CashTokens in a different category (${returnCategory}).`
+      : 'Crafting sends 2 MINA to the crafting address and returns CashTokens in a different category.';
+    $('crafting-note').hidden = false;
+    $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!walletReady) showFundingDialog('Connect a compatible wallet before crafting.');
+  } catch (error) {
+    report(error);
+  }
+});
 $('generate-payment').addEventListener('click', async () => {
   const generation = ++paymentGeneration;
   try {

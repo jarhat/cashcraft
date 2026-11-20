@@ -2449,7 +2449,7 @@ void render_item(Attrib *attrib) {
             for (int j = 0; j < 12; j++) matrix[j] *= 1.2f;
         }
         matrix[12] = 1.0f - 80.0f * g->scale / g->width;
-        matrix[13] = 1.0f - 2.0f * (132.0f * g->scale + i * spacing) / g->height;
+        matrix[13] = 1.0f - 2.0f * (150.0f * g->scale + i * spacing) / g->height;
         glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
         if (is_plant(w)) draw_plant(attrib, item_buffers[w]);
         else draw_cube(attrib, item_buffers[w]);
@@ -3385,6 +3385,12 @@ EMSCRIPTEN_KEEPALIVE void touch_next_item(void) {
 }
 EMSCRIPTEN_KEEPALIVE void touch_prev_item(void) {
     on_key(g->window, CRAFT_KEY_ITEM_PREV, 0, GLFW_PRESS, 0);
+}
+EMSCRIPTEN_KEEPALIVE void touch_scroll_items(int steps) {
+    if (!inventory_item_count) {
+        return;
+    }
+    g->item_index = ((g->item_index + steps) % inventory_item_count + inventory_item_count) % inventory_item_count;
 }
 #endif
 

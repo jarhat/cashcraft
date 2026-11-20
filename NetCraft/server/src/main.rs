@@ -17,6 +17,9 @@ const CACHE_CHUNKS: usize = 24;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(20);
 const MAX_ANIMALS: usize = 8;
 const MINA_ORE: i32 = 83;
+const REDSTONE_ORE: i32 = 49;
+const GOLD_ORE: i32 = 70;
+const LAPIS_LAZULI_ORE: i32 = 73;
 const ANIMAL_TICK: Duration = Duration::from_secs(1);
 type Blocks = HashMap<(i32, i32, i32), i32>;
 
@@ -108,7 +111,7 @@ impl Animal {
 struct Server {
     state: Mutex<State>,
     terrain: Mutex<Terrain>,
-    default_reward_category: Option<String>,
+    reward_categories: HashMap<i32, String>,
     address_prefix: String,
     reward_wake: Option<SyncSender<(i64, Player)>>,
 }
@@ -587,10 +590,10 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
             "DELETE FROM sign WHERE x=?1 AND y=?2 AND z=?3",
             params![x, y, z],
         )?;
-        if edited.is_none() && default == MINA_ORE {
+        if edited.is_none() {
             if let (Some(address), Some(category)) = (
                 player.reward_address.as_ref(),
-                server.default_reward_category.as_ref(),
+                server.reward_categories.get(&default),
             ) {
                 if transaction.execute(
                     "INSERT OR IGNORE INTO mining_rewards (x,y,z,cash_address,category,player_name) VALUES (?1,?2,?3,?4,?5,?6)",
@@ -612,7 +615,7 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
             inventory[previous as usize] = inventory[previous as usize].saturating_add(1);
         }
         send(&player, format!("I,{previous}\n"));
-        if reward_id.is_some() {
+        if reward_id.is_some() && default == MINA_ORE {
             if let Some(address) = player.reward_address.as_deref() {
                 send(&player, format!("Q,{address}\n"));
             }
@@ -963,27 +966,44 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
     result
 }
 
-fn reward_configuration() -> Result<Option<String>, String> {
-    let valid_category = |s: &str| s.len() == 64 && s.bytes().all(|c| c.is_ascii_hexdigit());
-    let default = env::var("BCH_REWARD_CATEGORY")
-        .ok()
-        .filter(|s| !s.is_empty());
-    if default.as_ref().is_some_and(|s| !valid_category(s)) {
-        return Err("BCH_REWARD_CATEGORY must be 64 hexadecimal characters".into());
+fn optional_category(name: &str) -> Result<Option<String>, String> {
+    let value = env::var(name).ok().filter(|s| !s.is_empty());
+    if value
+        .as_ref()
+        .is_some_and(|s| !(s.len() == 64 && s.bytes().all(|c| c.is_ascii_hexdigit())))
+    {
+        return Err(format!("{name} must be 64 hexadecimal characters"));
     }
-    Ok(default.map(|s| s.to_ascii_lowercase()))
+    Ok(value.map(|s| s.to_ascii_lowercase()))
+}
+
+// Each ore reward is optional; an ore without a configured category grants nothing.
+fn reward_configuration() -> Result<HashMap<i32, String>, String> {
+    let mut categories = HashMap::new();
+    let ores = [
+        (MINA_ORE, "BCH_REWARD_CATEGORY"),
+        (REDSTONE_ORE, "BCH_REDSTONE_REWARD_CATEGORY"),
+        (GOLD_ORE, "BCH_GOLD_REWARD_CATEGORY"),
+        (LAPIS_LAZULI_ORE, "BCH_LAPIS_REWARD_CATEGORY"),
+    ];
+    for (ore, name) in ores {
+        if let Some(category) = optional_category(name)? {
+            categories.insert(ore, category);
+        }
+    }
+    Ok(categories)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let address = env::var("NETCRAFT_LISTEN").unwrap_or_else(|_| "0.0.0.0:4080".into());
     let database = env::var("NETCRAFT_DB").unwrap_or_else(|_| "craft.db".into());
-    let mut default_reward_category = reward_configuration()?;
+    let mut reward_categories = reward_configuration()?;
     match env::var("NETCRAFT_MINING_REWARDS_ENABLED").as_deref() {
         Ok("true") => {
             eprintln!("Warning: mining rewards are enabled without player authentication")
         }
         Ok("false") | Err(env::VarError::NotPresent) => {
-            default_reward_category = None;
+            reward_categories.clear();
         }
         _ => return Err("NETCRAFT_MINING_REWARDS_ENABLED must be true or false".into()),
     }
@@ -1006,7 +1026,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             animal_tick: 0,
         }),
         terrain: Mutex::new(Terrain::default()),
-        default_reward_category,
+        reward_categories,
         address_prefix,
         reward_wake: start_reward_wake()?,
     });
@@ -1052,7 +1072,7 @@ mod tests {
                 animal_tick: 0,
             }),
             terrain: Mutex::new(Terrain::default()),
-            default_reward_category: Some("b".repeat(64)),
+            reward_categories: HashMap::from([(MINA_ORE, "b".repeat(64))]),
             address_prefix: "bitcoincash".into(),
             reward_wake: None,
         };

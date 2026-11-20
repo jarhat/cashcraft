@@ -314,12 +314,11 @@ test('touch block cycling invokes the game without adding a separate chat interf
   const context = { document, window, Date, Math, console };
   runInNewContext(script, context);
   const calls = [];
-  context.Module._touch_next_item = context.Module._touch_prev_item = true;
+  context.Module._touch_scroll_items = true;
   context.Module.ccall = (name, _result, _types, args) => calls.push([name, Array.from(args)]);
-  $('mobile-next').listeners.pointerdown({});
-  $('mobile-prev').listeners.pointerdown({});
-  assert.deepEqual(calls, [
-    ['touch_next_item', []], ['touch_prev_item', []],
-  ]);
+  const strip = $('block-scroll-strip');
+  strip.listeners.touchstart({ preventDefault() {}, touches: [{ clientY: 100 }] });
+  strip.listeners.touchmove({ preventDefault() {}, touches: [{ clientY: 60 }] });
+  assert.deepEqual(calls, [['touch_scroll_items', [1]]]);
   assert.doesNotMatch(shell, /id="mobile-chat"|id="touch-chat"/);
 });

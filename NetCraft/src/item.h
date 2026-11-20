@@ -66,7 +66,10 @@ typedef enum {
     Item_VINE,
     Item_SLAB_LOWER_STONEBRICK,
     Item_max,
-    Item_MINA_ORE = 83
+    Item_MINA_ORE = 83,
+    Item_REDSTONE_ORE = 49,
+    Item_GOLD_ORE = 70,
+    Item_LAPIS_LAZULI_ORE = 73
 } Item;
 
 extern int hotbar_items[];
