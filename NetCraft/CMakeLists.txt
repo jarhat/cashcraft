@@ -102,6 +102,8 @@ if (EMSCRIPTEN)
     #set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " --memory-init-file=0")
 
     if (CMAKE_BUILD_TYPE MATCHES "Release")
+        target_compile_options(craft PRIVATE -flto)
+        target_link_options(craft PRIVATE -flto)
         set_property(TARGET craft APPEND_STRING PROPERTY LINK_FLAGS " -O3")
 
         # Generate a .data file preloaded with shaders and textures

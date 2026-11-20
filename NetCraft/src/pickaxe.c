@@ -2,14 +2,16 @@
 #include "pickaxe.h"
 
 int pickaxe_vertices(float *vertices, bool mina) {
-    static const int left[10] = {8, 8, 9, 10, 11, 12, 14, 16, 18, 20};
-    static const int right[10] = {31, 31, 31, 31, 30, 30, 29, 28, 27, 25};
-    static const float colors[2][5][3] = {
-        {{.25f, .14f, .08f}, {.58f, .36f, .18f}, {.25f, .29f, .31f},
-         {.62f, .68f, .69f}, {.88f, .92f, .90f}},
+    static const float colors[2][6][3] = {
+        {{.20f, .11f, .06f}, {.58f, .34f, .16f}, {.20f, .22f, .24f},
+         {.61f, .66f, .68f}, {.88f, .91f, .92f}, {.78f, .50f, .26f}},
         {{.09f, .24f, .17f}, {.19f, .53f, .35f}, {.15f, .55f, .35f},
-         {.26f, .93f, .58f}, {.73f, 1.0f, .85f}}
+         {.26f, .93f, .58f}, {.73f, 1.0f, .85f}, {.45f, .29f, .16f}}
     };
+    static const int head_left[11] = {8, 5, 3, 2, 2, 3, 4, 6, 8, 11, 14};
+    static const int head_right[11] = {24, 27, 29, 30, 30, 29, 28, 26, 24, 21, 18};
+    static const int arch_left[11] = {11, 9, 7, 6, 6, 7, 8, 10, 12, 14, 16};
+    static const int arch_right[11] = {21, 23, 25, 26, 26, 25, 24, 22, 20, 18, 16};
     static const float corners[6][2] = {
         {0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}
     };
@@ -17,18 +19,19 @@ int pickaxe_vertices(float *vertices, bool mina) {
     for (int row = 0; row < 32; row++) {
         for (int col = 0; col < 32; col++) {
             int pixel = -1;
-            int diagonal = col - row;
-            if (row <= 23 && diagonal >= -1 && diagonal <= 2) {
-                pixel = diagonal == -1 || diagonal == 2 ? 0 : 1;
-                if (row % 7 == 0) pixel = 0;
+            int source_col = 31 - col;
+            int shaft = source_col - row;
+            if (row <= 23 && shaft >= 4 && shaft <= 7) {
+                pixel = shaft == 4 || shaft == 7 ? 0 : (shaft == 5 ? 1 : 5);
             }
-            if (row >= 20 && row < 30) {
-                int i = row - 20;
-                if (col >= left[i] && col <= right[i]) {
-                    if (i < 3 && col > left[i] + i + 1 && col < right[i] - i - 1 &&
-                        (col < 19 || col > 25)) continue;
-                    pixel = col == left[i] || col == right[i] || i == 9 ? 2 :
-                        (i >= 7 || (i == 6 && col % 3 != 0) ? 4 : 3);
+            if (row >= 19 && row <= 29) {
+                int i = row - 19;
+                bool in_head = source_col >= head_left[i] && source_col <= head_right[i];
+                bool in_arch = source_col > arch_left[i] && source_col < arch_right[i];
+                if (in_head && !in_arch) {
+                    pixel = source_col == head_left[i] || source_col == head_right[i] ||
+                        source_col == arch_left[i] + 1 || source_col == arch_right[i] - 1
+                        ? 2 : (row >= 26 ? 4 : 3);
                 }
             }
             if (pixel < 0) continue;
@@ -45,7 +48,7 @@ int pickaxe_vertices(float *vertices, bool mina) {
 
 PickaxePose pickaxe_pose(int width, int height, bool mining, double elapsed) {
     float size = fminf(width * .4f, height * .65f);
-    PickaxePose pose = {0, 0, size, 0};
+    PickaxePose pose = {width - size, height * .06f, size, 0};
     if (mining) {
         double phase = fmod(elapsed, .18) * (2.0 * 3.141592653589793 / .18);
         pose.angle = .08f * (float)sin(phase);

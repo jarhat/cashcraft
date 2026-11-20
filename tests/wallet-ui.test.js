@@ -10,7 +10,7 @@ import { normalizeUtxo, utxoKey } from '../src/utils.js';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
-test('MINA pickaxe follows the scanned fungible balance and clears on scan failure', async () => {
+test('MINA pickaxe requires a connected registered address holding at least one MINA', async () => {
   const start = source.indexOf('async function refreshBalances(');
   const end = source.indexOf('\nfunction validateRecipient', start);
   const elements = new Map();
@@ -26,33 +26,28 @@ test('MINA pickaxe follows the scanned fungible balance and clears on scan failu
     scanWallet: async () => ({ addresses: [], utxos: context.nextUtxos }),
     renderBalances() {}, loadRewardCategory: async () => {}, notifyTokenReceipts() {},
     updateGameRewardAddress: () => updates.push(context.minaPickaxe),
-    fetch: async () => ({ ok: true, json: async () => ({ mined: context.mined }) }),
-    mined: 3,
+    fetch: async () => { throw new Error('Mining history should not be requested.'); },
   };
   runInNewContext(source.slice(start, end), context);
   const token = (category, amount, pathIndex = 0, addressIndex = 0) =>
     ({ satoshis: 1, pathIndex, addressIndex, token: { category, amount } });
   for (const [utxos, expected] of [
-    [[token('mina', 1), token('other', 100)], false],
-    [[token('MINA', 1), token('mina', 1)], false],
-    [[token('MINA', 2), token('mina', 1)], true],
-    [[token('mina', 2), token('mina', 10, 1)], false],
-    [[token('mina', 2), token('mina', 10, 0, 1)], false],
-    [[token('mina', 0)], false],
+    [[token('mina', 1), token('other', 100)], true],
+    [[token('MINA', 1)], true],
+    [[token('MINA', 0)], false],
+    [[token('mina', 0), token('mina', 10, 1)], false],
+    [[token('mina', 0), token('mina', 10, 0, 1)], false],
   ]) {
     context.nextUtxos = utxos;
     await context.refreshBalances({ quiet: true });
     assert.equal(context.minaPickaxe, expected);
     assert.equal(updates.at(-1), expected);
   }
-  context.mined = 2;
-  context.nextUtxos = [token('mina', 3)];
+  context.registeredRewardAddress = null;
+  context.nextUtxos = [token('mina', 1)];
   await context.refreshBalances({ quiet: true });
   assert.equal(context.minaPickaxe, false);
-  context.mined = 3;
-  context.fetch = async () => ({ ok: false });
-  await context.refreshBalances({ quiet: true });
-  assert.equal(context.minaPickaxe, false);
+  context.registeredRewardAddress = 'address';
   context.minaPickaxe = true;
   context.scanWallet = async () => { throw new Error('scan failed'); };
   await assert.rejects(context.refreshBalances({ quiet: true }), /scan failed/);

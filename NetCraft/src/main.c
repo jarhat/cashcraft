@@ -2402,7 +2402,7 @@ void on_mining_swing(void) {
 
 static void render_pickaxe(Attrib *attrib) {
     if (!mining_has_pickaxe()) return;
-    int mina = mining_has_pickaxe() ? 1 : 0;
+    int mina = 0;
     if (!pickaxe_buffers[mina]) {
         float vertices[PICKAXE_MAX_VERTICES * PICKAXE_VERTEX_COMPONENTS];
         pickaxe_counts[mina] = pickaxe_vertices(vertices, mina);

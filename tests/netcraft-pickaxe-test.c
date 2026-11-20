@@ -43,8 +43,8 @@ int main(void) {
         PickaxePose back = pickaxe_pose(width, height, true, .135);
         PickaxePose returned = pickaxe_pose(width, height, true, .18);
         assert(near(rest.size, fminf(width * .4f, height * .65f)));
-        assert(near(rest.x, 0));
-        assert(near(rest.y, 0));
+        assert(near(rest.x, width - rest.size));
+        assert(near(rest.y, height * .06f));
         assert(near(rest.x, start.x) && near(rest.y, start.y));
         assert(near(returned.x, rest.x) && near(returned.y, rest.y));
         assert(near(forward.x, rest.x) && near(back.x, rest.x));
