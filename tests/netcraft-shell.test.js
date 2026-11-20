@@ -54,6 +54,8 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
   assert.deepEqual(updates, [['netcraft_set_reward_address', ''], ['mining_set_pickaxe', 0], ['netcraft_set_reward_address', 'new'], ['mining_set_pickaxe', 1]]);
   window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: '', pickaxe: false } });
   assert.deepEqual(updates.at(-1), ['mining_set_pickaxe', 0]);
+  window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: '', pickaxe: false, guestId: 'a'.repeat(64) } });
+  assert.deepEqual(updates.slice(-3), [['netcraft_set_guest_id', 'a'.repeat(64)], ['netcraft_set_reward_address', ''], ['mining_set_pickaxe', 0]]);
   assert.ok(context.Module.websocket);
   assert.equal(typeof $('mobile-mine').listeners.pointerdown, 'function');
   assert.equal(typeof window.listeners.pointermove, 'function');

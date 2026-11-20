@@ -5,10 +5,16 @@ import { hash160 } from '@cashscript/utils';
 import { setupGames } from '../src/games.js';
 import { BrowserWallet } from '../src/browser-wallet.js';
 
+const guestId = 'a'.repeat(64);
+globalThis.window = { addEventListener() {} };
+globalThis.localStorage = { getItem: () => guestId };
+
 test('game buttons minimize and restore without unloading the active game', async (t) => {
   const originalFetch = globalThis.fetch;
   const originalDocument = globalThis.document;
-  t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; });
+  const originalRaf = globalThis.requestAnimationFrame;
+  t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; globalThis.requestAnimationFrame = originalRaf; });
+  globalThis.requestAnimationFrame = () => {};
   const elements = new Map();
   const $ = (id) => {
     if (!elements.has(id)) elements.set(id, {
@@ -80,6 +86,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   address = null;
   $('game-frame').listeners.load();
   $('game-notifications').listeners.click();
+  $('game-guide-wallet').listeners.click();
   assert.equal(wallet, 1);
   address = 'bitcoincash:ztest';
   $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); };
@@ -100,6 +107,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   let notifications = 0;
   $('notifications-toggle').click = () => { notifications++; };
   await $('game-notifications').listeners.click();
+  $('game-guide-wallet').listeners.click();
   assert.equal($('game-dialog').hidden, false);
   assert.equal(notifications, 1);
   assert.equal($('game-frame').src, gameUrl);
@@ -164,7 +172,7 @@ test('NetCraft starts online without a wallet and accepts a registered address l
   assert.equal($('game-frame').src, '/games/netcraft/craftw.html#-+4080');
   address = 'bitcoincash:ztest';
   update(address);
-  assert.deepEqual(messages.at(-1), { type: 'netcraft-reward-address', address, pickaxe: false });
+  assert.deepEqual(messages.at(-1), { type: 'netcraft-reward-address', address, pickaxe: false, guestId });
   pickaxe = true;
   update(address);
   assert.equal(messages.at(-1).pickaxe, true);
@@ -228,16 +236,16 @@ test('NetCraft receives the connected token address when launched', async (t) =>
   address = null;
   update(address);
   $('game-frame').listeners.load();
-  assert.equal($('game-notifications')['aria-label'], 'Connect wallet');
+  assert.equal($('game-notifications')['aria-label'], 'CashCraft guide and wallet');
   assert.deepEqual(messages, [
-    { message: { type: 'netcraft-reward-address', address: browserAddress, pickaxe: false }, origin: '*' },
-    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false }, origin: '*' },
-    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: browserAddress, pickaxe: false, guestId }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false, guestId }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false, guestId }, origin: '*' },
   ]);
   update('bitcoincash:zother');
   assert.equal(messages[3].message.address, 'bitcoincash:zother');
-  assert.equal($('game-notifications')['aria-label'], 'Wallet and notifications');
-  assert.equal($('game-notifications')['aria-controls'], 'notifications-dialog');
+  assert.equal($('game-notifications')['aria-label'], 'CashCraft guide and wallet');
+  assert.equal($('game-notifications')['aria-controls'], 'game-guide');
 });
 
 test('fullscreen game regains keyboard focus without stealing focus from other dialogs', async (t) => {
@@ -259,6 +267,7 @@ test('fullscreen game regains keyboard focus without stealing focus from other d
         appendChild(child) { child.parentNode = this; }, insertBefore(child) { child.parentNode = this; },
         classList: { add: (value) => classes.add(value), remove: (value) => classes.delete(value), contains: (value) => classes.has(value), toggle: (value, force) => force ? classes.add(value) : classes.delete(value) },
         show() { this.open = true; document.activeElement = $('game-close'); },
+        close() { this.open = false; this.listeners.close(); },
         focus() { document.activeElement = this; },
       });
     }
@@ -270,6 +279,8 @@ test('fullscreen game regains keyboard focus without stealing focus from other d
   setupGames($, { translate: (text) => text, getRewardAddress: () => 'bitcoincash:ztest' });
   $('game-dialog').classList.add('game-auto-open');
   await $('game-netcraft').listeners.click();
+  $('game-guide').close();
+  callbacks.length = 0;
   assert.equal(document.activeElement, $('game-close'));
   $('game-frame').listeners.load();
   assert.equal(document.activeElement, $('game-frame'));

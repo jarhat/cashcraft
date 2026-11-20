@@ -747,11 +747,13 @@ test('game query links automatically open the selected game', async () => {
       loadWalletDependencies: async () => {}, loadSession: () => null,
       pairingInProgress: false, walletReady: false, startConnection: async () => {},
       logger: { warn() {} }, URLSearchParams, window: { location: { search } },
-      $: (id) => ({ click: () => opened.push(id) }),
+      $: (id) => id === 'game-dialog'
+        ? { classList: { add: (value) => opened.push(value) } }
+        : { click: () => opened.push(id) },
     };
     runInNewContext(source.slice(start, end), context);
     await new Promise((resolve) => setImmediate(resolve));
-    assert.deepEqual(opened, [expected]);
+    assert.deepEqual(opened, ['game-auto-open', expected]);
   }
 });
 

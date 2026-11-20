@@ -1945,7 +1945,7 @@ async function connectBrowserWallet(phrase, isCurrent = () => true, session = nu
     $('status').textContent = 'Browser wallet connected · checking balances…';
     if ($('connection-dialog').open) $('connection-dialog').close();
   } catch (error) {
-    sessionStorage.removeItem(`cashcraft:browser-wallet-session:v1:${network}`);
+    if (!session) sessionStorage.removeItem(`cashcraft:browser-wallet-session:v1:${network}`);
     manager = null;
     walletReady = false;
     await wallet.destroy();
@@ -2826,18 +2826,16 @@ const restoreSession = async () => {
       await startConnection({ restoring: true });
     }
   } catch (error) {
-    sessionStorage.removeItem(`cashcraft:browser-wallet-session:v1:${network}`);
-    logger.warn('Could not restore previous WizardConnect session:', error);
+    logger.warn('Could not restore previous wallet session:', error);
     $('status').textContent = 'Wallet session could not be restored. Open the wallet dialog to reconnect.';
   }
 };
-void restoreSession().finally(() => {
-  const params = new URLSearchParams(window.location.search);
-  const game = params.get('game');
-  if (game === 'pk2' || game === 'cashcraft') {
-    $(game === 'pk2' ? 'game-pk2' : 'game-netcraft').click();
-  }
-});
+void restoreSession();
+const gameLink = new URLSearchParams(window.location.search).get('game');
+if (gameLink === 'pk2' || gameLink === 'cashcraft') {
+  $('game-dialog').classList.add('game-auto-open');
+  $(gameLink === 'pk2' ? 'game-pk2' : 'game-netcraft').click();
+}
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

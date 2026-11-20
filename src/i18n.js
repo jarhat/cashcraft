@@ -1,6 +1,17 @@
 import { wikiTranslations } from './wiki-translations.js';
 
 const spanish = {
+  "🧙 Wizard's CashCraft guide": '🧙 Guía de CashCraft del mago',
+  'CashCraft guide and wallet': 'Guía de CashCraft y cartera',
+  'Close guide': 'Cerrar guía',
+  'Play': 'Jugar',
+  'Explore and mine 10 naturally generated green MINA ore blocks online to earn 1 MINA and unlock the faster green MINA pickaxe, even without a wallet.': 'Explora y mina en línea 10 bloques verdes de mineral MINA generados naturalmente para ganar 1 MINA y desbloquear el pico verde MINA más rápido, incluso sin cartera.',
+  'Set up a token-aware wallet to receive your earned MINA. Your mining progress and unclaimed rewards stay with this browser. A new wallet is also queued 1 welcome MINA. Rewards depend on the payout service.': 'Configura una cartera compatible con tokens para recibir los MINA ganados. Tu progreso y recompensas pendientes permanecen en este navegador. Una cartera nueva también tiene 1 MINA de bienvenida en espera. Las recompensas dependen del servicio de pagos.',
+  'MINA ore progress': 'Progreso de mineral MINA',
+  'MINA pickaxe unlocked': 'Pico MINA desbloqueado',
+  "Clearing this browser's site data will lose access to unclaimed rewards.": 'Si borras los datos de este sitio en el navegador, perderás el acceso a las recompensas pendientes.',
+  'The gem reopens this guide and your wallet. Invite shares the game; Ranking shows mining rewards; fullscreen expands the game; sound toggles audio. Craft prepares a transfer of 2 MINA for CashTokens in another category.': 'La gema vuelve a abrir esta guía y tu cartera. Invitar comparte el juego; Ranking muestra las recompensas de minería; pantalla completa amplía el juego; sonido activa o desactiva el audio. Fabricar prepara una transferencia de 2 MINA por CashTokens de otra categoría.',
+  'Use WASD to move, space to jump, left click to mine and right click to build. On mobile, use the joystick and the jump, mine and build buttons. Scroll to choose blocks.': 'Usa WASD para moverte, espacio para saltar, clic izquierdo para minar y clic derecho para construir. En móvil, usa el joystick y los botones de saltar, minar y construir. Desplázate para elegir bloques.',
   'Priced tokens': 'Tokens con precio',
   'Wallet connected': 'Cartera conectada',
   'About circulating supply': 'Sobre la oferta circulante',
@@ -206,6 +217,17 @@ const spanish = {
 };
 
 const french = {
+  "🧙 Wizard's CashCraft guide": '🧙 Guide CashCraft du magicien',
+  'CashCraft guide and wallet': 'Guide CashCraft et portefeuille',
+  'Close guide': 'Fermer le guide',
+  'Play': 'Jouer',
+  'Explore and mine 10 naturally generated green MINA ore blocks online to earn 1 MINA and unlock the faster green MINA pickaxe, even without a wallet.': 'Explorez et minez en ligne 10 blocs verts de minerai MINA générés naturellement pour gagner 1 MINA et débloquer la pioche verte MINA plus rapide, même sans portefeuille.',
+  'Set up a token-aware wallet to receive your earned MINA. Your mining progress and unclaimed rewards stay with this browser. A new wallet is also queued 1 welcome MINA. Rewards depend on the payout service.': 'Configurez un portefeuille compatible avec les jetons pour recevoir vos MINA gagnés. Votre progression et vos récompenses non réclamées restent dans ce navigateur. Un nouveau portefeuille reçoit aussi 1 MINA de bienvenue en attente. Les récompenses dépendent du service de paiement.',
+  'MINA ore progress': 'Progression du minerai MINA',
+  'MINA pickaxe unlocked': 'Pioche MINA débloquée',
+  "Clearing this browser's site data will lose access to unclaimed rewards.": 'Effacer les données de ce site dans le navigateur entraîne la perte des récompenses non réclamées.',
+  'The gem reopens this guide and your wallet. Invite shares the game; Ranking shows mining rewards; fullscreen expands the game; sound toggles audio. Craft prepares a transfer of 2 MINA for CashTokens in another category.': 'La gemme rouvre ce guide et votre portefeuille. Inviter partage le jeu ; Classement affiche les récompenses minières ; plein écran agrandit le jeu ; son active ou coupe le son. Fabriquer prépare un transfert de 2 MINA contre des CashTokens de catégorie différente.',
+  'Use WASD to move, space to jump, left click to mine and right click to build. On mobile, use the joystick and the jump, mine and build buttons. Scroll to choose blocks.': 'Utilisez WASD pour vous déplacer, espace pour sauter, clic gauche pour miner et clic droit pour construire. Sur mobile, utilisez le joystick et les boutons de saut, de minage et de construction. Faites défiler pour choisir les blocs.',
   'Wallet connected': 'Portefeuille connecté',
   'Priced tokens': 'Jetons avec prix',
   'About circulating supply': 'À propos de la quantité en circulation',
@@ -411,6 +433,17 @@ const french = {
 };
 
 const german = {
+  "🧙 Wizard's CashCraft guide": '🧙 CashCraft-Anleitung des Zauberers',
+  'CashCraft guide and wallet': 'CashCraft-Anleitung und Wallet',
+  'Close guide': 'Anleitung schließen',
+  'Play': 'Spielen',
+  'Explore and mine 10 naturally generated green MINA ore blocks online to earn 1 MINA and unlock the faster green MINA pickaxe, even without a wallet.': 'Erkunde die Welt und baue online 10 natürlich erzeugte grüne MINA-Erzblöcke ab, um 1 MINA zu verdienen und die schnellere grüne MINA-Spitzhacke freizuschalten, auch ohne Wallet.',
+  'Set up a token-aware wallet to receive your earned MINA. Your mining progress and unclaimed rewards stay with this browser. A new wallet is also queued 1 welcome MINA. Rewards depend on the payout service.': 'Richte eine tokenfähige Wallet ein, um deine verdienten MINA zu erhalten. Abbaufortschritt und nicht eingelöste Belohnungen bleiben in diesem Browser. Für eine neue Wallet wird außerdem 1 Willkommens-MINA vorgemerkt. Belohnungen hängen vom Auszahlungsdienst ab.',
+  'MINA ore progress': 'MINA-Erzfortschritt',
+  'MINA pickaxe unlocked': 'MINA-Spitzhacke freigeschaltet',
+  "Clearing this browser's site data will lose access to unclaimed rewards.": 'Beim Löschen der Websitedaten dieses Browsers geht der Zugriff auf nicht eingelöste Belohnungen verloren.',
+  'The gem reopens this guide and your wallet. Invite shares the game; Ranking shows mining rewards; fullscreen expands the game; sound toggles audio. Craft prepares a transfer of 2 MINA for CashTokens in another category.': 'Der Edelstein öffnet diese Anleitung und deine Wallet erneut. Einladen teilt das Spiel; Ranking zeigt Abbaubelohnungen; Vollbild vergrößert das Spiel; Ton schaltet Audio um. Herstellen bereitet eine Übertragung von 2 MINA für CashTokens einer anderen Kategorie vor.',
+  'Use WASD to move, space to jump, left click to mine and right click to build. On mobile, use the joystick and the jump, mine and build buttons. Scroll to choose blocks.': 'Bewege dich mit WASD, springe mit der Leertaste, baue mit Linksklick ab und mit Rechtsklick auf. Nutze auf Mobilgeräten den Joystick und die Tasten zum Springen, Abbauen und Bauen. Scrolle zur Blockauswahl.',
   'Wallet connected': 'Wallet verbunden',
   'Priced tokens': 'Token mit Preis',
   'About circulating supply': 'Über die Umlaufmenge',

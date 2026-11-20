@@ -462,7 +462,7 @@
         <span id="dot" class="dot"></span>
         <button id="connection-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
       </div>
-      <p id="game-wallet-notice" class="notification-message" hidden>Connect or create a wallet before mining to receive MINA rewards.</p>
+      <p id="game-wallet-notice" class="notification-message" hidden>Connect or create a wallet to receive a MINA welcome reward and mining rewards.</p>
 
       <p id="status" class="status" role="status">Not connected</p>
       <label for="connection-language">Language</label>
@@ -619,6 +619,22 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/></svg>
         </button>
       </div>
+      <dialog id="game-guide" class="game-guide" aria-labelledby="game-guide-title">
+        <div class="notifications-heading">
+          <strong id="game-guide-title">🧙 Wizard's CashCraft guide</strong>
+          <button id="game-guide-close" class="small-button" type="button" aria-label="Close guide">×</button>
+        </div>
+        <p>Explore and mine 10 naturally generated green MINA ore blocks online to earn 1 MINA and unlock the faster green MINA pickaxe, even without a wallet.</p>
+        <p>Set up a token-aware wallet to receive your earned MINA. Your mining progress and unclaimed rewards stay with this browser. A new wallet is also queued 1 welcome MINA. Rewards depend on the payout service.</p>
+        <p>Clearing this browser's site data will lose access to unclaimed rewards.</p>
+        <p id="game-guide-progress" role="status" aria-live="polite"></p>
+        <p>The gem reopens this guide and your wallet. Invite shares the game; Ranking shows mining rewards; fullscreen expands the game; sound toggles audio. Craft prepares a transfer of 2 MINA for CashTokens in another category.</p>
+        <p>Use WASD to move, space to jump, left click to mine and right click to build. On mobile, use the joystick and the jump, mine and build buttons. Scroll to choose blocks.</p>
+        <div class="browser-wallet-actions">
+          <button id="game-guide-wallet" class="small-button" type="button">Connect wallet</button>
+          <button id="game-guide-done" class="small-button" type="button">Play</button>
+        </div>
+      </dialog>
     </div>
   </dialog>
   <dialog id="ranking-dialog" class="notifications-dialog ranking-dialog" aria-labelledby="ranking-title">
