@@ -35,6 +35,7 @@
 #include "util.h"
 #include "worldgen/world.h"
 #include "mining.h"
+#include "pickaxe.h"
 #include "vr.h"
 #include "joy.h"
 #include "touch.h"
@@ -2372,6 +2373,44 @@ void render_cover(Attrib *attrib, Player *player) {
 
 static GLuint crosshair_buffer;
 static int crosshair_width, crosshair_height, crosshair_scale;
+static GLuint pickaxe_buffers[2];
+static int pickaxe_counts[2];
+
+static void render_pickaxe(Attrib *attrib) {
+    int mina = mining_has_pickaxe() ? 1 : 0;
+    if (!pickaxe_buffers[mina]) {
+        float vertices[PICKAXE_MAX_VERTICES * PICKAXE_VERTEX_COMPONENTS];
+        pickaxe_counts[mina] = pickaxe_vertices(vertices, mina);
+        pickaxe_buffers[mina] = gen_buffer(
+            pickaxe_counts[mina] * PICKAXE_VERTEX_COMPONENTS * sizeof(float), vertices);
+    }
+
+    bool mining = is_mining();
+#ifdef __EMSCRIPTEN__
+    mining = mining && (g->mode != MODE_ONLINE || online_ready);
+#endif
+    PickaxePose pose = pickaxe_pose(g->width, g->height, mining, mining_swing_elapsed());
+    float matrix[16];
+    set_matrix_2d(matrix, g->width, g->height);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glUniform2f(attrib->extra2, pose.x, pose.y);
+    glUniform1f(attrib->extra3, pose.size);
+    glUniform1f(attrib->extra4, pose.angle);
+    glDisable(GL_DEPTH_TEST);
+    glBindBuffer(GL_ARRAY_BUFFER, pickaxe_buffers[mina]);
+    glEnableVertexAttribArray(attrib->position);
+    glEnableVertexAttribArray(attrib->extra1);
+    glVertexAttribPointer(attrib->position, 2, GL_FLOAT, GL_FALSE,
+        PICKAXE_VERTEX_COMPONENTS * sizeof(float), 0);
+    glVertexAttribPointer(attrib->extra1, 3, GL_FLOAT, GL_FALSE,
+        PICKAXE_VERTEX_COMPONENTS * sizeof(float), (GLvoid *)(2 * sizeof(float)));
+    glDrawArrays(GL_TRIANGLES, 0, pickaxe_counts[mina]);
+    glDisableVertexAttribArray(attrib->position);
+    glDisableVertexAttribArray(attrib->extra1);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glEnable(GL_DEPTH_TEST);
+}
 
 static void render_crosshairs(Attrib *attrib) {
     float matrix[16];
@@ -3922,6 +3961,7 @@ void main_shutdown(void);
 
 static Attrib block_attrib = {0};
 static Attrib line_attrib = {0};
+static Attrib pickaxe_attrib = {0};
 static Attrib text_attrib = {0};
 static Attrib sky_attrib = {0};
 static GLuint sky_buffer;
@@ -4020,6 +4060,16 @@ int main(int argc, char **argv) {
     line_attrib.program = program;
     line_attrib.position = glGetAttribLocation(program, "position");
     line_attrib.matrix = glGetUniformLocation(program, "matrix");
+
+    program = load_program(
+        "shaders/pickaxe_vertex.glsl", "shaders/pickaxe_fragment.glsl");
+    pickaxe_attrib.program = program;
+    pickaxe_attrib.position = glGetAttribLocation(program, "position");
+    pickaxe_attrib.extra1 = glGetAttribLocation(program, "color");
+    pickaxe_attrib.matrix = glGetUniformLocation(program, "matrix");
+    pickaxe_attrib.extra2 = glGetUniformLocation(program, "origin");
+    pickaxe_attrib.extra3 = glGetUniformLocation(program, "size");
+    pickaxe_attrib.extra4 = glGetUniformLocation(program, "angle");
 
     program = load_program(
         "shaders/text_vertex.glsl", "shaders/text_fragment.glsl");
@@ -4291,6 +4341,12 @@ void main_shutdown() {
         del_buffer(crosshair_buffer);
         crosshair_buffer = 0;
     }
+    for (int i = 0; i < 2; i++) {
+        if (pickaxe_buffers[i]) {
+            del_buffer(pickaxe_buffers[i]);
+            pickaxe_buffers[i] = 0;
+        }
+    }
     for (int i = 0; i < NUM_INVENTORY_VISIBLE; i++) {
         if (item_count_buffers[i].buffer) {
             del_buffer(item_count_buffers[i].buffer);
@@ -4352,15 +4408,6 @@ void one_iter() {
     building_tick();
 
     handle_gamepad_input();
-
-#ifdef __EMSCRIPTEN__
-    static int pickaxe_mining = -1;
-    int current_pickaxe_mining = g->initialized && (g->mode != MODE_ONLINE || online_ready) && is_mining();
-    if (current_pickaxe_mining != pickaxe_mining) {
-        pickaxe_mining = current_pickaxe_mining;
-        EM_ASM(Module.setPickaxeMining($0);, pickaxe_mining);
-    }
-#endif
 
     // HANDLE MOVEMENT //
     handle_movement(dt);
@@ -4490,6 +4537,9 @@ void render_scene() {
 
         // RENDER HUD //
         glClear(GL_DEPTH_BUFFER_BIT);
+        if (g->show_ui) {
+            render_pickaxe(&pickaxe_attrib);
+        }
         if (SHOW_CROSSHAIRS && g->show_ui) {
             render_crosshairs(&line_attrib);
         }

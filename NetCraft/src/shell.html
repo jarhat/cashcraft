@@ -129,22 +129,6 @@
       #mobile-mine svg { width: 36px; height: 36px; }
       #sound-toggle { display: grid !important; place-items: center; position: fixed; right: 12px; top: 68px; z-index: 25; width: 48px; height: 48px; padding: 9px; border: 1px solid #a8e4ff; border-radius: 50%; background: rgba(15, 32, 38, .82); color: #e9f4ff; cursor: pointer; }
       #sound-toggle[aria-pressed="true"] .sound-muted { display: none; }
-      #mina-pickaxe {
-        --pickaxe-right: clamp(24px, 8vw, 100px);
-        --pickaxe-bottom: clamp(24px, 8vh, 80px);
-        position: fixed; right: var(--pickaxe-right); bottom: var(--pickaxe-bottom);
-        z-index: 19; width: clamp(80px, 18vmin, 150px); height: auto;
-        pointer-events: none; filter: drop-shadow(0 3px 3px #000a);
-        transform-origin: 80% 80%;
-      }
-      #mina-pickaxe[hidden] { display: none; }
-      #mina-pickaxe.mining { animation: mina-pickaxe-swing .32s ease-in-out infinite; }
-      @keyframes mina-pickaxe-swing {
-        0%, 100% { transform: translate(0, 0) rotate(0deg); }
-        30% { transform: translate(calc(-36vw + var(--pickaxe-right) + 35%), calc(-36vh + var(--pickaxe-bottom) + 35%)) rotate(-28deg); }
-        55% { transform: translate(calc(-33vw + var(--pickaxe-right) + 32%), calc(-45vh + var(--pickaxe-bottom) + 45%)) rotate(-45deg); }
-        80% { transform: translate(calc(-10vw + var(--pickaxe-right) + 10%), calc(-18vh + var(--pickaxe-bottom) + 18%)) rotate(-18deg); }
-      }
       #connection-status { display: block !important; position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 26; max-width: 90%; padding: 8px 12px; background: rgba(0,0,0,.8); color: white; text-align: center; }
       #connection-status[hidden] { display: none !important; }
       #game-error { display: block !important; position: fixed; top: 110px; left: 50%; transform: translateX(-50%); z-index: 41; width: min(90%, 600px); padding: 14px; background: #351c1c; color: white; font: 14px system-ui, sans-serif; text-align: center; overflow-wrap: anywhere; }
@@ -1285,13 +1269,6 @@
     <button id="sound-toggle" type="button" aria-pressed="true" aria-label="Sound enabled" title="Sound enabled">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3zM16 8a6 6 0 0 1 0 8"/><path class="sound-muted" d="M17 3 3 21"/></svg>
     </button>
-    <svg id="mina-pickaxe" viewBox="0 0 16 16" role="img" aria-label="MINA pickaxe equipped: double mining speed" hidden shape-rendering="crispEdges">
-      <path fill="#173e2b" d="M5 5h3v2h1v2h1v2h2v2h2v3h-3v-2H9v-2H8v-2H7V8H5z"/>
-      <path fill="#31875a" d="M6 6h1v2h1v2h1v2h2v2h2v1h-1v-1h-2v-2H9v-2H8V8H7V7H6z"/>
-      <path fill="#258d5a" d="M1 5h1V4h1V3h2V2h5v1h2v1h1v1h1v3h-2V7h-1V6H9V5H6v1H4v1H3v1H1z"/>
-      <path fill="#43ed94" d="M2 5h1V4h2V3h5v1h2v1h1v1h-1V5h-2V4H6v1H4v1H2z"/>
-      <path fill="#baffd8" d="M5 3h5v1H5z"/>
-    </svg>
     <div class="mobile-controls" aria-label="Touch controls">
       <div id="block-scroll-strip" class="block-scroll-strip" aria-label="Drag up or down to change block"></div>
       <div id="mobile-stick" class="mobile-stick" aria-label="Move"><svg class="mobile-stick-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20M12 2l-3 3m3-3 3 3M12 22l-3-3m3 3 3-3M2 12l3-3m-3 3 3 3M22 12l-3-3m3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><div id="mobile-stick-knob" class="mobile-stick-knob"></div></div>
@@ -1417,9 +1394,6 @@
         }
         document.addEventListener('pointerdown', notifyUserGesture);
         document.addEventListener('keydown', notifyUserGesture);
-        Module.setPickaxeMining = function(active) {
-          document.getElementById('mina-pickaxe').classList.toggle('mining', !!active);
-        };
         Module.applyPendingRewardAddress = function() {
           ready = true;
           if (pending !== undefined) {
@@ -1428,7 +1402,6 @@
           }
           if (pendingPickaxe !== undefined) {
             Module.ccall('mining_set_pickaxe', null, ['number'], [pendingPickaxe ? 1 : 0]);
-            document.getElementById('mina-pickaxe').toggleAttribute('hidden', !pendingPickaxe);
             pendingPickaxe = undefined;
           }
         };

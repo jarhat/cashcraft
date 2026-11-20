@@ -9,6 +9,7 @@
 #endif
 
 static double mining_started = 0;
+static double mining_swing_started = 0;
 static bool has_pickaxe = false;
 static bool holding_mine_button = false;
 static int building_progress = 0;
@@ -43,6 +44,14 @@ void mining_set_pickaxe(int enabled) {
 
 bool is_mining() {
     return holding_mine_button && target_w != 0;
+}
+
+bool mining_has_pickaxe(void) {
+    return has_pickaxe;
+}
+
+double mining_swing_elapsed(void) {
+    return glfwGetTime() - mining_swing_started;
 }
 
 void mining_stop() {
@@ -91,6 +100,7 @@ void mining_tick() {
 void mining_start() {
     holding_mine_button = true;
     mining_started = glfwGetTime();
+    mining_swing_started = mining_started;
 
     (void) get_targeted_block(&mining_x, &mining_y, &mining_z, &target_face);
 }
