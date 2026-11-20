@@ -2926,15 +2926,6 @@ void parse_command(const char *buffer, bool forward) {
     }
 }
 
-#ifdef __EMSCRIPTEN__
-EMSCRIPTEN_KEEPALIVE void touch_send_chat(const char *text) {
-    if (!text || !*text || strlen(text) >= MAX_TEXT_LENGTH ||
-        strchr(text, '\n') || strchr(text, '\r')) return;
-    if (text[0] == '/') parse_command(text, true);
-    else client_talk(text);
-}
-#endif
-
 void on_light() {
     State *s = &g->players->state;
     int hx, hy, hz;

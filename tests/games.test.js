@@ -32,15 +32,19 @@ test('game buttons minimize and restore without unloading the active game', asyn
     return { ok: true, headers: { get: () => 'text/html' }, text: async () => '<html>game</html>' };
   };
   const documentListeners = {};
+  let gameToolbarSelected = false;
   globalThis.document = {
     body: { classList: { toggle() {} } }, fullscreenElement: null,
-    querySelector() { return { after() {} }; },
+    querySelector(selector) { gameToolbarSelected = selector === '.game-toolbar'; return { after() {} }; },
     addEventListener(type, fn) { documentListeners[type] = fn; },
     async exitFullscreen() { this.fullscreenElement = null; documentListeners.fullscreenchange(); },
   };
   let address = 'bitcoincash:ztest';
+  $('top-send').parentNode = $('quick-nav');
+  $('top-receive').parentNode = $('quick-nav');
   $('game-ranking').parentNode = { insertBefore(child) { child.parentNode = this; } };
   setupGames($, { translate: (text) => text, getRewardAddress: () => address });
+  assert.equal(gameToolbarSelected, true);
   let wallet = 0;
   $('connection-open').click = () => { wallet++; };
   $('notifications-toggle').click = () => {};
@@ -49,6 +53,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); documentListeners.fullscreenchange(); };
   await $('game-fullscreen').listeners.click();
   assert.equal(document.fullscreenElement, $('game-stage'));
+  assert.equal($('top-send').parentNode, $('quick-nav'));
   const parent = { insertBefore(child) { child.parentNode = this; } };
   $('invite-dialog').parentNode = parent;
   $('game-invite').listeners.click();

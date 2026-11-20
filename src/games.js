@@ -15,12 +15,8 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     const playing = dialog.open && !dialog.hidden;
     document.body.classList.toggle('cashcraft-playing', playing);
     dock.hidden = !dialog.open || !dialog.hidden || !activeGame;
-    const actions = document.fullscreenElement === stage && playing ? $('game-wallet-actions') : $('quick-nav');
-    for (const id of ['top-send', 'top-receive']) {
-      actions.appendChild($(id));
-    }
   };
-  document.querySelector('.topbar').after(dialog, dock);
+  document.querySelector('.game-toolbar').after(dialog);
   stage.addEventListener('contextmenu', (event) => event.preventDefault());
   let generation = 0;
   let activeGame = null;

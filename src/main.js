@@ -461,14 +461,18 @@ function setConnection(connected) {
   $('forget').hidden = !connected || !!manager?.isBrowserWallet;
   $('disconnect').hidden = !connected;
   $('logout').hidden = !connected;
-  $('wizard-toggle').hidden = connected;
+  $('wizard-toggle').hidden = false;
   updateGameRewardAddress(connected && registeredRewardAddress === addressFor(0, 0) ? registeredRewardAddress : null);
   if (!connected) $('game-status').textContent = '';
   document.body.classList.toggle('wallet-connected', connected);
   $('network-wallet-status').textContent = translate(connected ? 'Wallet connected' : 'Not connected');
   if (!$('wizard-dialog').hidden) {
-    if (connected) closeTutorial();
-    else {
+    if (connected) {
+      if (tutorialStep === 0) {
+        tutorialStep = 1;
+        showTutorialStep();
+      }
+    } else {
       tutorialStep = 0;
       showTutorialStep();
     }
@@ -592,8 +596,8 @@ async function showPairingUri(uri) {
 
   await QRCode.toCanvas($('qr'), uri, {
     width: 190,
-    margin: 0,
-    errorCorrectionLevel: 'M',
+    margin: 4,
+    errorCorrectionLevel: 'H',
     color: { dark: '#07111b', light: '#ffffff' },
   });
   if (!walletReady && walletPairingUri === uri) pairingReminder.start();
@@ -2698,6 +2702,11 @@ const tutorialSteps = [
     title: 'Crafting table',
     message: 'Select a token to send, or switch to Receive to create a payment QR. Amounts are whole base units; review every transaction in your wallet.',
   },
+  {
+    id: 'games-toggle',
+    title: 'Play CashCraft',
+    message: 'Open the game menu to launch CashCraft. Use the gem in the game to see your wallet and rewards, and Ranking to compare mining rewards.',
+  },
 ];
 let tutorialStep = 0;
 
@@ -2709,7 +2718,8 @@ function showTutorialStep() {
   const focused = dialog.contains(document.activeElement) ? document.activeElement : null;
   panel.classList.add('tutorial-highlight');
   if (tutorialStep === 0) openConnectionDialog();
-  panel.before(dialog);
+  if (step.id === 'games-toggle') (panel.closest('.topbar') || panel.closest('.game-toolbar')).after(dialog);
+  else panel.before(dialog);
   if (tutorialStep !== 0 && $('connection-dialog').open) $('connection-dialog').close();
   $('wizard-title').textContent = step.title;
   $('wizard-message').textContent = step.message;
@@ -2735,7 +2745,7 @@ function closeTutorial() {
 }
 
 function openTutorial() {
-  tutorialStep = 0;
+  tutorialStep = walletReady ? 1 : 0;
   $('wizard-dialog').hidden = false;
   document.querySelector('.wizard-guide').classList.add('walking');
   $('wizard-toggle').setAttribute('aria-expanded', 'true');

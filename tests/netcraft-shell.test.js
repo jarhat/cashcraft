@@ -172,6 +172,7 @@ test('touch controls recover from unavailable pointer capture and release outsid
       addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute() {},
       classList: { add(name) { this.name = name; } },
+      focus() { this.focused = true; },
       setPointerCapture() { throw Object.assign(new Error('inactive pointer'), { name: 'InvalidStateError' }); },
       getBoundingClientRect() { return { left: 0, top: 0, width: 100 }; },
     });
@@ -194,6 +195,7 @@ test('touch controls recover from unavailable pointer capture and release outsid
   $('mobile-mine').listeners.pointerdown({ pointerId: 8 });
   windowListeners.blur.forEach((fn) => fn());
   $('mobile-stick').listeners.pointerdown({ pointerId: 9, clientX: 100, clientY: 50 });
+  assert.equal($('canvas').focused, true);
   assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);
   windowListeners.pointermove.forEach((fn) => fn({ pointerId: 9, clientX: 100, clientY: 0 }));
   assert.deepEqual(calls.at(-1), ['touch_set_move', [0, -1]]);
@@ -211,7 +213,7 @@ test('touch fallback tracks the initiating finger and releases held mining', () 
     if (!elements.has(id)) elements.set(id, {
       style: {}, value: '', listeners: {}, classList: { add() {} },
       addEventListener(type, fn) { this.listeners[type] = fn; },
-      setAttribute() {}, getBoundingClientRect() { return { left: 10, top: 20, width: 100, height: 200 }; },
+      setAttribute() {}, focus() {}, getBoundingClientRect() { return { left: 10, top: 20, width: 100, height: 200 }; },
     });
     return elements.get(id);
   };
@@ -238,7 +240,54 @@ test('touch fallback tracks the initiating finger and releases held mining', () 
   assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);
 });
 
-test('touch block cycling and chat invoke the game with the entered message', () => {
+test('touch joystick follows its starting finger and moves in every direction with Pointer Events available', () => {
+  const elements = new Map();
+  const listeners = {};
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      style: {}, value: '', listeners: {}, classList: { add() {} },
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      setAttribute() {}, focus() {},
+      getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 100 }; },
+    });
+    return elements.get(id);
+  };
+  const window = { PointerEvent: function() {}, addEventListener(type, fn) { (listeners[type] ||= []).push(fn); } };
+  const document = { getElementById: $, querySelector: () => $('controls'), addEventListener() {} };
+  const context = { document, window, Date, Math, console };
+  runInNewContext(script, context);
+  const calls = [];
+  context.Module._touch_set_move = true;
+  context.Module.ccall = (name, _result, _types, args) => calls.push([name, Array.from(args)]);
+  const event = (id, x, y) => ({
+    cancelable: true, preventDefault() {},
+    changedTouches: [{ identifier: id, clientX: x, clientY: y }],
+  });
+  $('mobile-stick').listeners.pointerdown({ pointerType: 'touch', pointerId: 1 });
+  assert.equal(calls.length, 0);
+  $('mobile-stick').listeners.touchstart(event(1, 55, 65));
+  assert.equal($('mobile-stick').style.transform, 'translate(5px,15px)');
+  listeners.pointercancel.forEach((fn) => fn({ pointerId: 1 }));
+  for (const [x, y, expected] of [
+    [5, 65, [-1, 0]], [105, 65, [1, 0]],
+    [55, 15, [0, -1]], [55, 115, [0, 1]],
+  ]) {
+    $('mobile-stick').listeners.touchmove(event(1, x, y));
+    assert.deepEqual(calls.at(-1), ['touch_set_move', expected]);
+    assert.notEqual($('mobile-stick-knob').style.transform, '');
+  }
+  $('mobile-stick').listeners.touchmove(event(1, 105, 15));
+  assert.ok(Math.abs(calls.at(-1)[1][0] - Math.SQRT1_2) < 1e-6);
+  assert.ok(Math.abs(calls.at(-1)[1][1] + Math.SQRT1_2) < 1e-6);
+  $('mobile-stick').listeners.touchend(event(2, 55, 65));
+  assert.notEqual($('mobile-stick').style.transform, '');
+  $('mobile-stick').listeners.touchcancel(event(1, 105, 15));
+  assert.equal($('mobile-stick').style.transform, '');
+  assert.equal($('mobile-stick-knob').style.transform, '');
+  assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);
+});
+
+test('touch block cycling invokes the game without adding a separate chat interface', () => {
   const elements = new Map();
   const $ = (id) => {
     if (!elements.has(id)) elements.set(id, {
@@ -253,16 +302,12 @@ test('touch block cycling and chat invoke the game with the entered message', ()
   const context = { document, window, Date, Math, console };
   runInNewContext(script, context);
   const calls = [];
-  context.Module._touch_next_item = context.Module._touch_prev_item = context.Module._touch_send_chat = true;
+  context.Module._touch_next_item = context.Module._touch_prev_item = true;
   context.Module.ccall = (name, _result, _types, args) => calls.push([name, Array.from(args)]);
   $('mobile-next').listeners.pointerdown({});
   $('mobile-prev').listeners.pointerdown({});
-  $('mobile-chat').listeners.click();
-  assert.equal($('touch-chat-input').focused, true);
-  $('touch-chat-input').value = ' /nick Alice ';
-  $('touch-chat').listeners.submit({ preventDefault() {} });
   assert.deepEqual(calls, [
-    ['touch_next_item', []], ['touch_prev_item', []], ['touch_send_chat', ['/nick Alice']],
+    ['touch_next_item', []], ['touch_prev_item', []],
   ]);
-  assert.equal($('touch-chat').hidden, true);
+  assert.doesNotMatch(shell, /id="mobile-chat"|id="touch-chat"/);
 });

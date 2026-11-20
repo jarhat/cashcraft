@@ -320,11 +320,11 @@ or malicious site scripts can spend its funds.
 
 ### Controls
 
-On touch devices, drag from anywhere on the joystick to move, drag the game view
+On touch devices, drag from anywhere on the joystick to move in any direction;
+the stick centers on the starting touch and returns when released. Drag the game view
 to look, and use the on-screen buttons to jump, mine, build, and cycle blocks in
-either direction. The chat button opens a keyboard-friendly message field; use
-`/nick NAME` to set your in-game name. On desktop press T to chat. New joins
-appear in chat. The Sound button
+either direction. Press T or Enter to use the game console for chat; use
+`/nick NAME` to set your in-game name. New joins appear in chat. The Sound button
 controls block and footstep sounds and the original looping tune after a user
 gesture; the game panel also has a fullscreen button. The `?game=cashcraft` URL
 parameter opens the panel below the top bar; browser fullscreen still
