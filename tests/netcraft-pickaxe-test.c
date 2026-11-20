@@ -37,18 +37,20 @@ int main(void) {
     for (int i = 0; i < 2; i++) {
         int width = i ? 390 : 1280;
         int height = i ? 844 : 720;
-        PickaxePose rest = pickaxe_pose(width, height, 1, false, 1);
-        PickaxePose start = pickaxe_pose(width, height, 1, true, 0);
-        PickaxePose strike = pickaxe_pose(width, height, 1, true, .18);
-        PickaxePose forward = pickaxe_pose(width, height, 1, true, .09);
-        PickaxePose back = pickaxe_pose(width, height, 1, true, .27);
-        PickaxePose returned = pickaxe_pose(width, height, 1, true, .36);
+        PickaxePose rest = pickaxe_pose(width, height, false, 1);
+        PickaxePose start = pickaxe_pose(width, height, true, 0);
+        PickaxePose forward = pickaxe_pose(width, height, true, .06);
+        PickaxePose back = pickaxe_pose(width, height, true, .18);
+        PickaxePose returned = pickaxe_pose(width, height, true, .24);
+        assert(near(rest.size, fminf(width, height) * .5f));
+        assert(near(rest.x + rest.size * .9375f, width));
+        assert(near(rest.y, 0));
         assert(near(rest.x, start.x) && near(rest.y, start.y));
         assert(near(returned.x, rest.x) && near(returned.y, rest.y));
-        assert(near(strike.x + strike.size * .1f, width * .5f));
-        assert(near(strike.y + strike.size * .7f, height * .5f));
-        assert(near(forward.x + back.x, rest.x + strike.x));
-        assert(forward.y > back.y && forward.angle > 0 && back.angle < 0);
+        assert(near(forward.x, rest.x) && near(back.x, rest.x));
+        assert(near(forward.y, rest.y) && near(back.y, rest.y));
+        assert(near(forward.angle, .13f) && near(back.angle, -.13f));
+        assert(near(returned.angle, 0));
     }
     return 0;
 }

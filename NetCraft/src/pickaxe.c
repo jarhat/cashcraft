@@ -45,19 +45,12 @@ int pickaxe_vertices(float *vertices, bool mina) {
     return count;
 }
 
-PickaxePose pickaxe_pose(int width, int height, float scale, bool mining, double elapsed) {
-    float size = fminf(150 * scale, fmaxf(80 * scale, fminf(width, height) * .18f));
-    size = fminf(size, fminf(width, height) * .4f);
-    PickaxePose pose = {width - size - 24 * scale, 24 * scale, size, 0};
+PickaxePose pickaxe_pose(int width, int height, bool mining, double elapsed) {
+    float size = fminf(width, height) * .5f;
+    PickaxePose pose = {width - size * .9375f, 0, size, 0};
     if (mining) {
-        double phase = fmod(elapsed, .36) * (2.0 * 3.141592653589793 / .36);
-        float progress = (float)((1.0 - cos(phase)) * .5);
-        float arc = (float)sin(phase);
-        float target_x = width * .5f - size * .1f;
-        float target_y = height * .5f - size * .7f;
-        pose.x += (target_x - pose.x) * progress + size * .07f * arc;
-        pose.y += (target_y - pose.y) * progress + size * .18f * arc;
-        pose.angle = .18f * arc;
+        double phase = fmod(elapsed, .24) * (2.0 * 3.141592653589793 / .24);
+        pose.angle = .13f * (float)sin(phase);
     }
     return pose;
 }

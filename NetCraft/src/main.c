@@ -2389,7 +2389,7 @@ static void render_pickaxe(Attrib *attrib) {
 #ifdef __EMSCRIPTEN__
     mining = mining && (g->mode != MODE_ONLINE || online_ready);
 #endif
-    PickaxePose pose = pickaxe_pose(g->width, g->height, g->scale, mining, mining_swing_elapsed());
+    PickaxePose pose = pickaxe_pose(g->width, g->height, mining, mining_swing_elapsed());
     float matrix[16];
     set_matrix_2d(matrix, g->width, g->height);
     glUseProgram(attrib->program);

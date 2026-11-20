@@ -11,7 +11,7 @@ attribute vec3 color;
 varying vec3 pixel_color;
 
 void main() {
-    vec2 pivot = vec2(0.8, 0.2);
+    vec2 pivot = vec2(0.9375, 0.0);
     vec2 p = position - pivot;
     float s = sin(angle);
     float c = cos(angle);
