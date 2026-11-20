@@ -3358,6 +3358,9 @@ void on_file_drop(GLFWwindow *window, int count, const char **paths) {
 EMSCRIPTEN_KEEPALIVE void touch_next_item(void) {
     on_key(g->window, CRAFT_KEY_ITEM_NEXT, 0, GLFW_PRESS, 0);
 }
+EMSCRIPTEN_KEEPALIVE void touch_prev_item(void) {
+    on_key(g->window, CRAFT_KEY_ITEM_PREV, 0, GLFW_PRESS, 0);
+}
 #endif
 
 void create_window() {

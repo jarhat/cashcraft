@@ -321,7 +321,7 @@ fn open_database(path: &str) -> rusqlite::Result<Connection> {
          CREATE INDEX IF NOT EXISTS sign_pq_idx ON sign (p,q);
          CREATE TABLE IF NOT EXISTS mining_rewards (
            id INTEGER PRIMARY KEY, x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL,
-           cash_address TEXT NOT NULL, category TEXT NOT NULL, signed_tx TEXT, txid TEXT, sent_at TEXT,
+           cash_address TEXT NOT NULL, category TEXT NOT NULL, signed_tx TEXT, txid TEXT, sent_at TEXT, player_name TEXT,
            UNIQUE(x,y,z)
          );",
     )?;
@@ -339,6 +339,9 @@ fn open_database(path: &str) -> rusqlite::Result<Connection> {
                 [],
             )?;
         }
+    }
+    if !columns.iter().any(|name| name == "player_name") {
+        db.execute("ALTER TABLE mining_rewards ADD COLUMN player_name TEXT", [])?;
     }
     db.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS mining_rewards_xyz_idx ON mining_rewards (x,y,z)",
@@ -590,8 +593,8 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
                 server.default_reward_category.as_ref(),
             ) {
                 if transaction.execute(
-                    "INSERT OR IGNORE INTO mining_rewards (x,y,z,cash_address,category) VALUES (?1,?2,?3,?4,?5)",
-                    params![x, y, z, address, category],
+                    "INSERT OR IGNORE INTO mining_rewards (x,y,z,cash_address,category,player_name) VALUES (?1,?2,?3,?4,?5,?6)",
+                    params![x, y, z, address, category, player.name],
                 )? > 0 {
                     reward_id = Some(transaction.last_insert_rowid());
                 }
@@ -917,7 +920,10 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
         broadcast(
             &state,
             None,
-            &format!("P,{id},0,0,0,0,0\nN,{id},{}\n", player.name),
+            &format!(
+                "P,{id},0,0,0,0,0\nN,{id},{}\nT,{} joined the game.\n",
+                player.name, player.name
+            ),
         );
         state.players.insert(id, player);
         id
@@ -1252,17 +1258,18 @@ mod tests {
         block_edit(&server, 1, x, y, z, 0).unwrap();
         assert!(wakes.try_recv().is_err());
         let state = server.state.lock().unwrap();
-        let (count, category, recipient): (i64, String, String) = state
+        let (count, category, recipient, name): (i64, String, String, String) = state
             .db
             .query_row(
-                "SELECT count(*),category,cash_address FROM mining_rewards",
+                "SELECT count(*),category,cash_address,player_name FROM mining_rewards",
                 [],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .unwrap();
         assert_eq!(count, 1);
         assert_eq!(category, "b".repeat(64));
         assert_eq!(recipient, address);
+        assert_eq!(name, "guest1");
         drop(state);
         chunk_response(&server, 1, 0, 0, -1).unwrap();
         let output = _first.try_iter().last().unwrap();

@@ -12,7 +12,7 @@ import { setupMarketTicker } from './market-ticker.js';
 import { setupChainTicker } from './chain-ticker.js';
 import { setupWikiGlossary } from './wiki-glossary.js';
 import { setupGames } from './games.js';
-import { setupGameInvite } from './game-invite.js';
+import { setupGameInvite, loadDonation } from './game-invite.js';
 import { groupMinaReceipts } from './reward-receipts.js';
 import { setupBrowserWallet } from './browser-wallet-ui.js';
 import { setupMediaSlideshow } from './media-slideshow.js';
@@ -109,6 +109,23 @@ if (mainnet && !$('receive-category').value) $('receive-category').value = PUSD_
 setupMarketTicker($('market-ticker'), translate, logger);
 setupChainTicker($('chain-ticker'), logger);
 setupMediaSlideshow($);
+
+const updateReceiveToken = () => {
+  $('receive-pusd').hidden = !mainnet || $('receive-category').value.trim().toLowerCase() !== PUSD_CATEGORY;
+};
+updateReceiveToken();
+if (mainnet) {
+  loadTokenLogo(PUSD_CATEGORY).then((image) => {
+    image.alt = '';
+    $('receive-pusd-logo').replaceChildren(image);
+  }).catch((error) => logger.warn('ParyonUSD logo unavailable:', error));
+}
+for (const field of ['receive-address', 'receive-category']) {
+  $(`edit-${field}`).addEventListener('click', () => {
+    $(field).readOnly = false;
+    $(field).focus();
+  });
+}
 let QRCode, decodeCashAddress, encodeCashAddress, hash160, initiateDappRelay;
 let DappConnectionManager, loadSession, sourceOutputToRelay, transactionToHex;
 let TransactionBuilder, placeholderP2PKHUnlocker, provider;
@@ -220,6 +237,7 @@ function renderMinaReceiptHistory(state) {
   transactions.replaceChildren();
   for (const [txid, amount] of [...grouped].reverse()) {
     const row = document.createElement('code');
+    row.className = 'mina-label';
     row.textContent = `${amount} MINA · ${txid}`;
     transactions.append(row);
   }
@@ -443,14 +461,18 @@ function setConnection(connected) {
   $('forget').hidden = !connected || !!manager?.isBrowserWallet;
   $('disconnect').hidden = !connected;
   $('logout').hidden = !connected;
-  $('wizard-toggle').hidden = connected;
+  $('wizard-toggle').hidden = false;
   updateGameRewardAddress(connected && registeredRewardAddress === addressFor(0, 0) ? registeredRewardAddress : null);
   if (!connected) $('game-status').textContent = '';
   document.body.classList.toggle('wallet-connected', connected);
   $('network-wallet-status').textContent = translate(connected ? 'Wallet connected' : 'Not connected');
   if (!$('wizard-dialog').hidden) {
-    if (connected) closeTutorial();
-    else {
+    if (connected) {
+      if (tutorialStep === 0) {
+        tutorialStep = 1;
+        showTutorialStep();
+      }
+    } else {
       tutorialStep = 0;
       showTutorialStep();
     }
@@ -574,8 +596,8 @@ async function showPairingUri(uri) {
 
   await QRCode.toCanvas($('qr'), uri, {
     width: 190,
-    margin: 0,
-    errorCorrectionLevel: 'M',
+    margin: 4,
+    errorCorrectionLevel: 'H',
     color: { dark: '#07111b', light: '#ffffff' },
   });
   if (!walletReady && walletPairingUri === uri) pairingReminder.start();
@@ -2060,11 +2082,19 @@ refreshBrowserWalletUI = setupBrowserWallet($, {
 updateGameRewardAddress = setupGames($, {
   translate,
   getRewardAddress: () => walletReady ? registeredRewardAddress : null,
+  isWalletConnected: () => walletReady,
 });
-setupGameInvite($, network, async () => {
+const donationDependencies = async () => {
   await loadWalletDependencies();
   return { QRCode, decodeCashAddress };
+};
+setupGameInvite($, network, donationDependencies);
+$('donate-open').addEventListener('click', () => {
+  if (!$('donate-dialog').open) $('donate-dialog').showModal();
+  void loadDonation($, network, donationDependencies, 'donate');
 });
+$('donate-close').addEventListener('click', () => $('donate-dialog').close());
+$('donate-dialog').addEventListener('close', () => $('donate-open').focus());
 
 $('show-nfts').addEventListener('change', () => {
   portfolioPage = 0;
@@ -2564,6 +2594,7 @@ for (const id of ['receive-address', 'receive-category', 'receive-amount']) {
       walletReceiveAddress = null;
       $('copy-receive-address').disabled = !$(id).value.trim();
     }
+    if (id === 'receive-category') updateReceiveToken();
   });
 }
 
@@ -2671,6 +2702,11 @@ const tutorialSteps = [
     title: 'Crafting table',
     message: 'Select a token to send, or switch to Receive to create a payment QR. Amounts are whole base units; review every transaction in your wallet.',
   },
+  {
+    id: 'games-toggle',
+    title: 'Play CashCraft',
+    message: 'Open the game menu to launch CashCraft. Use the gem in the game to see your wallet and rewards, and Ranking to compare mining rewards.',
+  },
 ];
 let tutorialStep = 0;
 
@@ -2682,7 +2718,8 @@ function showTutorialStep() {
   const focused = dialog.contains(document.activeElement) ? document.activeElement : null;
   panel.classList.add('tutorial-highlight');
   if (tutorialStep === 0) openConnectionDialog();
-  panel.before(dialog);
+  if (step.id === 'games-toggle') (panel.closest('.topbar') || panel.closest('.game-toolbar')).after(dialog);
+  else panel.before(dialog);
   if (tutorialStep !== 0 && $('connection-dialog').open) $('connection-dialog').close();
   $('wizard-title').textContent = step.title;
   $('wizard-message').textContent = step.message;
@@ -2708,7 +2745,7 @@ function closeTutorial() {
 }
 
 function openTutorial() {
-  tutorialStep = 0;
+  tutorialStep = walletReady ? 1 : 0;
   $('wizard-dialog').hidden = false;
   document.querySelector('.wizard-guide').classList.add('walking');
   $('wizard-toggle').setAttribute('aria-expanded', 'true');
@@ -2762,7 +2799,7 @@ const restoreSession = async () => {
 void restoreSession().finally(() => {
   const params = new URLSearchParams(window.location.search);
   const game = params.get('game');
-  if (params.has('c') || game === 'pk2' || game === 'cashcraft') {
+  if (game === 'pk2' || game === 'cashcraft') {
     $(game === 'pk2' ? 'game-pk2' : 'game-netcraft').click();
   }
 });

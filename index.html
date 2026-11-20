@@ -47,6 +47,9 @@
       <path fill="#cf3744" d="M5 10h13v6H5zm4-6h6v6H9z"/><path fill="#fff" d="M8 3h7v2H8zm0 7h8v2H8zM15 5h2v3h-2z"/><path fill="#eac09b" d="M10 7h5v3h-5z"/>
       <path fill="#ad774f" d="M33 10h13v6H33zm11-4h5v7h-5zM35 16h2v4h-2zm8 0h2v4h-2z"/><path fill="#e9c38b" d="M46 3h2v4h-2zm3 1h2v4h-2z"/><path fill="#e34a4a" d="M49 8h2v2h-2z"/><path fill="#9ab8c6" d="M18 15h15v1H18zM3 19h20v1H3z"/>
     </svg>
+    <button id="donate-open" class="donate-open" type="button" aria-label="Donate Bitcoin Cash" title="Donate Bitcoin Cash" aria-haspopup="dialog" aria-controls="donate-dialog">
+      <svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><path fill="#d63455" d="M2 2h4v1h1v1h2V3h1V2h4v1h1v5h-1v2h-1v1h-1v1h-1v1H9v1H7v-1H5v-1H4v-1H3v-1H2V8H1V3h1z"/><path fill="#ff9eae" d="M3 3h3v1H4v1H3z"/></svg>
+    </button>
   </div>
   <canvas id="snow-canvas" class="snow" aria-hidden="true"></canvas>
   <main class="shell">
@@ -83,13 +86,6 @@
             <button type="button" data-theme-option="miami">Miami</button>
           </div>
         </div>
-        <div class="tool-menu">
-          <button id="games-toggle" class="theme-toggle" type="button" aria-label="Choose a game" aria-expanded="false" aria-controls="games-menu">🎲</button>
-          <div id="games-menu" class="tool-dropdown" hidden>
-            <button id="game-netcraft" type="button">⛏️ CashCraft</button>
-            <button id="game-pk2" type="button">🐔 Pekka Kana 2</button>
-          </div>
-        </div>
       </div>
       <nav id="quick-nav" class="quick-nav" aria-label="Wallet actions" data-wallet-panel hidden>
         <button id="top-send" class="quick-action" type="button" aria-controls="send-panel">
@@ -100,16 +96,16 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 19h16" /></svg>
           <span>Receive</span>
         </button>
+        <button id="notifications-toggle" class="theme-toggle notification-toggle" data-wallet-panel hidden type="button" aria-label="Wallet notifications" aria-controls="notifications-dialog" aria-describedby="notification-indicator" aria-haspopup="dialog">
+          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M4 6V5a2 2 0 0 1 2-2h12v3m3 5h-5a2 2 0 0 0 0 4h5"/><circle cx="16" cy="13" r=".6"/></svg>
+          <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread notification</span></span>
+        </button>
       </nav>
 
       <span class="network"><i aria-hidden="true"></i><span id="network">CHIPNET</span><span id="network-wallet-status" class="visually-hidden">Not connected</span></span>
       <div class="topbar-tools topbar-tools-right">
         <button id="connection-open" class="theme-toggle" hidden type="button" aria-label="Wallet connection" aria-haspopup="dialog" aria-controls="connection-dialog">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M4 6V5a2 2 0 0 1 2-2h12v3m3 5h-5a2 2 0 0 0 0 4h5"/><circle cx="16" cy="13" r=".6"/></svg>
-        </button>
-        <button id="notifications-toggle" class="theme-toggle notification-toggle" data-wallet-panel hidden type="button" aria-label="Wallet notifications" aria-controls="notifications-dialog" aria-describedby="notification-indicator" aria-haspopup="dialog">
-          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M4 6V5a2 2 0 0 1 2-2h12v3m3 5h-5a2 2 0 0 0 0 4h5"/><circle cx="16" cy="13" r=".6"/></svg>
-          <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread notification</span></span>
         </button>
       </div>
       <aside id="wizard-guide" class="wizard-guide" aria-label="Wizard tutorial">
@@ -122,6 +118,27 @@
         </button>
       </aside>
     </header>
+
+    <div class="game-toolbar">
+      <div class="tool-menu game-launcher">
+        <button id="games-toggle" class="theme-toggle" type="button" aria-label="Choose a game" aria-expanded="false" aria-controls="games-menu">🎲</button>
+        <div id="games-menu" class="tool-dropdown" hidden>
+          <button id="game-netcraft" type="button">⛏️ CashCraft</button>
+          <button id="game-pk2" type="button" hidden>🐔 Pekka Kana 2</button>
+        </div>
+      </div>
+      <div id="game-minimized-controls" class="game-minimized-controls" hidden>
+        <nav id="minimized-wallet-actions" class="minimized-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
+        <div class="game-minimized-buttons">
+          <button id="game-minimized-fullscreen" class="game-minimized-icon" type="button" aria-label="Resume CashCraft in fullscreen" title="Resume in fullscreen">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/></svg>
+          </button>
+          <button id="game-restore" class="game-minimized-icon" type="button" aria-label="Resume CashCraft" title="Resume CashCraft">
+            <img src="/icon.svg" alt="">
+          </button>
+        </div>
+      </div>
+    </div>
 
       <div id="wizard-dialog" class="wizard-dialog" hidden>
         <strong id="wizard-title"></strong>
@@ -150,12 +167,12 @@
     <div class="dashboard">
       <div class="landing-welcome panel">
         <p class="eyebrow">BITCOIN CASH · CASHTOKENS</p>
-        <h2>Explore, build and mine MINA together.</h2>
+        <h2 class="mina-label">Explore, build and mine MINA together.</h2>
         <p class="muted">Join the multiplayer voxel world with your Bitcoin Cash wallet, or create a browser wallet to play.</p>
         <button id="landing-connect" class="button primary" type="button">Connect wallet <span aria-hidden="true">→</span></button>
         <ul class="landing-features">
           <li><strong>Multiplayer</strong><span>Explore and build together in a shared world.</span></li>
-          <li><strong>Mine MINA</strong><span>Discover MINA ore and receive CashToken rewards when payouts succeed.</span></li>
+          <li><strong class="mina-label">Mine MINA</strong><span>Discover MINA ore and receive CashToken rewards when payouts succeed.</span></li>
           <li><strong>Your wallet</strong><span>Connect a wallet or create an encrypted browser wallet.</span></li>
           <li><strong>Crafting table</strong><span>Manage and share your CashTokens.</span></li>
         </ul>
@@ -173,7 +190,7 @@
         <p id="usd" class="muted">USD value —</p>
         <div class="balance-extras">
           <p>CashTokens <strong id="tokens-usd">USD value unavailable</strong></p>
-          <p><span class="mina-gem" aria-hidden="true">◆</span> MINA <strong id="mina-balance">Unavailable</strong></p>
+          <p><img class="mina-gem" src="/mina-gem.svg" alt=""> MINA <strong id="mina-balance">Unavailable</strong></p>
         </div>
         <div class="divider"></div>
 
@@ -241,7 +258,7 @@
       </div>
 
       <div id="send-panel" class="tab-panel" role="tabpanel" aria-labelledby="send-tab">
-        <p class="swap-note cauldron-link"><a href="https://cauldron.quest/" target="_blank" rel="noopener noreferrer"><img src="https://cauldron.quest/favicon.ico" alt="" referrerpolicy="no-referrer"> Swap tokens on Cauldron ↗</a> · independent service; check rates and fees.</p>
+        <p class="swap-note cauldron-link"><a href="https://cauldron.quest/" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">🧪✨</span> Swap tokens on Cauldron ↗</a> · independent service; check rates and fees.</p>
         <div class="form">
           <div>
             <label for="category">Token category ID</label>
@@ -305,27 +322,33 @@
           Create a payment link and QR code for someone to send tokens to your wallet.
         </p>
 
-        <label class="receive-address-label">
-          Your receive address
+        <div class="receive-address-label">
+          <label for="receive-address">Your receive address</label>
           <div class="address-line">
-            <input id="receive-address" placeholder="bitcoincash:z…" autocomplete="off" spellcheck="false">
+            <button id="edit-receive-address" class="edit-field" type="button" aria-label="Edit receive address" aria-controls="receive-address"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4-.8L20 7l-3-3L5 16zm10-13 3 3"/></svg></button>
+            <input id="receive-address" placeholder="bitcoincash:z…" autocomplete="off" spellcheck="false" readonly>
             <button id="copy-receive-address" class="small-button" type="button" disabled>
               Copy
             </button>
           </div>
-        </label>
+        </div>
 
         <div class="form receive-form">
-          <label>
-            Token category ID
+          <div>
+            <label for="receive-category">Token category ID</label>
+            <div class="receive-category-field">
+            <button id="edit-receive-category" class="edit-field" type="button" aria-label="Edit token category" aria-controls="receive-category"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4-.8L20 7l-3-3L5 16zm10-13 3 3"/></svg></button>
             <input
               id="receive-category"
               placeholder="64-character category ID"
               autocomplete="off"
               spellcheck="false"
+              readonly
             >
+            <span id="receive-pusd" class="receive-token" hidden><span id="receive-pusd-logo" aria-hidden="true">◆</span> ParyonUSD</span>
+            </div>
             <span class="fine">Mainnet defaults to ParyonUSD (PUSD); you can enter another category.</span>
-          </label>
+          </div>
 
           <label>
             Amount
@@ -336,6 +359,7 @@
               name="receive-token-units"
               placeholder="Whole token units"
               autocomplete="off"
+              value="1"
             >
             <span class="fine">Enter base units; 100 base units equal 1 PUSD.</span>
           </label>
@@ -436,7 +460,10 @@
       <div id="connection-loading" class="connection-loading" role="status" hidden><span class="connection-spinner" aria-hidden="true"></span><span>Finishing wallet setup…</span></div>
 
       <div id="pairing" class="pairing hidden">
-        <canvas id="qr"></canvas>
+        <span class="pairing-qr">
+          <canvas id="qr" role="img" aria-label="WizardConnect pairing QR code"></canvas>
+          <img class="pairing-qr-logo" src="/wizardconnect-icon.png" alt="" aria-hidden="true">
+        </span>
         <p class="pair-title">Connect your wallet</p>
         <p class="muted">
           On another device, scan this code with your wallet’s WizardConnect scanner.
@@ -549,9 +576,12 @@
 
   <dialog id="game-dialog" class="notifications-dialog game-dialog" aria-label="CashCraft game">
     <div class="notifications-heading">
-      <button id="game-close" class="small-button close-notifications" type="button" aria-label="Minimize CashCraft">−</button>
+      <button id="game-ranking" class="small-button game-ranking-button" type="button" aria-haspopup="dialog" aria-controls="ranking-dialog" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v3a4 4 0 0 1-8 0zm0 1H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4M12 11v5m-4 4h8m-7-4h6v4"/></svg> Ranking
+      </button>
+      <button id="game-close" class="small-button close-notifications" type="button" aria-label="Minimize CashCraft" title="Minimize CashCraft">−</button>
     </div>
-    <nav class="game-switcher" aria-label="Choose a game">
+    <nav class="game-switcher" aria-label="Choose a game" hidden>
       <button id="switch-netcraft" class="small-button" type="button" aria-pressed="false">⛏️ CashCraft</button>
       <button id="switch-pk2" class="small-button" type="button" aria-pressed="false">🐔 Pekka Kana 2</button>
     </nav>
@@ -559,16 +589,16 @@
     <div id="game-stage" class="game-stage">
       <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen; gamepad *" allowfullscreen></iframe>
       <div id="game-wallet-prompt" class="game-wallet-prompt" role="status" hidden>
-        <span>Connect or create a wallet before mining to receive MINA rewards.</span>
+        <span id="game-wallet-prompt-message" class="mina-label">Connect or create a wallet before mining to receive MINA rewards.</span>
         <button id="game-wallet-prompt-connect" type="button">Connect or create wallet</button>
       </div>
       <nav id="game-wallet-actions" class="game-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
-      <div class="game-controls game-controls-right" aria-label="CashCraft controls">
+      <div id="game-controls-right" class="game-controls game-controls-right" aria-label="CashCraft controls">
         <button id="game-invite" type="button" aria-label="Invite to CashCraft" title="Invite to CashCraft" aria-haspopup="dialog" aria-controls="invite-dialog">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>
         </button>
         <button id="game-notifications" type="button" aria-label="Wallet and notifications" title="Wallet and notifications" aria-haspopup="dialog" aria-controls="notifications-dialog">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M4 6V5a2 2 0 0 1 2-2h12v3m3 5h-5a2 2 0 0 0 0 4h5"/><circle cx="16" cy="13" r=".6"/></svg>
+          <img src="/mina-gem.svg" alt="">
           <span id="game-notification-indicator" class="visually-hidden" hidden>Unread wallet notification</span>
         </button>
         <button id="game-fullscreen" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
@@ -577,17 +607,15 @@
       </div>
     </div>
   </dialog>
-  <div id="game-minimized-controls" class="game-minimized-controls" hidden>
-    <nav id="minimized-wallet-actions" class="minimized-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
-    <div class="game-minimized-buttons">
-    <button id="game-minimized-fullscreen" class="game-minimized-icon" type="button" aria-label="Resume CashCraft in fullscreen" title="Resume in fullscreen">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/></svg>
-    </button>
-    <button id="game-restore" class="game-minimized-icon" type="button" aria-label="Resume CashCraft" title="Resume CashCraft">
-      <img src="/icon.svg" alt="">
-    </button>
+  <dialog id="ranking-dialog" class="notifications-dialog ranking-dialog" aria-labelledby="ranking-title">
+    <div class="notifications-heading">
+      <h2 id="ranking-title"><img class="mina-gem" src="/mina-gem.svg" alt=""> MINA ranking</h2>
+      <button id="ranking-close" class="small-button close-notifications" type="button" aria-label="Close ranking">×</button>
     </div>
-  </div>
+    <p class="fine">Successfully broadcast mining rewards for the current category. Names are unauthenticated and reflect the name at the time of mining; older rewards may be unnamed.</p>
+    <p id="ranking-status" role="status"></p>
+    <ol id="ranking-list" class="ranking-list" aria-label="Mining rewards by player"></ol>
+  </dialog>
 
   <dialog id="invite-dialog" class="notifications-dialog" aria-labelledby="invite-title">
     <div class="notifications-heading">
@@ -604,6 +632,17 @@
     <canvas id="donation-qr" aria-label="Bitcoin Cash donation request QR code" hidden></canvas>
     <p><code id="donation-address"></code></p>
     <p id="invite-status" class="fine" role="status"></p>
+  </dialog>
+
+  <dialog id="donate-dialog" class="notifications-dialog" aria-labelledby="donate-title">
+    <div class="notifications-heading">
+      <h2 id="donate-title">Support CashCraft</h2>
+      <button id="donate-close" class="small-button close-notifications" type="button" aria-label="Close donation dialog">×</button>
+    </div>
+    <p>Support reward payouts and site hosting with a Bitcoin Cash donation. Thank you!</p>
+    <canvas id="donate-qr" aria-label="Bitcoin Cash donation request QR code" hidden></canvas>
+    <p><code id="donate-address"></code></p>
+    <p id="donate-status" class="fine" role="status"></p>
   </dialog>
 
   <dialog id="wiki-dialog" class="notifications-dialog wiki-dialog" aria-labelledby="wiki-title">
@@ -687,7 +726,7 @@
     </div>
     <div id="wallet-notification-summary" class="wallet-notification-summary" hidden>
       <p>Bitcoin Cash: <strong id="notification-bch">—</strong></p>
-      <p><span class="mina-gem" aria-hidden="true">◆</span> MINA balance: <strong id="notification-mina">—</strong></p>
+      <p><img class="mina-gem" src="/mina-gem.svg" alt=""> MINA balance: <strong id="notification-mina">—</strong></p>
       <details id="mina-receipt-history" hidden><summary id="mina-receipt-count"></summary><div id="mina-receipt-transactions"></div></details>
     </div>
     <p id="notifications-empty" class="muted">No notifications yet.</p>

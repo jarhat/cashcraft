@@ -4,32 +4,33 @@ const games = {
 };
 const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 
-export function setupGames($, { translate, getRewardAddress = () => null, autoOpen = false, autoOpenGame = 'netcraft' }) {
+export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, autoOpen = false, autoOpenGame = 'netcraft' }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
   const dock = $('game-minimized-controls');
   const restore = $('game-restore');
+  const rankingParent = $('game-ranking').parentNode;
   const setPlayingUi = () => {
     const playing = dialog.open && !dialog.hidden;
     document.body.classList.toggle('cashcraft-playing', playing);
     dock.hidden = !dialog.open || !dialog.hidden || !activeGame;
-    const actions = !dialog.open || !activeGame ? $('quick-nav')
-      : dialog.hidden ? $('minimized-wallet-actions') : $('game-wallet-actions');
-    for (const id of ['top-send', 'top-receive']) {
-      actions.appendChild($(id));
-    }
   };
-  document.querySelector('.topbar').after(dialog, dock);
+  document.querySelector('.game-toolbar').after(dialog);
   stage.addEventListener('contextmenu', (event) => event.preventDefault());
   let generation = 0;
   let activeGame = null;
   const updateRewardAddress = (address) => {
-    const connected = Boolean(address);
+    const connected = isWalletConnected ? isWalletConnected() : Boolean(address);
     $('game-notifications').setAttribute('aria-label', translate(connected ? 'Wallet and notifications' : 'Connect wallet'));
     $('game-notifications').setAttribute('title', translate(connected ? 'Wallet and notifications' : 'Connect wallet'));
     $('game-notifications').setAttribute('aria-controls', connected ? 'notifications-dialog' : 'connection-dialog');
-    $('game-wallet-prompt').hidden = activeGame !== 'netcraft' || connected;
+    $('game-wallet-prompt').hidden = activeGame !== 'netcraft' || Boolean(address);
+    $('game-wallet-prompt-message').textContent = translate(connected
+      ? 'Wallet connected; waiting for reward address registration.'
+      : 'Connect or create a wallet before mining to receive MINA rewards.');
+    $('game-wallet-prompt-connect').hidden = connected;
+    $('game-ranking').hidden = activeGame !== 'netcraft';
     if (activeGame) {
       const title = games[activeGame].title;
       $('game-restore').setAttribute('aria-label', `Resume ${title}`);
@@ -41,7 +42,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, autoOp
       frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '' }, '*');
     }
   };
-  const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'mina-welcome-dialog'];
+  const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'mina-welcome-dialog', 'ranking-dialog'];
   const canFocusGame = () => dialog.open && !dialog.hidden && activeGame &&
     !overlayDialogs.some((id) => $(id).open);
   frame.addEventListener('load', () => {
@@ -148,7 +149,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, autoOp
     }
   });
   $('game-notifications').addEventListener('click', () => {
-    const connected = Boolean(getRewardAddress());
+    const connected = isWalletConnected ? isWalletConnected() : Boolean(getRewardAddress());
     const overlay = $(connected ? 'notifications-dialog' : 'connection-dialog');
     if (document.fullscreenElement === stage) {
       const parent = overlay.parentNode;
@@ -171,10 +172,55 @@ export function setupGames($, { translate, getRewardAddress = () => null, autoOp
       overlay.addEventListener('close', () => parent.insertBefore(overlay, next), { once: true });
     }
   });
+  $('game-ranking').addEventListener('click', async () => {
+    if (activeGame !== 'netcraft') return;
+    const overlay = $('ranking-dialog');
+    if (document.fullscreenElement === stage && !overlay.open) {
+      const parent = overlay.parentNode;
+      const next = overlay.nextSibling;
+      stage.appendChild(overlay);
+      overlay.addEventListener('close', () => parent.insertBefore(overlay, next), { once: true });
+    }
+    if (!overlay.open) overlay.showModal();
+    const status = $('ranking-status');
+    const list = $('ranking-list');
+    list.replaceChildren();
+    status.textContent = 'Loading ranking…';
+    try {
+      const response = await fetch('/api/mina-ranking', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Ranking is unavailable. Please try again.');
+      const data = await response.json();
+      if (!Array.isArray(data.players) || data.players.some((player) =>
+        typeof player.name !== 'string' || !Number.isSafeInteger(player.rewards) || player.rewards < 1)) {
+        throw new Error('Ranking data is invalid.');
+      }
+      const max = data.players[0]?.rewards || 1;
+      for (const player of data.players) {
+        const row = document.createElement('li');
+        const label = document.createElement('span');
+        const value = document.createElement('strong');
+        const bar = document.createElement('span');
+        label.textContent = player.name;
+        value.textContent = `${player.rewards} MINA`;
+        bar.className = 'ranking-bar';
+        bar.style.width = `${player.rewards / max * 100}%`;
+        bar.setAttribute('aria-hidden', 'true');
+        row.append(label, value, bar);
+        list.append(row);
+      }
+      status.textContent = data.players.length ? '' : 'No mining rewards have been sent yet.';
+    } catch (error) {
+      status.textContent = error.message || 'Ranking is unavailable. Please try again.';
+    }
+  });
+  $('ranking-close').addEventListener('click', () => $('ranking-dialog').close());
   document.addEventListener('fullscreenchange', () => {
     const active = document.fullscreenElement === stage;
+    if (active) $('game-controls-right').prepend($('game-ranking'));
+    else rankingParent.insertBefore($('game-ranking'), $('game-close'));
     stage.classList.toggle('is-fullscreen', active);
     dialog.classList.toggle('is-fullscreen', active);
+    setPlayingUi();
     const label = translate(active ? 'Exit fullscreen' : 'Enter fullscreen');
     $('game-fullscreen').setAttribute('aria-pressed', String(active));
     $('game-fullscreen').setAttribute('aria-label', label);

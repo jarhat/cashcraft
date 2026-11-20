@@ -221,6 +221,7 @@ def open_netcraft_db(timeout: int) -> sqlite3.Connection:
         signed_tx TEXT,
         txid TEXT,
         sent_at TEXT,
+        player_name TEXT,
         UNIQUE(x, y, z)
     )""")
     return db
@@ -729,6 +730,15 @@ def check_balance() -> int:
     return _satoshis(bch_rpc("getbalance", [], wallet=True))
 
 
+@app.get("/api/payout-balance")
+def payout_balance() -> dict[str, str]:
+    try:
+        return {"satoshis": str(check_balance())}
+    except (RuntimeError, ValueError, TypeError) as exc:
+        logger.warning("Payout balance unavailable: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Payout balance unavailable.") from exc
+
+
 def _bch_amount(satoshis: int) -> str:
     return f"{satoshis // 100_000_000}.{satoshis % 100_000_000:08d}"
 
@@ -1010,4 +1020,27 @@ def mina_rewards_sent() -> dict:
         logger.error("Could not read MINA payout total: %s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Payout total unavailable") from exc
     return {"sent": str(total)}
+
+
+@app.get("/api/mina-ranking")
+def mina_ranking() -> dict:
+    if not NETCRAFT_DB_PATH:
+        raise HTTPException(status_code=503, detail="Ranking database unavailable.")
+    try:
+        uri = Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+            columns = {row[1] for row in db.execute("PRAGMA table_info(mining_rewards)")}
+            if not {"category", "sent_at"} <= columns:
+                raise sqlite3.DatabaseError("Mining rewards table unavailable")
+            name = "COALESCE(NULLIF(player_name, ''), 'Unknown player')" if "player_name" in columns else "'Unknown player'"
+            rows = db.execute(
+                f"SELECT {name} AS player, COUNT(*) AS rewards FROM mining_rewards "
+                "WHERE category = ? AND sent_at IS NOT NULL GROUP BY player "
+                "ORDER BY rewards DESC, player COLLATE NOCASE LIMIT 20",
+                (BCH_REWARD_CATEGORY,),
+            ).fetchall()
+    except sqlite3.Error as exc:
+        logger.error("Could not read MINA ranking: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Ranking unavailable.") from exc
+    return {"players": [{"name": name, "rewards": count} for name, count in rows]}
 

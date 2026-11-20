@@ -99,13 +99,13 @@ test('wizard highlights and scrolls to each tutorial panel without moving the na
   const start = source.indexOf('const tutorialSteps =');
   const end = source.indexOf('\n\nfetchBchUsd();', start);
   elements.set('connection-dialog', { open: false, close() { this.open = false; } });
-  runInNewContext(source.slice(start, end), { document, $: (id) => elements.get(id), requestAnimationFrame: (fn) => fn(), openConnectionDialog() { elements.get('connection-dialog').open = true; } });
+  runInNewContext(source.slice(start, end), { document, walletReady: false, $: (id) => elements.get(id), requestAnimationFrame: (fn) => fn(), openConnectionDialog() { elements.get('connection-dialog').open = true; } });
 
   elements.get('wizard-toggle').click();
   assert.equal(guidePosition, 'connection-section');
   assert.equal(elements.get('connection-dialog').open, true);
   assert.equal(elements.get('wizard-dialog').parent, 'connection-section');
-  assert.equal(elements.get('wizard-progress').textContent, '1 / 4');
+  assert.equal(elements.get('wizard-progress').textContent, '1 / 5');
   elements.get('wizard-next').click();
   assert.equal(guidePosition, 'balance-section');
   assert.equal(elements.get('connection-dialog').open, false);
@@ -580,6 +580,7 @@ test('forgetting a pairing notifies the wallet before tearing down the relay', a
 
 test('open in wallet remains available until an address is derived, including restored sessions', async () => {
   let instance;
+  let pairingQr;
   let relayCallback;
   let keyAvailable = false;
   let submissionFails = false;
@@ -601,7 +602,7 @@ test('open in wallet remains available until an address is derived, including re
     $: element, relay: null, manager: null, walletPairingUri: null,
     walletReady: false, pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
     refreshBrowserWalletUI() {},
-    QRCode: { toCanvas: async () => {} }, clearWalletDisplay() {}, setConnection() {},
+    QRCode: { toCanvas: async (canvas, uri, options) => { pairingQr = { canvas, uri, options }; } }, clearWalletDisplay() {}, setConnection() {},
     pairingReminder: { start() {} },
     updateReceiveAddress() {},
     addressFor() {
@@ -628,6 +629,10 @@ test('open in wallet remains available until an address is derived, including re
   };
   runInNewContext(source.slice(start, end), context);
   await context.startConnection({ restoring: true });
+  assert.equal(pairingQr.canvas, element('qr'));
+  assert.equal(pairingQr.uri, 'wiz:restored');
+  assert.equal(pairingQr.options.errorCorrectionLevel, 'H');
+  assert.equal(pairingQr.options.margin, 4);
   assert.equal(element('connect').hidden, true);
   assert.equal(element('open-wallet').hidden, false);
   assert.equal(element('open-wallet').disabled, false);
@@ -987,8 +992,8 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   $('wizard-dialog').hidden = false;
   $('wizard-next').disabled = true;
   context.setConnection(true);
-  assert.equal($('wizard-dialog').hidden, true);
-  assert.equal($('wizard-toggle').hidden, true);
+  assert.equal($('wizard-dialog').hidden, false);
+  assert.equal($('wizard-toggle').hidden, false);
   assert.equal(context.tutorialUpdated, undefined);
   $('game-dialog').open = true;
   $('game-dialog').close = () => { $('game-dialog').open = false; };
@@ -1255,6 +1260,7 @@ test('wizard follows the panels in reading order and resets when closed', () => 
       before(node) { node.parent = id; guidePosition = id; },
       close() { this.open = false; },
       closest(selector) {
+        if (selector === '.topbar') return { after(node) { node.parent = 'topbar'; guidePosition = 'topbar'; } };
         assert.equal(selector, '.grid');
         return id === 'connection-section' || id === 'balance-section' ? element('grid') : null;
       },
@@ -1272,7 +1278,7 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   };
   const start = source.indexOf('const tutorialSteps =');
   const end = source.indexOf('\n\nfetchBchUsd();', start);
-  runInNewContext(source.slice(start, end), { $, document, requestAnimationFrame: (fn) => fn(), openConnectionDialog() { element('connection-dialog').open = true; } });
+  runInNewContext(source.slice(start, end), { $, document, walletReady: false, requestAnimationFrame: (fn) => fn(), openConnectionDialog() { element('connection-dialog').open = true; } });
   function $ (id) { return element(id); }
   element('wizard-toggle').listeners.click();
   assert.deepEqual([...highlighted], ['connection-section']);
@@ -1290,8 +1296,11 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   assert.deepEqual([...highlighted], ['transfer-section']);
   assert.equal(guidePosition, 'transfer-section');
   element('wizard-next').listeners.click();
+  assert.deepEqual([...highlighted], ['games-toggle']);
+  assert.equal(guidePosition, 'topbar');
+  element('wizard-next').listeners.click();
   assert.equal(element('wizard-dialog').hidden, true);
   assert.equal(highlighted.size, 0);
-  assert.equal(guidePosition, 'transfer-section');
+  assert.equal(guidePosition, 'topbar');
   assert.equal(walking, false);
 });
