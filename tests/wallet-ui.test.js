@@ -10,6 +10,42 @@ import { normalizeUtxo, utxoKey } from '../src/utils.js';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
+test('MINA pickaxe follows the scanned fungible balance and clears on scan failure', async () => {
+  const start = source.indexOf('async function refreshBalances(');
+  const end = source.indexOf('\nfunction validateRecipient', start);
+  const elements = new Map();
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, { textContent: '' });
+    return elements.get(id);
+  };
+  const updates = [];
+  const context = {
+    $, walletReady: true, manager: {}, refreshPromise: null,
+    registeredRewardAddress: 'address', minaPickaxe: false, rewardCategory: 'mina',
+    deriveScanAddresses: () => [],
+    scanWallet: async () => ({ addresses: [], utxos: context.nextUtxos }),
+    renderBalances() {}, loadRewardCategory: async () => {}, notifyTokenReceipts() {},
+    updateGameRewardAddress: () => updates.push(context.minaPickaxe),
+  };
+  runInNewContext(source.slice(start, end), context);
+  const token = (category, amount) => ({ satoshis: 1, token: { category, amount } });
+  for (const [utxos, expected] of [
+    [[token('mina', 1), token('other', 100)], false],
+    [[token('MINA', 1), token('mina', 1)], true],
+    [[token('mina', 0)], false],
+  ]) {
+    context.nextUtxos = utxos;
+    await context.refreshBalances({ quiet: true });
+    assert.equal(context.minaPickaxe, expected);
+    assert.equal(updates.at(-1), expected);
+  }
+  context.minaPickaxe = true;
+  context.scanWallet = async () => { throw new Error('scan failed'); };
+  await assert.rejects(context.refreshBalances({ quiet: true }), /scan failed/);
+  assert.equal(context.minaPickaxe, false);
+  assert.equal(updates.at(-1), false);
+});
+
 test('payment defaults to PUSD only on mainnet and preserves an existing category', async () => {
   const start = source.indexOf('const mainnet =');
   const end = source.indexOf('\nsetupMarketTicker', start);

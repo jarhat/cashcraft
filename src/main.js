@@ -188,6 +188,7 @@ const pairingReminder = setupPairingReminder({
 let rewardCategory = null;
 let rewardCategoryPromise = null;
 let receiptWallet = null;
+let minaPickaxe = false;
 
 async function loadRewardCategory() {
   if (!rewardCategoryPromise) {
@@ -453,7 +454,10 @@ for (const name of ['theme', 'language', 'games']) {
 
 let updateGameRewardAddress = () => {};
 function setConnection(connected) {
-  if (!connected) registeredRewardAddress = null;
+  if (!connected) {
+    registeredRewardAddress = null;
+    minaPickaxe = false;
+  }
   pairingReminder.cancel();
   if (!connected) $('connection-loading').hidden = true;
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
@@ -491,6 +495,8 @@ function setConnection(connected) {
 }
 
 function clearWalletDisplay() {
+  minaPickaxe = false;
+  updateGameRewardAddress(null);
   balanceSatoshis = null;
   emptyBalanceNotified = false;
   portfolioVersion++;
@@ -1393,8 +1399,8 @@ async function refreshBalances({ quiet = false } = {}) {
 
   if (refreshPromise) return refreshPromise;
 
+  const scanManager = manager;
   const scanPromise = (async () => {
-    const scanManager = manager;
     if (!quiet) {
       $('status').textContent = 'Scanning wallet addresses…';
     }
@@ -1419,9 +1425,15 @@ async function refreshBalances({ quiet = false } = {}) {
           ? sum + BigInt(utxo.token.amount || 0) : sum, 0n).toString();
         $('mina-balance').textContent = mina;
         $('notification-mina').textContent = mina;
+        minaPickaxe = BigInt(mina) >= 2n;
+        updateGameRewardAddress(registeredRewardAddress);
         notifyTokenReceipts(utxos);
       }
     } catch (error) {
+      if (walletReady && manager === scanManager) {
+        minaPickaxe = false;
+        updateGameRewardAddress(registeredRewardAddress);
+      }
       receiptError = error;
     }
     if (!walletReady || manager !== scanManager) {
@@ -1455,6 +1467,12 @@ async function refreshBalances({ quiet = false } = {}) {
 
   try {
     return await scanPromise;
+  } catch (error) {
+    if (walletReady && manager === scanManager) {
+      minaPickaxe = false;
+      updateGameRewardAddress(registeredRewardAddress);
+    }
+    throw error;
   } finally {
     if (refreshPromise === scanPromise) {
       refreshPromise = null;
@@ -2083,6 +2101,7 @@ updateGameRewardAddress = setupGames($, {
   translate,
   getRewardAddress: () => walletReady ? registeredRewardAddress : null,
   isWalletConnected: () => walletReady,
+  hasMinaPickaxe: () => walletReady && minaPickaxe,
 });
 const donationDependencies = async () => {
   await loadWalletDependencies();

@@ -159,18 +159,25 @@ test('NetCraft starts online without a wallet and accepts a registered address l
   };
   globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
   let address = null;
+  let pickaxe = false;
   const messages = [];
   $('game-frame').contentWindow = { postMessage: (message) => messages.push(message) };
   const update = setupGames($, {
-    translate: (text) => text, getRewardAddress: () => address,
+    translate: (text) => text, getRewardAddress: () => address, hasMinaPickaxe: () => pickaxe,
   });
   await $('game-netcraft').listeners.click();
   assert.equal($('game-frame').src, '/games/netcraft/craftw.html#-+4080');
   assert.equal($('game-wallet-prompt').hidden, false);
   address = 'bitcoincash:ztest';
   update(address);
-  assert.deepEqual(messages.at(-1), { type: 'netcraft-reward-address', address });
+  assert.deepEqual(messages.at(-1), { type: 'netcraft-reward-address', address, pickaxe: false });
   assert.equal($('game-wallet-prompt').hidden, true);
+  pickaxe = true;
+  update(address);
+  assert.equal(messages.at(-1).pickaxe, true);
+  address = null;
+  update(address);
+  assert.equal(messages.at(-1).pickaxe, false);
 });
 
 test('game gem opens connected wallet notifications even while reward registration is pending', (t) => {
@@ -232,9 +239,9 @@ test('NetCraft receives the connected token address when launched', async (t) =>
   assert.equal($('game-notifications')['aria-label'], 'Connect wallet');
   assert.equal($('game-wallet-prompt').hidden, false);
   assert.deepEqual(messages, [
-    { message: { type: 'netcraft-reward-address', address: browserAddress }, origin: '*' },
-    { message: { type: 'netcraft-reward-address', address: '' }, origin: '*' },
-    { message: { type: 'netcraft-reward-address', address: '' }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: browserAddress, pickaxe: false }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false }, origin: '*' },
   ]);
   update('bitcoincash:zother');
   assert.equal(messages[3].message.address, 'bitcoincash:zother');

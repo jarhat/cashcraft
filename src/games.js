@@ -4,7 +4,7 @@ const games = {
 };
 const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 
-export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, autoOpen = false, autoOpenGame = 'netcraft' }) {
+export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, hasMinaPickaxe = () => false, autoOpen = false, autoOpenGame = 'netcraft' }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
@@ -39,7 +39,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       $('game-minimized-fullscreen').setAttribute('title', `Resume ${title} in fullscreen`);
     }
     if (activeGame === 'netcraft') {
-      frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '' }, '*');
+      frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '', pickaxe: connected && hasMinaPickaxe() }, '*');
     }
   };
   const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'mina-welcome-dialog', 'ranking-dialog'];

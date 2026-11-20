@@ -197,6 +197,9 @@ players or players without a wallet. Its wallet button opens the setup wizard.
 Browser wallet creation requires a password and confirmation of the recovery
 phrase backup. The wallet scans receive and change addresses, rescans after
 registration, and refreshes periodically while connected.
+Players with at least 2 MINA in their scanned wallet automatically equip a
+green pixel pickaxe that halves block mining time. It is removed when the
+wallet disconnects or a subsequent balance scan no longer qualifies.
 
 The loading screen shows available download progress and fades after the first
 frame is rendered. Its background is served by the frontend as
@@ -349,9 +352,9 @@ Do not manually resend a signed pending transaction; it is retried unchanged.
 Touch devices start with a three-chunk viewing radius and
 desktop browsers with four to limit rendering cost;
 use `/view <radius>` to adjust it. The right-hand block selector shows the
-current block enlarged followed by the next available blocks, with available
-mined counts. Building consumes one matching block; zero-count blocks cannot
-be placed. Inventory resets when the connection is lost or the page reloads.
+current block enlarged followed by the next available mined blocks and their
+counts. Building consumes one matching block; blocks disappear from the selector
+when their count reaches zero. Inventory resets when the connection is lost or the page reloads.
 `/noclip` is
 disabled by the online client; the server does not yet enforce movement
 collision against modified clients. Closing the wallet or notifications
