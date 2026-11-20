@@ -31,6 +31,18 @@ export function setupChainTicker(container, logger = console) {
         ['Node status', status.syncing ? 'Syncing' : 'Synced'],
       ];
       if (status.syncing) items.push(['Headers', status.headers.toLocaleString()]);
+      try {
+        const response = await fetch('/api/donation', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+        if (!response.ok) throw new Error(`Donation status request failed (${response.status}).`);
+        const donation = await response.json();
+        if (typeof donation.balance_bch !== 'number' || !Number.isFinite(donation.balance_bch) || donation.balance_bch < 0) {
+          throw new Error('Invalid server balance.');
+        }
+        items.push(['Server balance', `${donation.balance_bch.toLocaleString(undefined, { maximumFractionDigits: 8 })} BCH`]);
+      } catch (error) {
+        logger.warn('Server balance unavailable:', error);
+        items.push(['Server balance', 'Unavailable']);
+      }
       const track = document.createElement('div');
       track.className = 'market-ticker-track';
       for (let copy = 0; copy < 2; copy++) {

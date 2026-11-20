@@ -1,5 +1,5 @@
 const games = {
-  netcraft: { title: 'Netcraft', url: '/games/netcraft/craftw.html' },
+  netcraft: { title: 'CashCraft', url: '/games/netcraft/craft.html' },
   pk2: { title: 'Pekka Kana 2', url: '/games/pk2/index.html' },
 };
 
@@ -8,11 +8,19 @@ export function setupGames($, { claimBeer, translate }) {
   const frame = $('game-frame');
   let generation = 0;
   let activeGame = null;
+  let minimized = false;
+  let loadingTimer;
+  const restore = () => {
+    minimized = false;
+    $('game-restore').hidden = true;
+    if (!dialog.open) dialog.showModal();
+  };
   for (const [id, game] of Object.entries(games)) {
     const open = async () => {
-      if (dialog.open && activeGame === id) {
+      if ((dialog.open || minimized) && activeGame === id) {
         generation++;
         $('game-dialog-status').textContent = '';
+        if (minimized) restore();
         return;
       }
       const request = ++generation;
@@ -34,11 +42,16 @@ export function setupGames($, { claimBeer, translate }) {
         void frame.offsetWidth;
         frame.src = game.url;
         activeGame = id;
+        clearTimeout(loadingTimer);
+        $('game-loading').hidden = id !== 'netcraft';
+        if (id === 'netcraft') {
+          loadingTimer = setTimeout(() => { $('game-loading').hidden = true; }, 2500);
+        }
         frame.classList.add('game-shift-in');
         for (const key of Object.keys(games)) {
           $(`switch-${key}`).setAttribute('aria-pressed', String(key === id));
         }
-        if (!dialog.open) dialog.showModal();
+        if (!dialog.open) restore();
       } catch (error) {
         if (request === generation) status.textContent = error.message;
       }
@@ -46,10 +59,27 @@ export function setupGames($, { claimBeer, translate }) {
     $(`game-${id}`).addEventListener('click', open);
     $(`switch-${id}`).addEventListener('click', open);
   }
+  $('game-minimize').addEventListener('click', () => {
+    minimized = true;
+    $('game-restore').hidden = false;
+    dialog.close();
+  });
+  $('game-restore').addEventListener('click', restore);
+  $('game-maximize').addEventListener('click', () => {
+    const expanded = dialog.classList.toggle('game-maximized');
+    $('game-maximize').setAttribute('aria-pressed', String(expanded));
+    $('game-maximize').setAttribute('aria-label', expanded ? 'Restore game size' : 'Maximize game');
+  });
   $('game-close').addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => {
+    if (minimized || dialog.open) return;
     generation++;
     activeGame = null;
+    clearTimeout(loadingTimer);
+    $('game-loading').hidden = true;
+    dialog.classList.remove('game-maximized');
+    $('game-maximize').setAttribute('aria-pressed', 'false');
+    $('game-maximize').setAttribute('aria-label', 'Maximize game');
     frame.removeAttribute('src');
     $('game-dialog-status').textContent = '';
     for (const key of Object.keys(games)) $(`switch-${key}`).setAttribute('aria-pressed', 'false');

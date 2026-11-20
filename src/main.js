@@ -283,7 +283,7 @@ function setTheme(theme) {
   });
 }
 const migratedTheme = { dark: 'frost', blue: 'frost', green: 'aurora', bch: 'aurora', 'bch-sunrise': 'aurora' }[savedTheme] || savedTheme;
-setTheme(['frost', 'aurora'].includes(migratedTheme) ? migratedTheme : 'aurora');
+setTheme(['miami', 'frost', 'aurora'].includes(migratedTheme) ? migratedTheme : 'miami');
 
 for (const name of ['theme', 'language']) {
   const toggle = $(`${name}-toggle`);
@@ -322,6 +322,49 @@ for (const name of ['theme', 'language']) {
     }
   });
 }
+
+const gamesMenu = $('games-menu');
+const gamesToggle = $('games-toggle');
+function closeGamesMenu() {
+  gamesMenu.hidden = true;
+  gamesToggle.setAttribute('aria-expanded', 'false');
+}
+gamesToggle.addEventListener('click', () => {
+  const opening = gamesMenu.hidden;
+  document.querySelectorAll('.tool-dropdown').forEach((menu) => { menu.hidden = true; });
+  document.querySelectorAll('.tool-menu > button').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+  gamesMenu.hidden = !opening;
+  gamesToggle.setAttribute('aria-expanded', String(opening));
+});
+gamesMenu.addEventListener('click', closeGamesMenu);
+document.addEventListener('click', (event) => {
+  if (!gamesToggle.parentElement.contains(event.target)) closeGamesMenu();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !gamesMenu.hidden) {
+    closeGamesMenu();
+    gamesToggle.focus();
+  }
+});
+
+for (const button of document.querySelectorAll('.panel-maximize')) {
+  const panel = button.closest('.panel');
+  const label = button.getAttribute('aria-label');
+  button.addEventListener('click', () => {
+    const expanded = panel.classList.toggle('panel-maximized');
+    button.setAttribute('aria-pressed', String(expanded));
+    button.setAttribute('aria-label', expanded ? translate('Restore panel size') : label);
+  });
+}
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  document.querySelectorAll('.panel-maximized').forEach((panel) => {
+    panel.classList.remove('panel-maximized');
+    const button = panel.querySelector('.panel-maximize');
+    button.setAttribute('aria-pressed', 'false');
+    button.setAttribute('aria-label', translate('Maximize panel'));
+  });
+});
 
 function setConnection(connected) {
   pairingReminder.cancel();
@@ -461,7 +504,7 @@ async function showPairingUri(uri) {
   await QRCode.toCanvas($('qr'), uri, {
     width: 190,
     margin: 0,
-    errorCorrectionLevel: 'M',
+    errorCorrectionLevel: 'H',
     color: { dark: '#07111b', light: '#ffffff' },
   });
   if (!walletReady && walletPairingUri === uri) pairingReminder.start();
@@ -739,7 +782,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
 async function fetchBchUsd() {
   try {
     const response = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin-cash&vs_currencies=usd',
+      '/api/market/bch',
     );
 
     if (!response.ok) {
@@ -1898,7 +1941,7 @@ $('funding-connect').addEventListener('click', () => {
 
 
 const notificationsDialog = $('notifications-dialog');
-for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notifications-dialog', 'game-dialog']) {
+for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notifications-dialog', 'game-dialog', 'donate-dialog']) {
   const dialog = $(id);
   dialog.addEventListener('click', (event) => {
     if (event.target !== dialog) return;
@@ -1907,6 +1950,39 @@ for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog', 'notific
         event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
   });
 }
+$('donate-open').addEventListener('click', async () => {
+  const dialog = $('donate-dialog');
+  if (!dialog.open) dialog.showModal();
+  $('donate-details').hidden = true;
+  $('donate-status').textContent = translate('Loading donation address…');
+  try {
+    const response = await fetch('/api/donation', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+    if (!response.ok) throw new Error(`Donation service returned HTTP ${response.status}`);
+    const { address } = await response.json();
+    if (!address) {
+      $('donate-status').textContent = translate('Donations are not configured.');
+      return;
+    }
+    await loadWalletDependencies();
+    await QRCode.toCanvas($('donate-qr'), address, { width: 190, margin: 2 });
+    $('donate-address').textContent = address;
+    $('donate-details').hidden = false;
+    $('donate-status').textContent = '';
+  } catch (error) {
+    logger.warn('Donation information unavailable:', error);
+    $('donate-status').textContent = translate('Donation information unavailable.');
+  }
+});
+$('donate-close').addEventListener('click', () => $('donate-dialog').close());
+$('donate-copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('donate-address').textContent);
+    $('donate-status').textContent = translate('Copied');
+  } catch (error) {
+    logger.warn('Could not copy donation address:', error);
+    $('donate-status').textContent = translate('Could not copy address.');
+  }
+});
 function markNotificationsRead() {
   $('notification-indicator').hidden = true;
 }
@@ -2108,6 +2184,35 @@ $('top-receive').addEventListener('click', () => {
   setTransferTab('receive');
   $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
+const PARYON_USD_CATEGORY = '2469acc5afa4b10cb5b5c04afb89c3a3ffd61c5da9c01e26d00951cae2a02544';
+let receiveLogoGeneration = 0;
+function updateReceiveTokenLogo() {
+  const generation = ++receiveLogoGeneration;
+  const category = $('receive-category').value.trim().toLowerCase();
+  const target = $('receive-token-logo');
+  target.textContent = category === PARYON_USD_CATEGORY && mainnet ? 'PUSD' : '◆';
+  target.title = '';
+  if (!mainnet || !/^[0-9a-f]{64}$/.test(category)) return;
+  target.title = translate('Loading token logo…');
+  loadTokenLogo(category).then((logo) => {
+    if (generation !== receiveLogoGeneration) return;
+    logo.alt = '';
+    target.replaceChildren(logo);
+    target.title = category === PARYON_USD_CATEGORY ? 'ParyonUSD (PUSD)' : translate('Token logo');
+  }).catch((error) => {
+    logger.warn(`Token logo unavailable for ${category}:`, error);
+    if (generation === receiveLogoGeneration) target.title = translate('Token logo unavailable.');
+  });
+}
+if (mainnet && !$('receive-category').value.trim()) $('receive-category').value = PARYON_USD_CATEGORY;
+updateReceiveTokenLogo();
+for (const field of ['address', 'category']) {
+  $(`edit-receive-${field}`).addEventListener('click', () => {
+    const input = $(`receive-${field}`);
+    input.readOnly = false;
+    input.focus();
+  });
+}
 $('generate-payment').addEventListener('click', async () => {
   const generation = ++paymentGeneration;
   try {
@@ -2310,6 +2415,7 @@ for (const id of ['receive-address', 'receive-category', 'receive-amount']) {
       walletReceiveAddress = null;
       $('copy-receive-address').disabled = !$(id).value.trim();
     }
+    if (id === 'receive-category') updateReceiveTokenLogo();
   });
 }
 
