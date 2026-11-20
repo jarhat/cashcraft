@@ -199,14 +199,15 @@ Browser wallet creation requires a password and confirmation of the recovery
 phrase backup. The wallet scans receive and change addresses, rescans after
 registration, and refreshes periodically while connected.
 Players with at least 1 MINA on their registered reward address equip a regular
-pixel pickaxe in the lower-right corner. It has a wooden stem and a curved
-metal head, swings while mining, and reduces breakable block mining time to one
+pixel pickaxe in the lower-right corner. It has a wooden stem and a turquoise
+head, swings while mining, and reduces breakable block mining time to one
 quarter. The pickaxe disappears when the wallet disconnects or a balance scan
 no longer qualifies.
 
 The loading screen shows available download progress and fades after the first
-frame is rendered. Its background is served by the frontend as
-`/craft-loading.webp`; deploy the updated frontend alongside the rebuilt client.
+frame is rendered. Its background and mining-button icon are served by the
+frontend as `/craft-loading.webp` and `/pickaxe.svg`; deploy the updated
+frontend alongside the rebuilt client.
 Graphics and runtime errors are reported separately from the server connection, which can
 remain connected even if rendering fails. Check the browser console for the
 underlying error; a lost WebGL context requires reloading the game. After

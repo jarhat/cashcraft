@@ -6,6 +6,15 @@ import { runInNewContext } from 'node:vm';
 const shell = await readFile(new URL('../NetCraft/src/shell.html', import.meta.url), 'utf8');
 const script = shell.split("<script type='text/javascript'>")[1].split('</script>')[0];
 
+test('mining button and browser favicon use the pickaxe artwork', async () => {
+  const index = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const artwork = await readFile(new URL('../public/pickaxe.svg', import.meta.url), 'utf8');
+  assert.match(shell, /id="mobile-mine"[^>]*>\s*<img src="\/pickaxe\.svg" alt="" aria-hidden="true">/);
+  assert.match(index, /rel="icon" href="\/pickaxe\.svg"/);
+  assert.match(index, /rel="alternate icon" href="\/pickaxe-192\.png"/);
+  assert.match(artwork, /viewBox="0 0 16 16"/);
+});
+
 test('NetCraft initializes socket settings, touch controls and loading state before errors', () => {
   const elements = new Map();
   const $ = (id) => {

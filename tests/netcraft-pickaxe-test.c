@@ -1,10 +1,21 @@
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include "../NetCraft/src/pickaxe.h"
 
 static bool near(float a, float b) {
     return fabsf(a - b) < .01f;
+}
+
+static const float *pixel_at(float *vertices, int count, int x, int y) {
+    for (int i = 0; i < count; i += 6) {
+        float *vertex = vertices + i * PICKAXE_VERTEX_COMPONENTS;
+        if (near(vertex[0], x / 16.0f) && near(vertex[1], (15 - y) / 16.0f)) {
+            return vertex;
+        }
+    }
+    return NULL;
 }
 
 int main(void) {
@@ -26,6 +37,14 @@ int main(void) {
         }
     }
     assert(different_color);
+    const float *head = pixel_at(standard, count, 6, 2);
+    const float *blade = pixel_at(standard, count, 3, 10);
+    const float *handle = pixel_at(standard, count, 13, 12);
+    assert(head && blade && handle);
+    assert(head[3] > head[2] && head[4] > head[2]);
+    assert(blade[3] > blade[2] && blade[4] > blade[2]);
+    assert(handle[2] > handle[3] && handle[3] > handle[4]);
+    assert(!pixel_at(standard, count, 9, 10));
     for (int i = 0; i < count; i += 3) {
         int a = i * PICKAXE_VERTEX_COMPONENTS;
         int b = a + PICKAXE_VERTEX_COMPONENTS;
