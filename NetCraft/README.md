@@ -192,11 +192,16 @@ Disconnecting a wallet does not close the game; its reward address is cleared
 and can be connected again while playing.
 Players can start NetCraft without a wallet, but only mining while a registered
 token-aware wallet is connected earns rewards; earlier mining is not paid
-retroactively. On the first mined block, a gemstone appears for WizardConnect
-players or players without a wallet. Its wallet button opens the setup wizard.
+retroactively. On the first mined block without a wallet, a brief reminder
+appears in wallet connection details. New rewards and notifications make the
+game's wallet button blink green until the wallet is opened.
 Browser wallet creation requires a password and confirmation of the recovery
 phrase backup. The wallet scans receive and change addresses, rescans after
 registration, and refreshes periodically while connected.
+Players with at least 2 MINA in their scanned wallet automatically equip a
+green pixel pickaxe that halves block mining time. It is removed when the
+wallet disconnects or a subsequent balance scan no longer qualifies. The
+pickaxe swings toward the targeted block while mining.
 
 The loading screen shows available download progress and fades after the first
 frame is rendered. Its background is served by the frontend as
@@ -323,7 +328,8 @@ or malicious site scripts can spend its funds.
 On touch devices, drag from anywhere on the joystick to move in any direction;
 the stick centers on the starting touch and returns when released. Drag the game view
 to look, and use the on-screen buttons to jump, mine, build, and cycle blocks in
-either direction. Press T or Enter to use the game console for chat; use
+either direction. The larger mining button is at the lower right, next to the
+build button. Press T or Enter to use the game console for chat; use
 `/nick NAME` to set your in-game name. New joins appear in chat. The Sound button
 controls block and footstep sounds and the original looping tune after a user
 gesture; the game panel also has a fullscreen button. The `?game=cashcraft` URL
@@ -349,9 +355,9 @@ Do not manually resend a signed pending transaction; it is retried unchanged.
 Touch devices start with a three-chunk viewing radius and
 desktop browsers with four to limit rendering cost;
 use `/view <radius>` to adjust it. The right-hand block selector shows the
-current block enlarged followed by the next available blocks, with available
-mined counts. Building consumes one matching block; zero-count blocks cannot
-be placed. Inventory resets when the connection is lost or the page reloads.
+current block enlarged followed by the next available mined blocks and their
+counts. Building consumes one matching block; blocks disappear from the selector
+when their count reaches zero. Inventory resets when the connection is lost or the page reloads.
 `/noclip` is
 disabled by the online client; the server does not yet enforce movement
 collision against modified clients. Closing the wallet or notifications

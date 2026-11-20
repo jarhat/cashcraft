@@ -450,6 +450,7 @@
         <span id="dot" class="dot"></span>
         <button id="connection-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
       </div>
+      <p id="game-wallet-notice" class="notification-message" hidden>Connect or create a wallet before mining to receive MINA rewards.</p>
 
       <p id="status" class="status" role="status">Not connected</p>
       <label for="connection-language">Language</label>
@@ -588,10 +589,6 @@
     <p id="game-dialog-status" class="fine" role="status"></p>
     <div id="game-stage" class="game-stage">
       <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen; gamepad *" allowfullscreen></iframe>
-      <div id="game-wallet-prompt" class="game-wallet-prompt" role="status" hidden>
-        <span id="game-wallet-prompt-message" class="mina-label">Connect or create a wallet before mining to receive MINA rewards.</span>
-        <button id="game-wallet-prompt-connect" type="button">Connect or create wallet</button>
-      </div>
       <nav id="game-wallet-actions" class="game-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
       <div id="game-controls-right" class="game-controls game-controls-right" aria-label="CashCraft controls">
         <button id="game-invite" type="button" aria-label="Invite to CashCraft" title="Invite to CashCraft" aria-haspopup="dialog" aria-controls="invite-dialog">
@@ -707,18 +704,6 @@
     </div>
   </dialog>
 
-  <dialog id="mina-welcome-dialog" class="notifications-dialog mina-welcome-dialog" aria-label="MINA gemstone">
-    <div class="mina-welcome-art" aria-hidden="true">
-      <div class="mina-block-art">
-        <img src="/mina-block.png" alt="">
-        <svg class="mina-pickaxe" viewBox="0 0 64 64"><path d="M47 13 16 53" stroke="#92582e" stroke-width="7" stroke-linecap="round"/><path d="M18 20C30 5 46 3 57 16 43 12 33 17 26 27Z" fill="#b8d6cc" stroke="#527b70" stroke-width="3" stroke-linejoin="round"/></svg>
-      </div>
-      <svg class="mina-welcome-gem" viewBox="0 0 100 100"><path d="M10 30 26 12h48l16 18-40 58z" fill="#43ed94" stroke="#baffd8" stroke-width="3"/><path d="M10 30h80M26 12l8 18 16 58 16-58 8-18M34 30l16-18 16 18" fill="none" stroke="#168b62" stroke-width="2"/></svg>
-      <span class="mina-sparkle mina-sparkle-one">✦</span><span class="mina-sparkle mina-sparkle-two">✧</span><span class="mina-sparkle mina-sparkle-three">✦</span>
-    </div>
-    <button id="mina-welcome-setup" class="button primary mina-welcome-action" type="button" aria-label="Set up or connect a wallet" title="Set up or connect a wallet" hidden>↗</button>
-    <button id="mina-welcome-close" class="mina-welcome-close" type="button" aria-label="Close" title="Close">×</button>
-  </dialog>
   <dialog id="notifications-dialog" class="notifications-dialog" aria-labelledby="notifications-title">
     <div class="notifications-heading">
       <h2 id="notifications-title">Wallet &amp; notifications</h2>

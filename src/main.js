@@ -188,6 +188,7 @@ const pairingReminder = setupPairingReminder({
 let rewardCategory = null;
 let rewardCategoryPromise = null;
 let receiptWallet = null;
+let minaPickaxe = false;
 
 async function loadRewardCategory() {
   if (!rewardCategoryPromise) {
@@ -453,7 +454,16 @@ for (const name of ['theme', 'language', 'games']) {
 
 let updateGameRewardAddress = () => {};
 function setConnection(connected) {
-  if (!connected) registeredRewardAddress = null;
+  if (!connected) {
+    registeredRewardAddress = null;
+    minaPickaxe = false;
+  }
+  if (connected && !$('game-wallet-notice').hidden) {
+    $('game-wallet-notice').hidden = true;
+    if ($('shared-link-preview').classList.contains('hidden')) {
+      $('notification-indicator').hidden = true;
+    }
+  }
   pairingReminder.cancel();
   if (!connected) $('connection-loading').hidden = true;
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
@@ -491,6 +501,8 @@ function setConnection(connected) {
 }
 
 function clearWalletDisplay() {
+  minaPickaxe = false;
+  updateGameRewardAddress(null);
   balanceSatoshis = null;
   emptyBalanceNotified = false;
   portfolioVersion++;
@@ -1393,8 +1405,8 @@ async function refreshBalances({ quiet = false } = {}) {
 
   if (refreshPromise) return refreshPromise;
 
+  const scanManager = manager;
   const scanPromise = (async () => {
-    const scanManager = manager;
     if (!quiet) {
       $('status').textContent = 'Scanning wallet addresses…';
     }
@@ -1419,9 +1431,15 @@ async function refreshBalances({ quiet = false } = {}) {
           ? sum + BigInt(utxo.token.amount || 0) : sum, 0n).toString();
         $('mina-balance').textContent = mina;
         $('notification-mina').textContent = mina;
+        minaPickaxe = BigInt(mina) >= 2n;
+        updateGameRewardAddress(registeredRewardAddress);
         notifyTokenReceipts(utxos);
       }
     } catch (error) {
+      if (walletReady && manager === scanManager) {
+        minaPickaxe = false;
+        updateGameRewardAddress(registeredRewardAddress);
+      }
       receiptError = error;
     }
     if (!walletReady || manager !== scanManager) {
@@ -1455,6 +1473,12 @@ async function refreshBalances({ quiet = false } = {}) {
 
   try {
     return await scanPromise;
+  } catch (error) {
+    if (walletReady && manager === scanManager) {
+      minaPickaxe = false;
+      updateGameRewardAddress(registeredRewardAddress);
+    }
+    throw error;
   } finally {
     if (refreshPromise === scanPromise) {
       refreshPromise = null;
@@ -1979,38 +2003,10 @@ $('refresh').addEventListener('click', () => {
 });
 
 function openConnectionDialog() {
+  if (!walletReady && !$('game-wallet-notice').hidden &&
+      $('shared-link-preview').classList.contains('hidden')) markNotificationsRead();
   if (!$('connection-dialog').open) $('connection-dialog').showModal();
 }
-
-function showMinaWelcome() {
-  $('mina-welcome-setup').hidden = walletReady;
-  const dialog = $('mina-welcome-dialog');
-  if (!dialog.open) {
-    const stage = $('game-stage');
-    if (document.fullscreenElement === stage) {
-      const parent = dialog.parentNode;
-      const next = dialog.nextSibling;
-      stage.appendChild(dialog);
-      dialog.addEventListener('close', () => parent.insertBefore(dialog, next), { once: true });
-    }
-    dialog.showModal();
-  }
-}
-
-$('mina-welcome-close').addEventListener('click', () => $('mina-welcome-dialog').close());
-$('mina-welcome-setup').addEventListener('click', () => {
-  $('mina-welcome-dialog').close();
-  const dialog = $('connection-dialog');
-  const stage = $('game-stage');
-  if (document.fullscreenElement === stage && !dialog.open) {
-    const parent = dialog.parentNode;
-    const next = dialog.nextSibling;
-    stage.appendChild(dialog);
-    dialog.addEventListener('close', () => parent.insertBefore(dialog, next), { once: true });
-  }
-  openTutorial();
-  $('browser-wallet-section').open = true;
-});
 
 async function refreshAfterRewardRegistration(wallet) {
   try {
@@ -2083,6 +2079,7 @@ updateGameRewardAddress = setupGames($, {
   translate,
   getRewardAddress: () => walletReady ? registeredRewardAddress : null,
   isWalletConnected: () => walletReady,
+  hasMinaPickaxe: () => walletReady && minaPickaxe,
 });
 const donationDependencies = async () => {
   await loadWalletDependencies();
@@ -2167,12 +2164,10 @@ $('notifications-toggle').addEventListener('click', () => {
 });
 $('notifications-close').addEventListener('click', () => notificationsDialog.close());
 notificationsDialog.addEventListener('close', () => {
-  markNotificationsRead();
   $('notifications-toggle').focus({ preventScroll: true });
 });
 
-let firstBlockMined = false;
-$('game-frame').addEventListener('load', () => { firstBlockMined = false; });
+let walletMiningReminderShown = false;
 window.addEventListener('message', (event) => {
   if (event.source !== $('game-frame').contentWindow) return;
   if ($('game-dialog').open && event.data?.type === 'netcraft-user-gesture' &&
@@ -2180,9 +2175,10 @@ window.addEventListener('message', (event) => {
     unlockNotificationAudio();
   }
   if ($('game-dialog').open && $('game-frame').src.includes('/games/netcraft/') &&
-      event.data?.type === 'netcraft-block-mined' && !firstBlockMined) {
-    firstBlockMined = true;
-    if (!walletReady || !manager?.isBrowserWallet) showMinaWelcome();
+      event.data?.type === 'netcraft-block-mined' && !walletReady && !walletMiningReminderShown) {
+    walletMiningReminderShown = true;
+    $('game-wallet-notice').hidden = false;
+    $('notification-indicator').hidden = false;
   }
   if ($('game-dialog').open && $('game-frame').src.includes('/games/netcraft/') &&
       event.data?.type === 'netcraft-mina-reward' &&
@@ -2819,13 +2815,12 @@ document.querySelectorAll('.wallet-icon').forEach((image) => {
 });
 
 function markReceiptNotificationsRead() {
-  if (!walletReady || receiptWallet !== receiptStorageKey()) return;
+  if (!walletReady) return;
   const state = readReceiptState();
   state.unread = false;
   localStorage.setItem(receiptStorageKey(), JSON.stringify(state));
 }
 $('notifications-toggle').addEventListener('click', markReceiptNotificationsRead);
-notificationsDialog.addEventListener('close', markReceiptNotificationsRead);
 
 setInterval(() => {
   if (!walletReady) return;

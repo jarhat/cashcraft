@@ -180,6 +180,30 @@ test('shows a pending mining payout immediately', () => {
   assert.equal(h.queuedSounds, 2);
 });
 
+test('reading a notification stays clear on rescan and a new reward alerts again', async () => {
+  const h = receiptHarness();
+  await h.api.loadRewardCategory();
+  const first = { txid: 'first', vout: 0, token: { category: h.category, amount: 1n } };
+  h.api.notifyTokenReceipts([first]);
+  const key = 'ctf-token-receipts:mainnet:wallet';
+  const start = source.indexOf('function markReceiptNotificationsRead()');
+  const end = source.indexOf("\n$('notifications-toggle')", start);
+  const context = {
+    walletReady: true, receiptStorageKey: () => key,
+    readReceiptState: () => JSON.parse(h.stored.get(key)),
+    localStorage: { setItem: (id, value) => h.stored.set(id, value) },
+  };
+  runInNewContext(source.slice(start, end), context);
+  context.markReceiptNotificationsRead();
+  h.elements.get('notification-indicator').hidden = true;
+  h.api.notifyTokenReceipts([first]);
+  assert.equal(h.elements.get('notification-indicator').hidden, true);
+  assert.equal(JSON.parse(h.stored.get(key)).unread, false);
+  h.api.notifyTokenReceipts([first, { ...first, txid: 'second' }]);
+  assert.equal(h.elements.get('notification-indicator').hidden, false);
+  assert.equal(JSON.parse(h.stored.get(key)).unread, true);
+});
+
 test('reports an unsuccessful payout while it remains pending for retry', () => {
   const h = receiptHarness();
   h.api.queueMinedRewardNotification('wallet');
@@ -267,6 +291,7 @@ test('refresh renders the new balance before announcing the reward', async () =>
     renderBalances: () => calls.push('balance'),
     loadRewardCategory: async () => {},
     notifyTokenReceipts: () => calls.push('notification'),
+    updateGameRewardAddress() {}, registeredRewardAddress: null,
     $: (id) => elements.get(id),
   };
   runInNewContext(source.slice(start, end), context);
@@ -275,7 +300,7 @@ test('refresh renders the new balance before announcing the reward', async () =>
   assert.equal(context.balanceSatoshis, 1000n);
 });
 
-test('celebration opens notifications even when autoplay is blocked', async () => {
+test('a reward does not open a modal when autoplay is blocked', async () => {
   const calls = [];
   let canPlay = false;
   class AudioContext {
@@ -304,7 +329,7 @@ test('celebration opens notifications even when autoplay is blocked', async () =
   };
   runInNewContext(source.slice(start, end), context);
   context.showMinaCelebration();
-  assert.equal(elements.get('notifications-dialog').open, true);
+  assert.equal(elements.get('notifications-dialog').open, false);
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(calls.filter((call) => call === 'tone').length, 0);
   canPlay = true;

@@ -4,7 +4,7 @@ const games = {
 };
 const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 
-export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, autoOpen = false, autoOpenGame = 'netcraft' }) {
+export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, hasMinaPickaxe = () => false, autoOpen = false, autoOpenGame = 'netcraft' }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
@@ -25,11 +25,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     $('game-notifications').setAttribute('aria-label', translate(connected ? 'Wallet and notifications' : 'Connect wallet'));
     $('game-notifications').setAttribute('title', translate(connected ? 'Wallet and notifications' : 'Connect wallet'));
     $('game-notifications').setAttribute('aria-controls', connected ? 'notifications-dialog' : 'connection-dialog');
-    $('game-wallet-prompt').hidden = activeGame !== 'netcraft' || Boolean(address);
-    $('game-wallet-prompt-message').textContent = translate(connected
-      ? 'Wallet connected; waiting for reward address registration.'
-      : 'Connect or create a wallet before mining to receive MINA rewards.');
-    $('game-wallet-prompt-connect').hidden = connected;
     $('game-ranking').hidden = activeGame !== 'netcraft';
     if (activeGame) {
       const title = games[activeGame].title;
@@ -39,10 +34,10 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       $('game-minimized-fullscreen').setAttribute('title', `Resume ${title} in fullscreen`);
     }
     if (activeGame === 'netcraft') {
-      frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '' }, '*');
+      frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '', pickaxe: connected && hasMinaPickaxe() }, '*');
     }
   };
-  const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'mina-welcome-dialog', 'ranking-dialog'];
+  const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'ranking-dialog'];
   const canFocusGame = () => dialog.open && !dialog.hidden && activeGame &&
     !overlayDialogs.some((id) => $(id).open);
   frame.addEventListener('load', () => {
@@ -158,10 +153,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       overlay.addEventListener('close', () => parent.insertBefore(overlay, next), { once: true });
     }
     $(connected ? 'notifications-toggle' : 'connection-open').click();
-  });
-  $('game-wallet-prompt-connect').addEventListener('click', () => {
-    $('browser-wallet-section').open = true;
-    $('game-notifications').click();
   });
   $('game-invite').addEventListener('click', () => {
     const overlay = $('invite-dialog');

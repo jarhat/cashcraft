@@ -38,6 +38,20 @@ static void check_rate(double step) {
 int main(void) {
     check_rate(1.0 / 20);
     check_rate(1.0 / 120);
+    now = 5;
+    target = 0;
+    mining_start();
+    mining_tick();
+    assert(!is_mining());
+    target = 1;
+    mining_tick();
+    assert(is_mining());
+    target = 0;
+    mining_tick();
+    assert(!is_mining());
+    mining_stop();
+    assert(!is_mining());
+    target = 1;
     now = 10;
     mined = 0;
     mining_start();
@@ -60,6 +74,31 @@ int main(void) {
     now = 100;
     mining_tick();
     assert(mined == 2);
+    mining_stop();
+
+    target = 1;
+    target_x_value = 0;
+    now = 200;
+    mining_set_pickaxe(1);
+    mining_start();
+    now = 200.99;
+    mining_tick();
+    assert(mined == 2);
+    now = 201;
+    mining_tick();
+    assert(mined == 3);
+    mining_set_pickaxe(0);
+    now = 202.01;
+    mining_tick();
+    assert(mined == 3);
+    now = 203.01;
+    mining_tick();
+    assert(mined == 4);
+    target = 2;
+    mining_set_pickaxe(1);
+    now = 300;
+    mining_tick();
+    assert(mined == 4);
     mining_stop();
     return 0;
 }

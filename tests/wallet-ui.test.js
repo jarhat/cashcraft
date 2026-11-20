@@ -10,6 +10,42 @@ import { normalizeUtxo, utxoKey } from '../src/utils.js';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
+test('MINA pickaxe follows the scanned fungible balance and clears on scan failure', async () => {
+  const start = source.indexOf('async function refreshBalances(');
+  const end = source.indexOf('\nfunction validateRecipient', start);
+  const elements = new Map();
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, { textContent: '' });
+    return elements.get(id);
+  };
+  const updates = [];
+  const context = {
+    $, walletReady: true, manager: {}, refreshPromise: null,
+    registeredRewardAddress: 'address', minaPickaxe: false, rewardCategory: 'mina',
+    deriveScanAddresses: () => [],
+    scanWallet: async () => ({ addresses: [], utxos: context.nextUtxos }),
+    renderBalances() {}, loadRewardCategory: async () => {}, notifyTokenReceipts() {},
+    updateGameRewardAddress: () => updates.push(context.minaPickaxe),
+  };
+  runInNewContext(source.slice(start, end), context);
+  const token = (category, amount) => ({ satoshis: 1, token: { category, amount } });
+  for (const [utxos, expected] of [
+    [[token('mina', 1), token('other', 100)], false],
+    [[token('MINA', 1), token('mina', 1)], true],
+    [[token('mina', 0)], false],
+  ]) {
+    context.nextUtxos = utxos;
+    await context.refreshBalances({ quiet: true });
+    assert.equal(context.minaPickaxe, expected);
+    assert.equal(updates.at(-1), expected);
+  }
+  context.minaPickaxe = true;
+  context.scanWallet = async () => { throw new Error('scan failed'); };
+  await assert.rejects(context.refreshBalances({ quiet: true }), /scan failed/);
+  assert.equal(context.minaPickaxe, false);
+  assert.equal(updates.at(-1), false);
+});
+
 test('payment defaults to PUSD only on mainnet and preserves an existing category', async () => {
   const start = source.indexOf('const mainnet =');
   const end = source.indexOf('\nsetupMarketTicker', start);
@@ -204,7 +240,7 @@ test('notification can be dismissed outside and reopened with its request intact
   assert.equal(dialog.open, true);
   dialog.listeners.click({ target: dialog, clientX: 1, clientY: 50 });
   assert.equal(dialog.open, false);
-  assert.equal(indicator.hidden, true);
+  assert.equal(indicator.hidden, false);
   for (const id of ['connection-dialog', 'wiki-dialog', 'funding-dialog']) {
     const other = element(id);
     other.listeners.close = () => {};
@@ -962,8 +998,8 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   const nodes = new Map();
   const $ = (id) => {
     if (!nodes.has(id)) nodes.set(id, {
-      hidden: id === 'wizard-dialog',
-      classList: { toggle() {} },
+      hidden: id === 'wizard-dialog' || id === 'game-wallet-notice',
+      classList: { toggle() {}, contains() { return true; } },
       getAttribute: () => 'true',
     });
 
@@ -989,6 +1025,11 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   assert.equal($('network-wallet-status').textContent, 'Wallet connected');
   assert.equal($('wizard-guide').hidden, false);
   assert.equal($('advanced-settings').hidden, false);
+  $('game-wallet-notice').hidden = false;
+  $('notification-indicator').hidden = false;
+  context.setConnection(true);
+  assert.equal($('game-wallet-notice').hidden, true);
+  assert.equal($('notification-indicator').hidden, true);
   $('wizard-dialog').hidden = false;
   $('wizard-next').disabled = true;
   context.setConnection(true);
@@ -1010,42 +1051,36 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   assert.equal(context.tutorialUpdated, true);
 });
 
-test('only the first mined block opens the gemstone for WizardConnect or no wallet', () => {
+test('the first block mined without a wallet sets a reminder without opening a modal', () => {
   let handler;
-  let load;
-  let shown = 0;
   const gameWindow = {};
   const frame = {
     src: '/games/netcraft/craftw.html',
     contentWindow: gameWindow,
-    addEventListener(_type, fn) { load = fn; },
   };
+  const notice = { hidden: true };
+  const indicator = { hidden: true };
   const context = {
-    $: (id) => id === 'game-frame' ? frame : { open: true },
+    $: (id) => ({ 'game-frame': frame, 'game-wallet-notice': notice,
+      'notification-indicator': indicator, 'game-dialog': { open: true } })[id],
     window: { addEventListener(_type, fn) { handler = fn; } },
     walletReady: false, manager: null,
-    showMinaWelcome() { shown++; },
   };
-  const start = source.indexOf('let firstBlockMined =');
+  const start = source.indexOf('let walletMiningReminderShown =');
   const end = source.indexOf('\nlet notificationAudio', start);
   runInNewContext(source.slice(start, end), context);
   const mine = (source = gameWindow) => handler({ source, data: { type: 'netcraft-block-mined' } });
   mine({});
-  assert.equal(shown, 0);
+  assert.equal(indicator.hidden, true);
   mine();
+  assert.equal(notice.hidden, false);
+  assert.equal(indicator.hidden, false);
+  indicator.hidden = true;
   mine();
-  assert.equal(shown, 1);
-  load();
+  assert.equal(indicator.hidden, true);
   context.walletReady = true;
-  context.manager = { isBrowserWallet: true };
   mine();
-  assert.equal(shown, 1);
-  context.manager = {};
-  mine();
-  assert.equal(shown, 1);
-  load();
-  mine();
-  assert.equal(shown, 2);
+  assert.equal(indicator.hidden, true);
 });
 
 test('reward registration resends the address and rescans after an in-flight browser wallet scan', async () => {

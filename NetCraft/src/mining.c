@@ -4,8 +4,12 @@
 #include <GLFW/glfw3.h>
 #include "mining.h"
 #include "item.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 static double mining_started = 0;
+static bool has_pickaxe = false;
 static bool holding_mine_button = false;
 static int building_progress = 0;
 static bool holding_build_button = false;
@@ -24,6 +28,18 @@ int target_w = 0;
 extern void on_mine(void);
 extern void on_build(void);
 extern int get_targeted_block(int *x, int *y, int *z, int *face);
+
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+#endif
+void mining_set_pickaxe(int enabled) {
+    bool next = enabled != 0;
+    if (next != has_pickaxe) {
+        has_pickaxe = next;
+        if (holding_mine_button) mining_started = glfwGetTime();
+        mining_stage = 0;
+    }
+}
 
 bool is_mining() {
     return holding_mine_button && target_w != 0;
@@ -56,7 +72,7 @@ void mining_tick() {
             return;
         }
 
-        double hardness = is_hardness(target_w);
+        double hardness = is_hardness(target_w) * (has_pickaxe ? 0.5 : 1.0);
         double elapsed = glfwGetTime() - mining_started;
 
         // Block break indicator

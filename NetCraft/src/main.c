@@ -2397,18 +2397,33 @@ static void render_crosshairs(Attrib *attrib) {
 }
 
 static GLuint item_buffers[256];
+static int inventory_items[INVENTORY_COUNT_LEN];
+static int inventory_item_count;
+
+static void sync_inventory_items(void) {
+    int selected = inventory_item_count && g->item_index >= 0 &&
+        g->item_index < inventory_item_count ? inventory_items[g->item_index] : 0;
+    inventory_item_count = Inventory_items(&g->inventory, inventory_items);
+    g->item_index = 0;
+    for (int i = 0; i < inventory_item_count; i++) {
+        if (inventory_items[i] == selected) {
+            g->item_index = i;
+            break;
+        }
+    }
+}
 
 static int visible_items(void) {
     float spacing = 42.0f * g->scale;
     int visible = 1 + (int)((g->height - 270.0f * g->scale) / spacing);
     if (visible < 1) visible = 1;
     if (visible > NUM_INVENTORY_VISIBLE) visible = NUM_INVENTORY_VISIBLE;
-    if (visible > hotbar_item_count) visible = hotbar_item_count;
+    if (visible > inventory_item_count) visible = inventory_item_count;
     return visible;
 }
 
 void render_item(Attrib *attrib) {
-    if (hotbar_item_count <= 0) return;
+    if (inventory_item_count <= 0) return;
     glUseProgram(attrib->program);
     glUniform3f(attrib->camera, 0, 0, 5);
     glUniform1i(attrib->sampler, 0);
@@ -2421,7 +2436,7 @@ void render_item(Attrib *attrib) {
     float spacing = 42.0f * g->scale;
     int visible = visible_items();
     for (int i = 0; i < visible; i++) {
-        int w = hotbar_items[(g->item_index + i) % hotbar_item_count];
+        int w = inventory_items[(g->item_index + i) % inventory_item_count];
         if (w <= 0 || w >= 256) continue;
         if (!item_buffers[w]) {
             item_buffers[w] = is_plant(w)
@@ -2472,7 +2487,7 @@ typedef struct {
 static ItemCountBuffer item_count_buffers[NUM_INVENTORY_VISIBLE];
 
 static void render_item_counts(Attrib *attrib) {
-    if (hotbar_item_count <= 0) return;
+    if (inventory_item_count <= 0) return;
     float matrix[16];
     set_matrix_2d(matrix, g->width, g->height);
     glUseProgram(attrib->program);
@@ -2481,7 +2496,7 @@ static void render_item_counts(Attrib *attrib) {
     glUniform1i(attrib->extra1, 0);
     glUniform1f(attrib->extra2, 1.0f);
     for (int i = 0; i < visible_items(); i++) {
-        int w = hotbar_items[(g->item_index + i) % hotbar_item_count];
+        int w = inventory_items[(g->item_index + i) % inventory_item_count];
         uint32_t count = Inventory_getCount(&g->inventory, w);
         ItemCountBuffer *cached = &item_count_buffers[i];
         if (!cached->buffer || cached->count != count || cached->item != w ||
@@ -2950,6 +2965,7 @@ void on_mine() {
         set_block(hx, hy, hz, 0);
         if (g->mode != MODE_ONLINE) {
             Inventory_collect(&g->inventory, hw);
+            sync_inventory_items();
             if (hw == Item_MINA_ORE && g->mina_mined < UINT32_MAX) g->mina_mined++;
         }
 #ifdef __EMSCRIPTEN__
@@ -2983,7 +2999,11 @@ void on_build() {
         }
 
         if (hy > 0 && hy < 256 && !player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
-            int hw = hotbar_items[g->item_index];
+            if (!inventory_item_count) {
+                add_message("Mine a block before building.");
+                return;
+            }
+            int hw = inventory_items[g->item_index];
 
 #ifdef __EMSCRIPTEN__
             Chunk *target = find_chunk(chunked(hx), chunked(hz));
@@ -2994,6 +3014,7 @@ void on_build() {
                 add_message("Mine this block type before building with it.");
                 return;
             }
+            sync_inventory_items();
             if (g->mode == MODE_ONLINE) {
                 pending_placement.active = true;
                 pending_placement.x = hx; pending_placement.y = hy;
@@ -3012,8 +3033,8 @@ void on_middle_click() {
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(false, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    for (int i = 0; i < hotbar_item_count; i++) {
-        if (hotbar_items[i] == hw) {
+    for (int i = 0; i < inventory_item_count; i++) {
+        if (inventory_items[i] == hw) {
             g->item_index = i;
             break;
         }
@@ -3169,19 +3190,19 @@ void on_key(GLFWwindow *window, int key, int scancode, int action, int mods) {
         }
     }
     if (!g->typing) {
-        if (key >= '1' && key <= '9') {
+        if (key >= '1' && key <= '9' && key - '1' < inventory_item_count) {
             g->item_index = key - '1';
         }
-        if (key == '0') {
+        if (key == '0' && inventory_item_count > 9) {
             g->item_index = 9;
         }
-        if (key == CRAFT_KEY_ITEM_NEXT) {
-            g->item_index = (g->item_index + 1) % hotbar_item_count;
+        if (key == CRAFT_KEY_ITEM_NEXT && inventory_item_count) {
+            g->item_index = (g->item_index + 1) % inventory_item_count;
         }
-        if (key == CRAFT_KEY_ITEM_PREV) {
+        if (key == CRAFT_KEY_ITEM_PREV && inventory_item_count) {
             g->item_index--;
             if (g->item_index < 0) {
-                g->item_index = hotbar_item_count - 1;
+                g->item_index = inventory_item_count - 1;
             }
         }
         if (key == CRAFT_KEY_OBSERVE) {
@@ -3245,15 +3266,19 @@ void on_char(GLFWwindow *window, unsigned int u) {
 
 void _on_scroll_blockselect(double ydelta) {
     static double ypos = 0;
+    if (!inventory_item_count) {
+        ypos = 0;
+        return;
+    }
     ypos += ydelta;
     if (ypos < -SCROLL_THRESHOLD) {
-        g->item_index = (g->item_index + 1) % hotbar_item_count;
+        g->item_index = (g->item_index + 1) % inventory_item_count;
         ypos = 0;
     }
     if (ypos > SCROLL_THRESHOLD) {
         g->item_index--;
         if (g->item_index < 0) {
-            g->item_index = hotbar_item_count - 1;
+            g->item_index = inventory_item_count - 1;
         }
         ypos = 0;
     }
@@ -3659,6 +3684,7 @@ void parse_buffer(char *buffer, int len) {
         int mined_item;
         if (line[0] == 'I' && sscanf(line, "I,%d", &mined_item) == 1) {
             Inventory_collect(&g->inventory, mined_item);
+            sync_inventory_items();
             if (mined_item == Item_MINA_ORE && g->mina_mined < UINT32_MAX) g->mina_mined++;
 #ifdef __EMSCRIPTEN__
             EM_ASM({
@@ -3693,7 +3719,10 @@ void parse_buffer(char *buffer, int len) {
             pending_placement.active && pending_placement.x == jx &&
             pending_placement.y == jy && pending_placement.z == jz &&
             pending_placement.item == item && (accepted == 0 || accepted == 1)) {
-            if (!accepted) Inventory_collect(&g->inventory, item);
+            if (!accepted) {
+                Inventory_collect(&g->inventory, item);
+                sync_inventory_items();
+            }
             pending_placement.active = false;
 #ifdef __EMSCRIPTEN__
             if (accepted) EM_ASM(if (Module.playBlockSound) Module.playBlockSound(1););
@@ -3858,6 +3887,7 @@ void reset_model() {
     g->flying = false;
     g->item_index = 0;
     Inventory_reset(&g->inventory);
+    sync_inventory_items();
     pending_placement.active = false;
     g->ortho_zoom = 32;
     memset(g->typing_buffer, 0, sizeof(char) * MAX_TEXT_LENGTH);
@@ -4129,6 +4159,7 @@ void client_connection_failed(void) {
         g->chunks[i].needs_resync = 1;
     }
     Inventory_reset(&g->inventory);
+    sync_inventory_items();
     pending_placement.active = false;
     animals_clear();
     client_stop();
@@ -4315,6 +4346,15 @@ void one_iter() {
     building_tick();
 
     handle_gamepad_input();
+
+#ifdef __EMSCRIPTEN__
+    static int pickaxe_mining = -1;
+    int current_pickaxe_mining = g->initialized && (g->mode != MODE_ONLINE || online_ready) && is_mining();
+    if (current_pickaxe_mining != pickaxe_mining) {
+        pickaxe_mining = current_pickaxe_mining;
+        EM_ASM(Module.setPickaxeMining($0);, pickaxe_mining);
+    }
+#endif
 
     // HANDLE MOVEMENT //
     handle_movement(dt);

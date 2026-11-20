@@ -2354,8 +2354,9 @@ input:not([type="checkbox"]), textarea, select {
   height: 13px;
   border: 2px solid #fff;
   border-radius: 2px;
-  background: #fa244b;
-  box-shadow: 0 0 0 2px #8f1638, 0 0 12px #ff244b;
+  background: #43ed94;
+  box-shadow: 0 0 0 2px #087c45, 0 0 12px #43ed94;
+  animation: wallet-alert-blink 1s ease-in-out infinite;
 }
 .advanced-control, .nft-toggle {
   position: relative;
@@ -2999,19 +3000,6 @@ body::before { content: none; display: none; }
 .balance-extras p, .wallet-notification-summary p { display: flex; justify-content: space-between; gap: 12px; margin: 0; }
 .balance-extras strong { text-align: right; }
 .mina-gem { color: #44de90; }
-.mina-welcome-dialog { width: min(440px, 90vw); text-align: center; overflow: hidden; }
-.mina-welcome-art { position: relative; display: flex; justify-content: center; align-items: center; min-height: 260px; gap: 12px; }
-.mina-block-art { position: relative; flex: 0 0 100px; }
-.mina-block-art img { width: 100px; height: 100px; image-rendering: pixelated; border-radius: 8px; }
-.mina-pickaxe { position: absolute; width: 85px; right: -25px; top: -32px; filter: drop-shadow(0 3px 4px #0009); }
-.mina-welcome-gem { width: min(200px, 48vw); filter: drop-shadow(0 0 22px #43ed94a0); animation: mina-glow 2s ease-in-out infinite alternate; }
-.mina-sparkle { position: absolute; color: #c8ffe4; font-size: 2rem; animation: mina-glow 1.5s ease-in-out infinite alternate; }
-.mina-sparkle-one { top: 18%; left: 44%; }.mina-sparkle-two { top: 19%; right: 4%; animation-delay: .5s; }.mina-sparkle-three { bottom: 17%; right: 17%; animation-delay: 1s; }
-.mina-welcome-action { display: inline-flex; width: auto; min-width: 52px; justify-content: center; font-size: 1.5rem; }
-.mina-welcome-action[hidden] { display: none; }
-.mina-welcome-close { position: absolute; top: 12px; right: 16px; background: none; border: 0; color: inherit; font-size: 1.8rem; cursor: pointer; }
-@keyframes mina-glow { from { opacity: .7; transform: scale(.96); } to { opacity: 1; transform: scale(1.04); } }
-@media (prefers-reduced-motion: reduce) { .mina-welcome-gem, .mina-sparkle { animation: none; } }
 .wallet-notification-summary { display: grid; gap: 8px; margin-bottom: 16px; }
 #mina-receipt-transactions code { display: block; overflow-wrap: anywhere; margin-top: 6px; }
 .topbar > :not(.mesh-landscape):not(.mesh-sun) { position: relative; z-index: 1; }
@@ -3052,9 +3040,6 @@ body::before { content: none; display: none; }
 .game-switcher[hidden], #game-pk2[hidden] { display: none; }
 .game-switcher [aria-pressed="true"] { border-color: var(--ice); color: var(--ice); }
 .game-stage { position: relative; overflow: hidden; border: 1px solid var(--glass-border); border-radius: 12px; background: #080e17; -webkit-touch-callout: none; }
-.game-wallet-prompt { position: absolute; z-index: 2; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; width: min(90%, 520px); padding: 10px 12px; border: 1px solid #43ed94; border-radius: 12px; background: rgba(3, 35, 22, .94); color: #fff; text-align: center; font-size: .85rem; }
-.game-wallet-prompt[hidden] { display: none; }
-.game-wallet-prompt button { min-height: 36px; padding: 6px 12px; border: 1px solid #87ffc1; border-radius: 8px; background: #087c45; color: #fff; cursor: pointer; font: inherit; font-weight: 700; }
 .game-wallet-actions { position: absolute; top: 12px; left: 12px; z-index: 1; }
 .game-wallet-actions .quick-action { min-height: 44px; }
 @media (max-width: 520px) {
@@ -3073,10 +3058,18 @@ body::before { content: none; display: none; }
 .game-dialog.is-fullscreen #game-close, .game-dialog.is-fullscreen .game-share { display: none; }
 .game-share svg { width: 20px; height: 20px; }
 .game-controls button { position: relative; }
-#game-notifications {
-  background: #087c45; border-color: #87ffc1; box-shadow: 0 0 0 2px rgb(67 237 148 / 35%);
+#game-notifications img { filter: grayscale(1); }
+#game-notifications:has(#game-notification-indicator:not([hidden])) { animation: wallet-button-blink 1s ease-in-out infinite; }
+#game-notifications:has(#game-notification-indicator:not([hidden])) img { filter: none; }
+@keyframes wallet-button-blink {
+  0%, 100% { background: rgba(0,0,0,.55); border-color: rgba(255,255,255,.5); box-shadow: none; }
+  50% { background: #087c45; border-color: #87ffc1; box-shadow: 0 0 0 3px #43ed94; }
 }
-#game-notifications:has(#game-notification-indicator:not([hidden])) { box-shadow: 0 0 0 3px #43ed94; }
+@keyframes wallet-alert-blink { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+  #game-notifications:has(#game-notification-indicator:not([hidden])) { animation: none; background: #087c45; border-color: #87ffc1; }
+  .notification-indicator:not([hidden]) { animation: none; }
+}
 .topbar { background: var(--page-base); isolation: isolate; }
 #browser-wallet-section { margin: 14px 0; }
 #browser-wallet-section summary { cursor: pointer; font-weight: 600; }

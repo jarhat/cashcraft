@@ -3,6 +3,7 @@ bool is_mining(void);
 void mining_stop(void);
 void mining_tick(void);
 void mining_start(void);
+void mining_set_pickaxe(int enabled);
 void building_stop(void);
 void building_tick(void);
 void building_start(void);

@@ -13,7 +13,11 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
       listeners: {}, style: {}, value: '', hidden: false,
       addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute(name, value) { this[name] = value; },
-      classList: { add(name) { this.name = name; } },
+      toggleAttribute(name, force) { this[name] = force; },
+      classList: {
+        add(name) { this.name = name; },
+        toggle(name, active) { this[name] = active; },
+      },
       setPointerCapture() {},
       getBoundingClientRect() { return { left: 0, top: 0, width: 100 }; },
     });
@@ -32,12 +36,20 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
   const updates = [];
   context.Module.ccall = (name, result, types, args) => updates.push([name, args[0]]);
   window.listeners.message({ source: {}, data: { type: 'netcraft-reward-address', address: 'spoofed' } });
-  window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: 'first' } });
-  window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: '' } });
+  window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: 'first', pickaxe: true } });
+  window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: '', pickaxe: false } });
   assert.equal(updates.length, 0);
   context.Module.applyPendingRewardAddress();
-  window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: 'new' } });
-  assert.deepEqual(updates, [['netcraft_set_reward_address', ''], ['netcraft_set_reward_address', 'new']]);
+  assert.equal($('mina-pickaxe').hidden, true);
+  window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: 'new', pickaxe: true } });
+  assert.equal($('mina-pickaxe').hidden, false);
+  assert.deepEqual(updates, [['netcraft_set_reward_address', ''], ['mining_set_pickaxe', 0], ['netcraft_set_reward_address', 'new'], ['mining_set_pickaxe', 1]]);
+  context.Module.setPickaxeMining(1);
+  assert.equal($('mina-pickaxe').classList.mining, true);
+  context.Module.setPickaxeMining(0);
+  assert.equal($('mina-pickaxe').classList.mining, false);
+  window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: '', pickaxe: false } });
+  assert.equal($('mina-pickaxe').hidden, true);
   assert.ok(context.Module.websocket);
   assert.equal(typeof $('mobile-mine').listeners.pointerdown, 'function');
   assert.equal(typeof window.listeners.pointermove, 'function');
