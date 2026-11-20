@@ -4347,6 +4347,15 @@ void one_iter() {
 
     handle_gamepad_input();
 
+#ifdef __EMSCRIPTEN__
+    static int pickaxe_mining = -1;
+    int current_pickaxe_mining = g->initialized && (g->mode != MODE_ONLINE || online_ready) && is_mining();
+    if (current_pickaxe_mining != pickaxe_mining) {
+        pickaxe_mining = current_pickaxe_mining;
+        EM_ASM(Module.setPickaxeMining($0);, pickaxe_mining);
+    }
+#endif
+
     // HANDLE MOVEMENT //
     handle_movement(dt);
 

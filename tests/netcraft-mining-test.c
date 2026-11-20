@@ -38,6 +38,20 @@ static void check_rate(double step) {
 int main(void) {
     check_rate(1.0 / 20);
     check_rate(1.0 / 120);
+    now = 5;
+    target = 0;
+    mining_start();
+    mining_tick();
+    assert(!is_mining());
+    target = 1;
+    mining_tick();
+    assert(is_mining());
+    target = 0;
+    mining_tick();
+    assert(!is_mining());
+    mining_stop();
+    assert(!is_mining());
+    target = 1;
     now = 10;
     mined = 0;
     mining_start();
