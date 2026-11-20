@@ -165,6 +165,39 @@ class RewardTests(unittest.TestCase):
             self.assertEqual([call.args for call in rpc.call_args_list],
                              [("sendrawtransaction", ["abcd"]), ("sendrawtransaction", ["ef01"])])
 
+    def test_browser_wallet_welcome_and_mining_transactions_are_recorded(self):
+        address = "bitcoincash:zqyx49mu0kkn9ftfj6hje6g2wfer34yfnqnpwfwhlf"
+        path = Path(self.tmp.name) / "netcraft.sqlite3"
+        client = TestClient(backend.app)
+        self.assertEqual(client.post("/api/cash-address", json={"cash_address": address}).status_code, 200)
+        with sqlite3.connect(path) as db:
+            db.execute("""CREATE TABLE mining_rewards (
+                id INTEGER PRIMARY KEY, cash_address TEXT, category TEXT,
+                signed_tx TEXT, txid TEXT, sent_at TEXT
+            )""")
+            db.executemany("INSERT INTO mining_rewards (id, cash_address, category) VALUES (?, ?, ?)",
+                           [(1, address, "b" * 64), (2, address, "b" * 64)])
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path)), \
+             patch.object(backend, "NETCRAFT_MINING_REWARDS_ENABLED", "true"), \
+             patch.object(backend, "build_reward_transaction",
+                          side_effect=[("01", "1" * 64), ("02", "2" * 64), ("03", "3" * 64)]) as build, \
+             patch.object(backend, "bch_rpc", side_effect=["1" * 64, "2" * 64, "3" * 64]):
+            self.assertTrue(backend.process_one_reward())
+            with sqlite3.connect(backend.DB_PATH) as db:
+                self.assertEqual(db.execute("SELECT cash_address, signed_tx, txid, sent_at FROM token_rewards").fetchone(),
+                                 (address, "01", "1" * 64, None))
+            self.assertTrue(backend.process_one_reward())
+            self.assertTrue(backend.process_one_mining_reward(1))
+            self.assertTrue(backend.process_one_mining_reward(2))
+            self.assertEqual(build.call_count, 3)
+        with sqlite3.connect(backend.DB_PATH) as db:
+            self.assertIsNotNone(db.execute("SELECT sent_at FROM token_rewards").fetchone()[0])
+        with sqlite3.connect(path) as db:
+            rows = db.execute("SELECT cash_address, signed_tx, txid, sent_at FROM mining_rewards ORDER BY id").fetchall()
+            self.assertEqual([(r[0], r[1], r[2]) for r in rows],
+                             [(address, "02", "2" * 64), (address, "03", "3" * 64)])
+            self.assertTrue(all(row[3] for row in rows))
+
     def test_pending_signed_wallet_payout_prevents_conflicting_mining_transaction(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"

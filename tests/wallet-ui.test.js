@@ -2,7 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
+import { encodeCashAddress } from '@bitauth/libauth';
+import { hash160 } from '@cashscript/utils';
 import { inspectNft } from '../src/nft-inspection.js';
+import { BrowserWallet } from '../src/browser-wallet.js';
+import { normalizeUtxo, utxoKey } from '../src/utils.js';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
@@ -386,6 +390,38 @@ test('a pending scan retains its original wallet addresses when sessions change'
   assert.deepEqual(Array.from(result.utxos, (utxo) => utxo.address), [0, 1]);
 });
 
+test('browser wallet scans its token-aware receive address and finds MINA outputs', async (t) => {
+  const wallet = new BrowserWallet('abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
+  t.after(() => wallet.destroy());
+  const addressFor = (path, index, type = 'p2pkhWithTokens') => encodeCashAddress({
+    prefix: 'bitcoincash', type, payload: hash160(wallet.getPubkey(path, index)),
+  }).address;
+  const expected = 'bitcoincash:zqyx49mu0kkn9ftfj6hje6g2wfer34yfnqnpwfwhlf';
+  const queried = [];
+  const context = {
+    $: () => ({ value: '1' }), addressFor, scanAddressRecords: [],
+    SCAN_CONCURRENCY: 2, SCAN_RETRY_DELAYS_MS: [], mainnet: false,
+    provider: { getUtxos: async (address) => {
+      queried.push(address);
+      return address === expected ? [{
+        txid: 'a'.repeat(64), vout: 0, satoshis: 651n,
+        token: { category: 'b'.repeat(64), amount: 1n },
+      }] : [];
+    } },
+    normalizeUtxo, utxoKey,
+  };
+  const derive = source.slice(source.indexOf('function deriveScanAddresses()'), source.indexOf('\nasync function showPairingUri'));
+  const scan = source.slice(source.indexOf('async function fetchAddressUtxosWithRetry('), source.indexOf('\nfunction renderBalances'));
+  runInNewContext(`${derive}\n${scan}`, context);
+  context.scanAddressRecords = context.deriveScanAddresses();
+  const result = await context.scanWallet();
+  assert.ok(queried.includes(expected));
+  assert.equal(result.utxos.length, 1);
+  assert.equal(result.utxos[0].token.category, 'b'.repeat(64));
+  assert.equal(result.utxos[0].token.amount, 1n);
+  assert.equal(result.utxos[0].spendAddress, addressFor(0, 0, 'p2pkh'));
+});
+
 test('late scans restart the manager handshake and attach the listener immediately', async () => {
   let time = 1000;
   let keyExchange;
@@ -450,7 +486,7 @@ test('stale wallet callbacks cannot disconnect a newer session', async () => {
     pairingInProgress: false, walletTransitioning: false, showPairingWhenReady: false,
     refreshBrowserWalletUI() {},
     clearWalletDisplay() {}, setConnection() {}, updateReceiveAddress() {},
-    addressFor: () => 'recipient', submitCashAddress: async () => { submissions++; },
+    addressFor: () => 'recipient', registerRewardAddress: async () => { submissions++; },
     refreshBalances: async () => {}, loadWalletDependencies: async () => {},
     loadSession: () => null, DappConnectionManager: Manager,
     initiateDappRelay: (callback) => {
@@ -572,7 +608,7 @@ test('open in wallet remains available until an address is derived, including re
       if (!keyAvailable) throw new Error('Public key missing');
       return 'token-address';
     },
-    submitCashAddress: async () => { if (submissionFails) throw new Error('registration unavailable'); },
+    registerRewardAddress: async () => { if (submissionFails) throw new Error('registration unavailable'); },
     refreshBalances: async () => {
       if (scanFails) throw new Error('scan unavailable');
       if (scanPending) await new Promise((resolve) => { resolveScan = resolve; });
@@ -642,7 +678,7 @@ test('saved wallet sessions start restoring immediately on page load', async () 
     loadSession: () => saved,
     pairingInProgress: false, walletReady: false,
     startConnection: async (options) => events.push(options.restoring ? 'restore' : 'new'),
-    logger: { warn() {} },
+    logger: { warn() {} }, URLSearchParams, window: { location: { search: '' } }, craftRoute: false,
   };
   runInNewContext(source.slice(start, end), context);
   await new Promise((resolve) => setImmediate(resolve));
@@ -907,13 +943,14 @@ test('connected panels reveal only after a wallet connection and hide on disconn
       classList: { toggle() {} },
       getAttribute: () => 'true',
     });
+
     return nodes.get(id);
   };
   const start = source.indexOf('function setConnection(');
   const end = source.indexOf('\nfunction clearWalletDisplay', start);
   const context = {
     $, document: { querySelectorAll: () => panels, body: { classList: { toggle() {} } } }, sending: false,
-    pairingInProgress: false, transferInteracted: false, tutorialStep: 2, manager: null,
+    pairingInProgress: false, transferInteracted: false, tutorialStep: 2, manager: null, registeredRewardAddress: 'token-address',
     refreshBrowserWalletUI() {},
     pairingReminder: { cancel() {} },
     addressFor: () => 'token-address',
@@ -948,6 +985,72 @@ test('connected panels reveal only after a wallet connection and hide on disconn
   assert.equal($('advanced-settings').hidden, true);
   assert.equal(context.tutorialStep, 0);
   assert.equal(context.tutorialUpdated, true);
+});
+
+test('only the first mined block opens the gemstone for WizardConnect or no wallet', () => {
+  let handler;
+  let load;
+  let shown = 0;
+  const gameWindow = {};
+  const frame = {
+    src: '/games/netcraft/craftw.html',
+    contentWindow: gameWindow,
+    addEventListener(_type, fn) { load = fn; },
+  };
+  const context = {
+    $: (id) => id === 'game-frame' ? frame : { open: true },
+    window: { addEventListener(_type, fn) { handler = fn; } },
+    walletReady: false, manager: null,
+    showMinaWelcome() { shown++; },
+  };
+  const start = source.indexOf('let firstBlockMined =');
+  const end = source.indexOf('\nlet notificationAudio', start);
+  runInNewContext(source.slice(start, end), context);
+  const mine = (source = gameWindow) => handler({ source, data: { type: 'netcraft-block-mined' } });
+  mine({});
+  assert.equal(shown, 0);
+  mine();
+  mine();
+  assert.equal(shown, 1);
+  load();
+  context.walletReady = true;
+  context.manager = { isBrowserWallet: true };
+  mine();
+  assert.equal(shown, 1);
+  context.manager = {};
+  mine();
+  assert.equal(shown, 1);
+  load();
+  mine();
+  assert.equal(shown, 2);
+});
+
+test('reward registration resends the address and rescans after an in-flight browser wallet scan', async () => {
+  let finishScan;
+  const scan = new Promise((resolve) => { finishScan = resolve; });
+  const wallet = { isBrowserWallet: true };
+  const events = [];
+  const context = {
+    manager: wallet, walletReady: true, registeredRewardAddress: null,
+    refreshPromise: scan,
+    addressFor: () => 'token-address',
+    submitCashAddress: async (address) => { events.push(`register:${address}`); return { reward_status: 'pending' }; },
+    updateGameRewardAddress: (address) => events.push(`game:${address}`),
+    refreshBalances: async () => { events.push('rescan'); },
+    logger: { warn() {} },
+  };
+  const start = source.indexOf('async function refreshAfterRewardRegistration(');
+  const end = source.indexOf("\ndocument.querySelectorAll('[data-wallet-choice]')", start);
+  runInNewContext(source.slice(start, end), context);
+  await Promise.all([
+    context.registerRewardAddress('token-address', wallet),
+    context.registerRewardAddress('token-address', wallet),
+  ]);
+  assert.deepEqual(events, ['register:token-address', 'game:token-address']);
+  finishScan();
+  await new Promise(setImmediate);
+  assert.deepEqual(events, ['register:token-address', 'game:token-address', 'rescan']);
+  assert.equal(context.registeredRewardAddress, 'token-address');
 });
 
 test('NFT inspection validates capabilities and commitment bytes', () => {

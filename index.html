@@ -668,17 +668,17 @@
     </div>
   </dialog>
 
-  <dialog id="mina-welcome-dialog" class="notifications-dialog mina-welcome-dialog" aria-labelledby="mina-welcome-title">
+  <dialog id="mina-welcome-dialog" class="notifications-dialog mina-welcome-dialog" aria-label="MINA gemstone">
     <div class="mina-welcome-art" aria-hidden="true">
-      <img src="/mina-block.png" alt="">
-      <span class="mina-welcome-gem">◆</span>
+      <div class="mina-block-art">
+        <img src="/mina-block.png" alt="">
+        <svg class="mina-pickaxe" viewBox="0 0 64 64"><path d="M47 13 16 53" stroke="#92582e" stroke-width="7" stroke-linecap="round"/><path d="M18 20C30 5 46 3 57 16 43 12 33 17 26 27Z" fill="#b8d6cc" stroke="#527b70" stroke-width="3" stroke-linejoin="round"/></svg>
+      </div>
+      <svg class="mina-welcome-gem" viewBox="0 0 100 100"><path d="M10 30 26 12h48l16 18-40 58z" fill="#43ed94" stroke="#baffd8" stroke-width="3"/><path d="M10 30h80M26 12l8 18 16 58 16-58 8-18M34 30l16-18 16 18" fill="none" stroke="#168b62" stroke-width="2"/></svg>
+      <span class="mina-sparkle mina-sparkle-one">✦</span><span class="mina-sparkle mina-sparkle-two">✧</span><span class="mina-sparkle mina-sparkle-three">✦</span>
     </div>
-    <h2 id="mina-welcome-title">Welcome to MINA</h2>
-    <p id="mina-welcome-status"></p>
-    <p>MINA is a CashToken reward. Mine natural MINA ore in CashCraft to request more rewards.</p>
-    <p>Back up your wallet recovery phrase offline. Never share it; anyone with the phrase can spend your funds. For a browser wallet, use “Show recovery phrase” in the wallet connection dialog. For other wallets, follow their backup instructions.</p>
-    <button id="mina-welcome-setup" class="button primary" type="button" hidden>Set up or connect a wallet</button>
-    <button id="mina-welcome-close" class="button primary" type="button">Got it</button>
+    <button id="mina-welcome-setup" class="button primary mina-welcome-action" type="button" aria-label="Set up or connect a wallet" title="Set up or connect a wallet" hidden>↗</button>
+    <button id="mina-welcome-close" class="mina-welcome-close" type="button" aria-label="Close" title="Close">×</button>
   </dialog>
   <dialog id="notifications-dialog" class="notifications-dialog" aria-labelledby="notifications-title">
     <div class="notifications-heading">
