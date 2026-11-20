@@ -145,6 +145,7 @@ $('network').textContent = network.toUpperCase();
 let manager = null;
 let relay = null;
 let walletReady = false;
+let registeredRewardAddress = null;
 let refreshBrowserWalletUI = () => {};
 let pairingInProgress = false;
 let walletTransitioning = false;
@@ -439,6 +440,7 @@ for (const name of ['theme', 'language', 'games']) {
 
 let updateGameRewardAddress = () => {};
 function setConnection(connected) {
+  if (!connected) registeredRewardAddress = null;
   pairingReminder.cancel();
   if (!connected) $('connection-loading').hidden = true;
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => { panel.hidden = !connected; });
@@ -447,7 +449,7 @@ function setConnection(connected) {
   $('disconnect').hidden = !connected;
   $('logout').hidden = !connected;
   $('wizard-toggle').hidden = connected;
-  updateGameRewardAddress(connected ? addressFor(0, 0) : null);
+  updateGameRewardAddress(connected && registeredRewardAddress === addressFor(0, 0) ? registeredRewardAddress : null);
   if (!connected) $('game-status').textContent = '';
   document.body.classList.toggle('wallet-connected', connected);
   $('network-wallet-status').textContent = translate(connected ? 'Wallet connected' : 'Not connected');
@@ -660,7 +662,7 @@ async function startConnection({ fresh = false, restoring = false } = {}) {
         addressReady = true;
         if ($('connection-dialog').open) $('connection-dialog').close();
         $('connection-loading').hidden = false;
-        const submission = submitCashAddress(address).catch((error) => {
+        const submission = registerRewardAddress(address, connectionManager).catch((error) => {
           if (walletReady && manager === connectionManager) {
             report(new Error(`Address submission failed: ${error?.message || error}`));
             $('status').textContent = 'Wallet connected · address submission failed';
@@ -1907,7 +1909,7 @@ async function connectBrowserWallet(phrase, isCurrent = () => true, session = nu
   }
 
   void (async () => {
-    const [scan, submission] = await Promise.allSettled([refreshBalances(), submitCashAddress(address)]);
+    const [scan, submission] = await Promise.allSettled([refreshBalances(), registerRewardAddress(address, wallet)]);
     if (!walletReady || manager !== wallet) return;
     const failures = [];
     if (scan.status === 'rejected') failures.push(`Balance scan failed: ${scan.reason?.message || scan.reason}`);
@@ -1963,6 +1965,78 @@ function openConnectionDialog() {
   if (!$('connection-dialog').open) $('connection-dialog').showModal();
 }
 
+let welcomeAddress = null;
+let cancelWalletPrompt = null;
+function showMinaWelcome(status, address = null) {
+  const setup = status === 'setup';
+  if (!setup) cancelWalletPrompt = null;
+  welcomeAddress = address;
+  $('mina-welcome-status').textContent = translate(setup
+    ? 'Connect or create a wallet to receive a MINA welcome reward and mining rewards.'
+    : status === 'sent'
+      ? 'Your one-unit MINA welcome reward has been sent.'
+      : 'Your one-unit MINA welcome reward is queued. Delivery depends on the payout wallet and network.');
+  $('mina-welcome-setup').hidden = !setup;
+  $('mina-welcome-close').textContent = translate(setup ? 'Not now' : 'Got it');
+  const dialog = $('mina-welcome-dialog');
+  if (!dialog.open) {
+    const stage = $('game-stage');
+    if (document.fullscreenElement === stage) {
+      const parent = dialog.parentNode;
+      const next = dialog.nextSibling;
+      stage.appendChild(dialog);
+      dialog.addEventListener('close', () => parent.insertBefore(dialog, next), { once: true });
+    }
+    dialog.showModal();
+  }
+}
+
+$('mina-welcome-close').addEventListener('click', () => $('mina-welcome-dialog').close());
+$('mina-welcome-dialog').addEventListener('close', () => {
+  cancelWalletPrompt?.();
+  cancelWalletPrompt = null;
+  if (!welcomeAddress) return;
+  try {
+    localStorage.setItem(`cashcraft:mina-welcome:v1:${network}:${welcomeAddress}`, 'shown');
+  } catch (error) {
+    logger.warn('Could not save MINA welcome notification state:', error);
+  }
+  welcomeAddress = null;
+});
+$('mina-welcome-setup').addEventListener('click', () => {
+  cancelWalletPrompt = null;
+  $('mina-welcome-dialog').close();
+  openTutorial();
+  $('browser-wallet-section').open = true;
+});
+
+let addressRegistration = null;
+function registerRewardAddress(address, wallet) {
+  if (addressRegistration?.address === address && addressRegistration.wallet === wallet) {
+    return addressRegistration.promise;
+  }
+  const registration = { address, wallet, promise: null };
+  registration.promise = (async () => {
+    const result = await submitCashAddress(address);
+    if (!walletReady || manager !== wallet || addressFor(0, 0) !== address) return;
+    registeredRewardAddress = address;
+    if (result.reward_status !== 'none') {
+      let shown = false;
+      try {
+        shown = Boolean(localStorage.getItem(`cashcraft:mina-welcome:v1:${network}:${address}`));
+      } catch (error) {
+        logger.warn('Could not read MINA welcome notification state:', error);
+      }
+      if (!shown) showMinaWelcome(result.reward_status, address);
+    }
+    updateGameRewardAddress(address);
+  })().finally(() => {
+    if (addressRegistration === registration) addressRegistration = null;
+  });
+  addressRegistration = registration;
+  return registration.promise;
+}
+
 document.querySelectorAll('[data-wallet-choice]').forEach((choice) => {
   choice.addEventListener('click', () => {
     document.querySelectorAll('[data-wallet-choice]').forEach((other) => {
@@ -1988,21 +2062,34 @@ $('wiki-language').addEventListener('change', (event) => setLanguage(event.targe
 $('connection-language').addEventListener('change', (event) => setLanguage(event.target.value));
 setupWikiGlossary($('wiki-dialog'));
 
-updateGameRewardAddress = setupGames($, {
-  translate,
-  getRewardAddress: () => walletReady ? addressFor(0, 0) : null,
-  autoOpen: craftRoute || new URLSearchParams(window.location.search).has('c') ||
-    new URLSearchParams(window.location.search).get('game') === 'pk2',
-  autoOpenGame: new URLSearchParams(window.location.search).get('game') === 'pk2' ? 'pk2' : 'netcraft',
-});
-setupGameInvite($, network, async () => {
-  await loadWalletDependencies();
-  return { QRCode, decodeCashAddress };
-});
 refreshBrowserWalletUI = setupBrowserWallet($, {
   network,
   canConnect: () => !walletReady && !pairingInProgress && !walletTransitioning,
   onConnect: connectBrowserWallet,
+});
+updateGameRewardAddress = setupGames($, {
+  translate,
+  getRewardAddress: () => walletReady ? registeredRewardAddress : null,
+  onWalletNeeded: (cancel) => {
+    if (!walletReady) {
+      if (pairingInProgress || relay) openConnectionDialog();
+      else {
+        cancelWalletPrompt = cancel;
+        showMinaWelcome('setup');
+      }
+      return;
+    }
+    $('status').textContent = 'Registering wallet for MINA rewards…';
+    const wallet = manager;
+    registerRewardAddress(addressFor(0, 0), wallet).catch((error) => {
+      report(new Error(`Address submission failed: ${error?.message || error}`));
+      $('status').textContent = 'Wallet connected · address submission failed';
+    });
+  },
+});
+setupGameInvite($, network, async () => {
+  await loadWalletDependencies();
+  return { QRCode, decodeCashAddress };
 });
 
 $('show-nfts').addEventListener('change', () => {
@@ -2692,7 +2779,12 @@ const restoreSession = async () => {
     $('status').textContent = 'Wallet session could not be restored. Open the wallet dialog to reconnect.';
   }
 };
-void restoreSession();
+void restoreSession().finally(() => {
+  const params = new URLSearchParams(window.location.search);
+  if (craftRoute || params.has('c') || params.get('game') === 'pk2') {
+    $(params.get('game') === 'pk2' ? 'game-pk2' : 'game-netcraft').click();
+  }
+});
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

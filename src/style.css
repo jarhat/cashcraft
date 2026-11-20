@@ -2993,6 +2993,10 @@ body::before { content: none; display: none; }
 .balance-extras p, .wallet-notification-summary p { display: flex; justify-content: space-between; gap: 12px; margin: 0; }
 .balance-extras strong { text-align: right; }
 .mina-gem { color: #44de90; }
+.mina-welcome-dialog { max-width: 460px; text-align: center; }
+.mina-welcome-art { display: flex; justify-content: center; align-items: center; gap: 20px; }
+.mina-welcome-art img { width: 72px; height: 72px; image-rendering: pixelated; border-radius: 8px; }
+.mina-welcome-gem { color: #43ed94; font-size: 4rem; text-shadow: 0 0 18px rgb(67 237 148 / 50%); }
 .wallet-notification-summary { display: grid; gap: 8px; margin-bottom: 16px; }
 #mina-receipt-transactions code { display: block; overflow-wrap: anywhere; margin-top: 6px; }
 .topbar > :not(.mesh-landscape):not(.mesh-sun) { position: relative; z-index: 1; }

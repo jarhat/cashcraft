@@ -266,9 +266,13 @@ def _insert_cash_address(
         )
 
 
-def save_cash_address(address: str, prefix: str, address_type: int) -> None:
+def save_cash_address(address: str, prefix: str, address_type: int) -> str:
     with open_db(timeout=10) as db:
         _insert_cash_address(db, address, prefix, address_type)
+        row = db.execute(
+            "SELECT sent_at FROM token_rewards WHERE cash_address = ?", (address,)
+        ).fetchone()
+        return "sent" if row and row[0] else "pending" if row else "none"
 
 
 def _prefix_expand(prefix: str) -> list[int]:
@@ -692,7 +696,7 @@ def receive_cash_address(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
-        save_cash_address(address, prefix, address_type)
+        reward_status = save_cash_address(address, prefix, address_type)
     except RewardDatabaseError as exc:
         logger.exception("Could not save cash address.")
         raise HTTPException(status_code=503, detail="Address database unavailable.") from exc
@@ -702,12 +706,14 @@ def receive_cash_address(
             detail="Could not save cash address.",
         ) from exc
 
+    reward_wake.set()
     return {
         "network": NETWORK,
         "cash_address": address,
         "prefix": prefix,
         "token_aware": True,
         "address_type": address_type,
+        "reward_status": reward_status,
     }
 
 
@@ -933,10 +939,17 @@ def process_one_mining_reward(reward_id: int | None = None) -> bool:
                 (requested_reward_id,),
             ).fetchone()
         else:
-            row = db.execute(
+            with open_db(timeout=10) as address_db:
+                pending_welcome = {
+                    item[0] for item in address_db.execute(
+                        "SELECT cash_address FROM token_rewards WHERE sent_at IS NULL"
+                    )
+                }
+            rows = db.execute(
                 """SELECT id, cash_address, category, signed_tx, txid FROM mining_rewards
-                   WHERE sent_at IS NULL ORDER BY signed_tx IS NULL, id LIMIT 1"""
-            ).fetchone()
+                   WHERE sent_at IS NULL ORDER BY signed_tx IS NULL, id"""
+            )
+            row = next((item for item in rows if item[3] or item[1] not in pending_welcome), None)
         if not row:
             return False
         reward_id, address, category, signed_tx, txid = row
@@ -944,6 +957,12 @@ def process_one_mining_reward(reward_id: int | None = None) -> bool:
         if not CATEGORY_RE.fullmatch(category):
             raise RuntimeError("Invalid mining reward category.")
         if not signed_tx:
+            with open_db(timeout=10) as address_db:
+                if address_db.execute(
+                    "SELECT 1 FROM token_rewards WHERE cash_address = ? AND sent_at IS NULL",
+                    (address,),
+                ).fetchone():
+                    raise RuntimeError("The welcome reward must be sent before mining rewards.")
             ensure_no_pending_signed_payout()
             signed_tx, txid = build_reward_transaction(address, category, mining=True)
             db.execute(
