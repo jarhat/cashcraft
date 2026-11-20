@@ -13,25 +13,28 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   const dock = $('game-minimized-controls');
   const restore = $('game-restore');
   const guide = $('game-guide');
+  const prompt = $('mining-prompt');
+  const toolbar = document.querySelector('.game-toolbar');
   const rankingParent = $('game-ranking').parentNode;
   const setPlayingUi = () => {
     const playing = dialog.open && !dialog.hidden;
     document.body.classList.toggle('cashcraft-playing', playing);
     dock.hidden = !dialog.open || !dialog.hidden || !activeGame;
   };
-  document.querySelector('.game-toolbar').after(dialog);
+  toolbar.after(dialog);
   stage.addEventListener('contextmenu', (event) => event.preventDefault());
   let generation = 0;
   let activeGame = null;
   let guideShown = false;
   let guestId = null;
   let guestUnlocked = null;
+  let firstBlockShown = false;
   const updateRewardAddress = (address) => {
     const connected = isWalletConnected ? isWalletConnected() : Boolean(address);
-    const gemLabel = activeGame === 'netcraft' ? 'CashCraft guide and wallet' : connected ? 'Wallet and notifications' : 'Connect wallet';
+    const gemLabel = connected ? 'Wallet and notifications' : 'Connect wallet';
     $('game-notifications').setAttribute('aria-label', translate(gemLabel));
     $('game-notifications').setAttribute('title', translate(gemLabel));
-    $('game-notifications').setAttribute('aria-controls', activeGame === 'netcraft' ? 'game-guide' : connected ? 'notifications-dialog' : 'connection-dialog');
+    $('game-notifications').setAttribute('aria-controls', connected ? 'notifications-dialog' : 'connection-dialog');
     $('game-guide-wallet').textContent = translate(connected ? 'Wallet and notifications' : 'Connect wallet');
     $('game-ranking').hidden = activeGame !== 'netcraft';
     if (activeGame) {
@@ -42,13 +45,14 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       $('game-minimized-fullscreen').setAttribute('title', `Resume ${title} in fullscreen`);
     }
     if (activeGame === 'netcraft') {
-      frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '', pickaxe: connected && hasMinaPickaxe(), guestId }, '*');
+      frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '', pickaxe: connected && hasMinaPickaxe(), connected, guestId }, '*');
     }
   };
-  const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'ranking-dialog', 'game-guide'];
+  const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'ranking-dialog', 'game-guide', 'mining-prompt'];
   const canFocusGame = () => dialog.open && !dialog.hidden && activeGame &&
     !overlayDialogs.some((id) => $(id).open);
   frame.addEventListener('load', () => {
+    if (activeGame) document.documentElement.classList.remove('game-link-loading');
     updateRewardAddress(getRewardAddress());
     if (canFocusGame() && [document.body, $('game-close'), $('game-fullscreen'),
       $('switch-netcraft'), $('switch-pk2'), frame].includes(document.activeElement)) {
@@ -71,6 +75,8 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         generation++;
         $('game-dialog-status').textContent = '';
         dialog.hidden = false;
+        stage.appendChild(guide);
+        stage.appendChild(prompt);
         setPlayingUi();
         return;
       }
@@ -114,7 +120,10 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
           guide.show();
         }
       } catch (error) {
-        if (request === generation) status.textContent = error.message;
+        if (request === generation) {
+          document.documentElement.classList.remove('game-link-loading');
+          status.textContent = error.message;
+        }
       }
   };
   for (const id of Object.keys(games)) {
@@ -134,7 +143,12 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         return false;
       }
     }
-    if (guide.open) guide.close();
+    const guideOpen = guide.open;
+    const promptOpen = prompt.open;
+    toolbar.after(guide);
+    toolbar.after(prompt);
+    if (guideOpen && !guide.open) guide.show();
+    if (promptOpen && !prompt.open) prompt.show();
     dialog.hidden = true;
     setPlayingUi();
     restore.focus({ preventScroll: true });
@@ -143,12 +157,20 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   $('game-close').addEventListener('click', minimize);
   dialog.addEventListener('cancel', (event) => { event.preventDefault(); void minimize(); });
   restore.addEventListener('click', () => {
+    const guideOpen = guide.open;
+    const promptOpen = prompt.open;
+    stage.appendChild(guide);
+    stage.appendChild(prompt);
+    if (guideOpen && !guide.open) guide.show();
+    if (promptOpen && !prompt.open) prompt.show();
     dialog.hidden = false;
     setPlayingUi();
     frame.focus({ preventScroll: true });
   });
   $('game-minimized-fullscreen').addEventListener('click', async () => {
     if (!activeGame) return;
+    stage.appendChild(guide);
+    stage.appendChild(prompt);
     dialog.hidden = false;
     setPlayingUi();
     try {
@@ -169,29 +191,43 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     }
     $(connected ? 'notifications-toggle' : 'connection-open').click();
   };
-  $('game-notifications').addEventListener('click', () => {
-    if (activeGame === 'netcraft') {
-      if (!guide.open) guide.show();
-      return;
-    }
-    openWallet();
-  });
+  $('game-notifications').addEventListener('click', openWallet);
+  $('game-guide-open').addEventListener('click', () => { if (!guide.open) guide.show(); });
   $('game-guide-wallet').addEventListener('click', () => {
-    guide.close();
     openWallet();
   });
+  $('mining-prompt-wallet').addEventListener('click', () => {
+    prompt.close();
+    openWallet();
+  });
+  for (const id of ['mining-prompt-close', 'mining-prompt-later']) {
+    $(id).addEventListener('click', () => prompt.close());
+  }
   for (const id of ['game-guide-close', 'game-guide-done']) {
     $(id).addEventListener('click', () => guide.close());
   }
   window.addEventListener('message', (event) => {
-    if (event.source !== frame.contentWindow || activeGame !== 'netcraft' ||
+    if (event.source !== frame.contentWindow || activeGame !== 'netcraft') return;
+    const connected = isWalletConnected ? isWalletConnected() : Boolean(getRewardAddress());
+    if (event.data?.type === 'netcraft-block-mined' && !firstBlockShown) {
+      firstBlockShown = true;
+      if (!connected) {
+        $('mining-prompt-title').textContent = translate('First block mined!');
+        $('mining-prompt-message').textContent = translate('Next, find green MINA ore and mine 10 natural blocks to earn 1 MINA.');
+        if (!prompt.open) prompt.show();
+      }
+      return;
+    }
+    if (
         event.data?.type !== 'netcraft-mining-progress' ||
         !Number.isInteger(event.data.blocks) || event.data.blocks < 0 || event.data.blocks > 9 ||
         typeof event.data.unlocked !== 'boolean') return;
     $('game-guide-progress').textContent = `${translate('MINA ore progress')}: ${event.data.blocks} / 10` +
-      (event.data.unlocked ? ` · ${translate('MINA pickaxe unlocked')}` : '');
-    if (guestUnlocked === false && event.data.unlocked && !(isWalletConnected ? isWalletConnected() : getRewardAddress()) && !guide.open) {
-      guide.show();
+      (event.data.unlocked ? ` · ${translate(connected ? 'MINA pickaxe unlocked' : 'Connect a wallet to equip your pickaxe')}` : '');
+    if (guestUnlocked === false && event.data.unlocked && !connected) {
+      $('mining-prompt-title').textContent = translate('1 MINA earned!');
+      $('mining-prompt-message').textContent = translate('Next, connect a wallet to receive your reward and equip your green pickaxe.');
+      if (!prompt.open) prompt.show();
     }
     guestUnlocked = event.data.unlocked;
   });

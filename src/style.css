@@ -3153,7 +3153,6 @@ html[data-theme="miami"] {
 .receive-category-field input { min-width: 0; flex: 1; }
 .receive-token { display: inline-flex; align-items: center; gap: 4px; font-size: .75rem; }
 .receive-token[hidden] { display: none; }
-#receive-pusd-logo img { width: 24px; height: 24px; object-fit: contain; }
 :where(button, input, select, textarea, a, summary):focus-visible { outline: 3px solid #198d65; outline-offset: 3px; }
 @media (max-width: 520px) {
   .game-controls { gap: 4px; right: 6px; }
@@ -3198,4 +3197,93 @@ html[data-theme="miami"] {
   .tutorial-highlight::after, .wallet-link::after, .wizard-toggle::after, .transfer-tab.active::after {
     animation: none;
   }
+}
+
+html[data-theme="voxel"] {
+  --ice: #65e7ac; --mint: #32d994; --muted: #a6b0ac; --line: #34413b;
+  --panel: #101512; --glass-tint: #101512; --glass-border: #37433d;
+  --glass-glow: rgb(35 214 130 / 10%); --accent-soft: #d6e5dc;
+  --glow-color: #32d994; --page-base: #000;
+  --page-halo: rgb(25 99 61 / 14%); --page-halo-secondary: transparent;
+  --chart-1: #32d994; --chart-2: #9dc9aa; --chart-3: #91a59a;
+}
+html[data-theme="voxel"] body {
+  color: #e5ece8;
+  background: radial-gradient(ellipse at 50% 0, #0b2116, transparent 480px), #000;
+}
+html[data-theme="voxel"] .topbar,
+html[data-theme="voxel"] .game-toolbar,
+html[data-theme="voxel"] .panel,
+html[data-theme="voxel"] .notifications-dialog,
+html[data-theme="voxel"] .tool-dropdown {
+  border: 1px solid #37443d;
+  border-radius: 22px;
+  background: #101512;
+  box-shadow: 0 12px 32px #0008;
+}
+html[data-theme="voxel"] .topbar {
+  border-color: #38644c;
+  border-radius: 26px;
+  background: linear-gradient(110deg, #102019, #111714 55%, #090e0b);
+  box-shadow: inset 0 1px #ffffff12, 0 12px 38px #000b;
+}
+html[data-theme="voxel"] .panel { padding: clamp(18px, 2.5vw, 28px); }
+html[data-theme="voxel"] .primary,
+html[data-theme="voxel"] .quick-action.active,
+html[data-theme="voxel"] .transfer-tab.active {
+  color: #052014; background: #39d995; border: 1px solid #72efb3;
+  border-radius: 14px; box-shadow: 0 4px 18px #25c97926;
+}
+html[data-theme="voxel"] .primary:hover:not(:disabled) { background: #71edb0; }
+html[data-theme="voxel"] .quick-action svg,
+html[data-theme="voxel"] .eyebrow,
+html[data-theme="voxel"] footer { color: #9ce8a5; }
+html[data-theme="voxel"] input,
+html[data-theme="voxel"] select,
+html[data-theme="voxel"] textarea {
+  background: #080c0a; color: #edf5f0; border: 1px solid #56645c; border-radius: 12px;
+}
+html[data-theme="voxel"] input:focus,
+html[data-theme="voxel"] select:focus,
+html[data-theme="voxel"] textarea:focus { border-color: #7ff0a3; box-shadow: 0 0 0 3px #4cc97755; }
+html[data-theme="voxel"] .theme-toggle,
+html[data-theme="voxel"] .small-button,
+html[data-theme="voxel"] .topbar .quick-action {
+  border: 1px solid #46554c; border-radius: 13px; background: #202a24; color: #e1ebe4;
+}
+html[data-theme="voxel"] .topbar .quick-action svg { color: #c1e6bc; }
+html[data-theme="voxel"] .wizard-toggle {
+  border-color: #32d994; border-radius: 16px; background: #0a1a11; color: #e5f8ed;
+}
+html[data-theme="voxel"] .landing-features li { background: #1a211d; border-color: #36443b; border-radius: 17px; }
+html[data-theme="voxel"] .snow { filter: brightness(0) saturate(100%) invert(75%) sepia(39%) saturate(1063%) hue-rotate(91deg) brightness(94%); }
+.topbar-tools-left { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.topbar-bch { width: 34px; height: 34px; object-fit: contain; }
+img[src="/bitcoin-cash-official.svg"] { filter: hue-rotate(95deg); }
+.category-input-icon { flex: 0 0 28px; width: 28px; height: 28px; margin-right: 6px; }
+.category-input-icon[hidden] { display: none; }
+.topbar-tools-left .tool-menu { position: relative; }
+.topbar-tools-left .tool-dropdown { left: 0; right: auto; z-index: 20; }
+.game-wizard-art { width: 34px; height: 42px; vertical-align: middle; image-rendering: pixelated; }
+#game-guide-title { display: flex; align-items: center; gap: 8px; }
+#game-guide-open svg { width: 28px; height: 32px; stroke: none; }
+.game-guide[open] { border-radius: 4px; border-width: 2px; box-shadow: 0 6px #07100b, 0 12px 30px #0009; }
+.game-guide[open]:not(.game-stage .game-guide) { position: fixed; max-height: 65vh; }
+.mining-art { position: relative; height: 96px; display: flex; justify-content: center; }
+.mining-art img:first-child { width: 105px; height: 105px; image-rendering: pixelated; }
+.mining-art img:last-child { width: 32px; align-self: flex-start; margin-left: -12px; }
+.crypto-mesh { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 8px; border: 1px solid #69e597; background: radial-gradient(circle, #2d8250, #142d1d); color: #e0ffdf; font-weight: 800; }
+.crypto-mesh img { width: 34px; height: 34px; object-fit: contain; }
+.crypto-icons { display: flex; justify-content: center; align-items: center; gap: 14px; margin: 8px; }
+.crypto-icons img { width: 26px; height: 26px; object-fit: contain; }
+@media (max-width: 680px) {
+  .topbar-tools-left { max-width: none; }
+  .topbar-bch { width: 28px; height: 28px; }
+  .game-guide[open] { max-height: 55%; }
+}
+@media (max-width: 520px) {
+  .topbar .topbar-tools-left { grid-column: 1 / -1; }
+  .topbar .wizard-guide, body.wallet-connected .topbar .wizard-guide { grid-column: 2; grid-row: 2; }
+  .topbar .topbar-tools-right { grid-column: 2; grid-row: 3; }
+  .topbar .quick-nav { grid-row: 4; }
 }

@@ -205,10 +205,14 @@ The browser wallet's unlocked session survives a refresh in the same tab until
 explicitly disconnected or the tab session ends. WizardConnect attempts to
 restore its saved pairing; the external wallet may still require approval.
 Players have a regular pixel pickaxe in the lower-right corner. Mining ten
-eligible MINA ore blocks without a wallet unlocks the green pickaxe for that
-browser identity. A registered wallet holding at least 2 MINA across its scanned
-addresses also qualifies. The green pickaxe reduces breakable block mining time
-to one quarter.
+eligible MINA ore blocks unlocks the green pickaxe for that browser identity.
+It is equipped only while a wallet is connected. A registered wallet holding at
+least 2 MINA across its scanned addresses also qualifies. The green pickaxe
+reduces breakable block mining time to one quarter.
+When a crafting address is configured, the crafting control prepares a
+reviewable transfer of 10 MINA. Mining 100 eligible MINA ore blocks requests
+10 MINA in rewards; delivery and crafting returns depend on their respective
+services. Players must connect a wallet and approve the transfer themselves.
 
 The loading screen shows available download progress and fades after the first
 frame is rendered. Its background and touch-button icons are served by the
@@ -264,9 +268,9 @@ an immediate BCHN transaction for each ten eligible blocks; wallet transaction
 creation is serialized to avoid spending the same inputs twice. The wallet
 refreshes after the request and shows a receipt once it sees the zero-confirmation
 output. A request can fail or take longer if the node or network is unavailable.
-The green gemstone button reopens the dismissible game guide, which provides
-access to wallet connection or notifications; opening notifications marks them
-read. Shared game links open a viewport-filling game; use the fullscreen button
+The wizard button reopens the dismissible game guide. The green gemstone opens
+wallet connection or notifications; opening notifications marks them read.
+Shared game links open a viewport-filling game; use the fullscreen button
 for browser fullscreen, which requires a user gesture. Browsers may require a
 user gesture before sound can play.
 The HUD counts MINA ore blocks mined during the current game session, including

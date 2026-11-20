@@ -10,6 +10,33 @@ import { normalizeUtxo, utxoKey } from '../src/utils.js';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
+test('crafting prefills a reviewable 10 MINA transfer', async () => {
+  const start = source.indexOf('let craftingConfigPromise = null;');
+  const end = source.indexOf("\n$('generate-payment')", start);
+  const elements = new Map();
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      listeners: {}, value: '', hidden: false,
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      dispatchEvent() {}, click() { return this.listeners.click?.(); },
+      close() {}, scrollIntoView() {},
+    });
+    return elements.get(id);
+  };
+  const context = {
+    $, API_BASE_URL: '', walletReady: true, Event,
+    fetch: async () => ({ ok: true, json: async () => ({ address: 'craft-address', returnCategory: 'other' }) }),
+    loadRewardCategory: async () => 'mina-category',
+    setTransferTab() {}, translate: (text) => text, report(error) { throw error; },
+  };
+  runInNewContext(source.slice(start, end), context);
+  await $('game-crafting').listeners.click();
+  assert.equal($('recipient').value, 'craft-address');
+  assert.equal($('category').value, 'mina-category');
+  assert.equal($('amount').value, '10');
+  assert.match($('crafting-note').textContent, /Review the 10 MINA transfer/);
+});
+
 test('MINA pickaxe requires a connected registered wallet holding at least two MINA', async () => {
   const start = source.indexOf('async function refreshBalances(');
   const end = source.indexOf('\nfunction validateRecipient', start);
@@ -73,8 +100,8 @@ test('payment defaults to PUSD only on mainnet and preserves an existing categor
 });
 
 test('theme preferences migrate and select the correct palette', () => {
-  for (const [saved, expected] of [[null, 'aurora'], ['bch', 'aurora'], ['bch-sunrise', 'aurora'], ['green', 'aurora'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'aurora'], ['frost', 'frost'], ['miami', 'miami'], ['mina', 'aurora'], ['unknown', 'aurora']]) {
-    const buttons = ['frost', 'aurora', 'miami'].map((themeOption) => ({
+  for (const [saved, expected] of [[null, 'voxel'], ['bch', 'voxel'], ['green', 'voxel'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'voxel'], ['frost', 'frost'], ['miami', 'voxel'], ['unknown', 'voxel']]) {
+    const buttons = ['frost', 'voxel'].map((themeOption) => ({
       dataset: { themeOption },
       setAttribute(name, value) { this[name] = value; },
     }));
@@ -89,7 +116,7 @@ test('theme preferences migrate and select the correct palette', () => {
       setItem(key, value) { this[key] = value; },
     };
     const start = source.indexOf('const savedTheme =');
-    const end = source.indexOf("\nfor (const name of ['theme', 'language', 'games'])", start);
+    const end = source.indexOf("\ndocument.querySelector('.topbar-tools-left').append(", start);
     runInNewContext(source.slice(start, end), { document, localStorage });
     assert.equal(document.documentElement.dataset.theme, expected);
     assert.equal(localStorage['ctf-theme'], expected);
@@ -191,7 +218,7 @@ function sharedLinkFixture(search) {
   };
   const body = source.slice(source.indexOf('function fillFromUrl('), source.indexOf('\nconst mainnet'));
   runInNewContext(`${body}\nfillFromUrl();`, {
-    URLSearchParams, Object, document, $: element, walletReady: false,
+    URLSearchParams, Object, document, $: element, walletReady: false, refreshCategoryIcon() {},
     window: { location: { search, href: `https://ctf.example/${search}` } },
   });
   return element;

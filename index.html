@@ -1,8 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="voxel">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>if (['cashcraft', 'pk2'].includes(new URLSearchParams(location.search).get('game'))) document.documentElement.classList.add('game-link-loading');</script>
+  <style>
+    #game-link-loader { display: none; }
+    .game-link-loading #game-link-loader { display: grid; position: fixed; inset: 0; z-index: 9999; place-content: center; justify-items: center; gap: 20px; color: #b7ffca; background: #0a1910; font: 700 15px system-ui, sans-serif; letter-spacing: .12em; }
+    .game-link-loading #game-link-loader::before { content: ""; width: min(300px, 75vw); height: 110px; background: radial-gradient(circle, #4be78a 3px, transparent 4px) 0 0 / 18px 18px; mask-image: linear-gradient(110deg, transparent, #000, transparent); animation: game-dots 1.2s ease-in-out infinite alternate; }
+    @keyframes game-dots { from { opacity: .35; transform: translateX(-8px); } to { opacity: 1; transform: translateX(8px); } }
+    @media (prefers-reduced-motion: reduce) { .game-link-loading #game-link-loader::before { animation: none; } }
+  </style>
   <meta name="theme-color" content="#05070b">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -40,6 +48,7 @@
   </script>
 </head>
 <body>
+  <div id="game-link-loader" role="status">LOADING CASHCRAFT…</div>
   <div class="market-strip" aria-label="Bitcoin Cash blockchain status">
     <span class="market-label">BCH / CHAIN</span>
     <div id="chain-ticker" class="market-ticker" role="region" tabindex="0" aria-label="Bitcoin Cash blockchain status and MINA rewards sent">Loading blockchain status…</div>
@@ -62,6 +71,7 @@
         </svg>
       </div>
       <div class="topbar-tools topbar-tools-left">
+        <img class="topbar-bch" src="/bitcoin-cash-official.svg" alt="Bitcoin Cash">
         <button id="wiki-open" class="theme-toggle" type="button" aria-label="CashTokens wiki" aria-haspopup="dialog" aria-controls="wiki-dialog">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-2-2-5-2-9-1v13c4-1 7-1 9 1m0-13c2-2 5-2 9-1v13c-4-1-7-1-9 1m0-13v13"/></svg>
         </button>
@@ -117,14 +127,13 @@
           <button type="button" data-language-option="de" lang="de">Deutsch</button>
         </div>
       </div>
-      <div class="tool-menu" data-wallet-panel hidden>
+      <div class="tool-menu">
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Choose theme" aria-expanded="false" aria-controls="theme-menu">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.7 1.7 0 0 1 1.3-2.7H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><circle cx="7.5" cy="11" r=".7"/><circle cx="10" cy="7.5" r=".7"/><circle cx="14" cy="7.5" r=".7"/><circle cx="17" cy="11" r=".7"/></svg>
         </button>
         <div id="theme-menu" class="tool-dropdown" hidden>
           <button type="button" data-theme-option="frost">Frost</button>
-          <button type="button" data-theme-option="aurora">Aurora</button>
-          <button type="button" data-theme-option="miami">Miami</button>
+          <button type="button" data-theme-option="voxel">CashCraft</button>
         </div>
       </div>
       <div id="game-minimized-controls" class="game-minimized-controls" hidden>
@@ -163,7 +172,7 @@
               <li><strong>Mine</strong> (hold): break blocks. <strong>Build</strong>: place the selected block. <strong>Jump</strong>: jump.</li>
               <li><strong>Block selection</strong>: scroll the mouse wheel, or drag up or down on the right edge of the screen on touch devices.</li>
               <li><strong>Rewards</strong>: mining MINA ore pays MINA-linked CashTokens. Redstone, gold and lapis ores pay separate token categories when the operator configures them.</li>
-              <li><strong>Crafting</strong> (top-left button): opens Send with 2 MINA prefilled to the crafting address. Crafting also returns a different CashToken category; the amount is shown in the Send panel.</li>
+              <li><strong>Crafting</strong> (top-left button): opens Send with 10 MINA prefilled. Review the transfer and crafting terms before approving.</li>
             </ul>
           </details>
         </div>
@@ -274,6 +283,7 @@
           <div>
             <label for="category">Token category ID</label>
             <div class="category-field">
+              <span id="category-icon" class="token-icon category-input-icon" aria-hidden="true" hidden>◆</span>
               <input
                 id="category"
                 placeholder="64-character category ID"
@@ -350,6 +360,7 @@
             <label for="receive-category">Token category ID</label>
             <div class="receive-category-field">
             <button id="edit-receive-category" class="edit-field" type="button" aria-label="Edit token category" aria-controls="receive-category"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4-.8L20 7l-3-3L5 16zm10-13 3 3"/></svg></button>
+            <span id="receive-category-icon" class="token-icon category-input-icon" aria-hidden="true" hidden>◆</span>
             <input
               id="receive-category"
               placeholder="64-character category ID"
@@ -357,7 +368,7 @@
               spellcheck="false"
               readonly
             >
-            <span id="receive-pusd" class="receive-token" hidden><span id="receive-pusd-logo" aria-hidden="true">◆</span> ParyonUSD</span>
+            <span id="receive-pusd" class="receive-token" hidden>ParyonUSD</span>
             </div>
             <span class="fine">Mainnet defaults to ParyonUSD (PUSD); you can enter another category.</span>
           </div>
@@ -603,11 +614,14 @@
       <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen; gamepad *" allowfullscreen></iframe>
       <nav id="game-wallet-actions" class="game-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
       <div id="game-controls-left" class="game-controls game-controls-left" aria-label="CashCraft crafting">
-        <button id="game-crafting" type="button" aria-label="Craft: send 2 MINA to get CashTokens back" title="Craft: send 2 MINA to get CashTokens back" hidden>
+        <button id="game-crafting" type="button" aria-label="Open crafting with 10 MINA" title="Open crafting with 10 MINA" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
         </button>
       </div>
       <div id="game-controls-right" class="game-controls game-controls-right" aria-label="CashCraft controls">
+        <button id="game-guide-open" type="button" aria-label="Open wizard guide" title="Open wizard guide" aria-controls="game-guide">
+          <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true"><path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/><path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/><path fill="#f0c7ae" d="M13 18h10v8H13z"/><path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/><path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/><path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/><path fill="#ffe887" d="M3 21h4v3H3z"/></svg>
+        </button>
         <button id="game-invite" type="button" aria-label="Invite to CashCraft" title="Invite to CashCraft" aria-haspopup="dialog" aria-controls="invite-dialog">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>
         </button>
@@ -621,19 +635,28 @@
       </div>
       <dialog id="game-guide" class="game-guide" aria-labelledby="game-guide-title">
         <div class="notifications-heading">
-          <strong id="game-guide-title">🧙 Wizard's CashCraft guide</strong>
+          <strong id="game-guide-title"><img class="game-wizard-art" src="/wizard.svg" alt=""> Wizard's CashCraft guide</strong>
           <button id="game-guide-close" class="small-button" type="button" aria-label="Close guide">×</button>
         </div>
-        <p>Explore and mine 10 naturally generated green MINA ore blocks online to earn 1 MINA and unlock the faster green MINA pickaxe, even without a wallet.</p>
+        <div class="browser-wallet-actions"><button id="game-guide-wallet" class="small-button" type="button">Connect wallet</button><button id="game-guide-done" class="small-button" type="button">Play</button></div>
+        <p>Explore and mine 10 naturally generated green MINA ore blocks online to earn 1 MINA. Connect a wallet to receive it and equip the faster green MINA pickaxe.</p>
         <p>Set up a token-aware wallet to receive your earned MINA. Your mining progress and unclaimed rewards stay with this browser. A new wallet is also queued 1 welcome MINA. Rewards depend on the payout service.</p>
         <p>Clearing this browser's site data will lose access to unclaimed rewards.</p>
         <p id="game-guide-progress" role="status" aria-live="polite"></p>
-        <p>The gem reopens this guide and your wallet. Invite shares the game; Ranking shows mining rewards; fullscreen expands the game; sound toggles audio. Craft prepares a transfer of 2 MINA for CashTokens in another category.</p>
+        <p>The wizard reopens this guide. The gem opens your wallet and notifications. Invite shares the game; Ranking shows mining rewards; fullscreen expands the game; sound toggles audio. Craft prepares a transfer of 10 MINA.</p>
         <p>Use WASD to move, space to jump, left click to mine and right click to build. On mobile, use the joystick and the jump, mine and build buttons. Scroll to choose blocks.</p>
-        <div class="browser-wallet-actions">
-          <button id="game-guide-wallet" class="small-button" type="button">Connect wallet</button>
-          <button id="game-guide-done" class="small-button" type="button">Play</button>
-        </div>
+      </dialog>
+      <dialog id="mining-prompt" class="game-guide mining-prompt" aria-labelledby="mining-prompt-title">
+        <div class="notifications-heading"><strong id="mining-prompt-title">Your next step</strong><button id="mining-prompt-close" class="small-button" type="button" aria-label="Close">×</button></div>
+        <div class="browser-wallet-actions"><button id="mining-prompt-wallet" class="small-button" type="button">Connect wallet</button><button id="mining-prompt-later" class="small-button" type="button">Keep playing</button></div>
+        <div class="mining-art" aria-hidden="true"><img src="/mining-table.svg" alt=""><img src="/mina-gem.svg" alt=""></div>
+        <div class="crypto-mesh"><img src="/bitcoin-cash-official.svg" alt="Bitcoin Cash"><img src="/mina-gem.svg" alt="MINA"><span>BCH × MINA</span></div>
+        <p id="mining-prompt-message"></p>
+        <p>Mine 100 natural MINA ore blocks to earn 10 MINA for crafting. Rewards depend on the payout service.</p>
+        <button id="mining-prompt-craft" class="small-button" type="button" hidden>Open crafting table</button>
+        <p>MINA CashTokens are received in a Bitcoin Cash transaction. Connect or set up a wallet to claim them and use your green pickaxe.</p>
+        <p>Need BCH? <a href="https://sideshift.ai" target="_blank" rel="noopener noreferrer">SideShift.ai</a> is an independent swap service on mainnet. Check network, rates and fees.</p>
+        <div class="crypto-icons" aria-label="Bitcoin Cash, Bitcoin and Ethereum"><img src="/bitcoin-cash-official.svg" alt="Bitcoin Cash"><img src="/bitcoin-official.png" alt="Bitcoin"><img src="/ethereum-official.png" alt="Ethereum"></div>
       </dialog>
     </div>
   </dialog>
@@ -698,7 +721,7 @@
         <details class="wiki-term"><summary>NFT</summary><div class="wiki-term-popover">An NFT is a non-fungible token. It can carry application-defined data and a capability.</div></details>
         <details class="wiki-term"><summary>Covenant</summary><div class="wiki-term-popover">A covenant is a script that can place rules on how an output may be spent.</div></details>
         <details class="wiki-term"><summary>Ore rewards</summary><div class="wiki-term-popover">In CashCraft, mining ore can pay separate CashToken categories. Each ore type uses its own category, so check the category ID before you treat a token as MINA-linked.</div></details>
-        <details class="wiki-term"><summary>Crafting</summary><div class="wiki-term-popover">The crafting button opens Send with 2 MINA prefilled to the crafting address. Crafting returns a different token category, so check the category shown in the Send panel.</div></details>
+        <details class="wiki-term"><summary>Crafting</summary><div class="wiki-term-popover">The crafting button opens Send with 10 MINA prefilled. Review the transfer and crafting terms before approving.</div></details>
         <details class="wiki-term"><summary>BCMR</summary><div class="wiki-term-popover">BCMR describes token metadata such as names and icons. It does not prove a token is authentic.</div></details>
       </div>
       <p>A practical guide to Bitcoin Cash tokens. This overview is not a consensus implementation; consult the <a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer">CashTokens specification ↗</a> and its test vectors for normative rules.</p>
