@@ -14,4 +14,6 @@ test('browser chunks wait for the complete server snapshot before rendering or a
   assert.match(source, /if \(!chunk_is_ready\(chunk\) \|\| chunk->dirty\) continue;/);
   assert.match(source, /!target \|\| !chunk_is_ready\(target\)/);
   assert.match(source, /online_ready && chunk->sync_pending/);
+  assert.match(force, /syncing_chunk_count\(\) < MAX_SYNCING_CHUNKS/);
+  assert.match(force, /syncing_chunk_count\(\) >= MAX_SYNCING_CHUNKS/);
 });

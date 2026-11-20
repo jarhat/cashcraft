@@ -1451,7 +1451,7 @@
               var musicBlob = new Blob([musicBytes], { type: 'audio/mpeg' });
               music = new Audio(URL.createObjectURL(musicBlob));
               music.loop = true;
-              music.volume = 0.22;
+              music.volume = 0.30;
             }
             if (music.paused) await music.play();
             if (!enabled) {
@@ -1497,7 +1497,7 @@
             var rate = name === 'step' ? .88 : name === 'mine' ? .96 : .92;
             source.playbackRate.value = rate + Math.random() * (name === 'step' ? .2 : .1);
             var effectGain = context.createGain();
-            effectGain.gain.value = (name === 'step' ? .20 : .35) * (.9 + Math.random() * .2);
+            effectGain.gain.value = (name === 'step' ? .15 : .25) * (.9 + Math.random() * .2);
             source.connect(effectGain);
             effectGain.connect(context.destination);
             source.start();

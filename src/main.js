@@ -1431,7 +1431,23 @@ async function refreshBalances({ quiet = false } = {}) {
           ? sum + BigInt(utxo.token.amount || 0) : sum, 0n).toString();
         $('mina-balance').textContent = mina;
         $('notification-mina').textContent = mina;
-        minaPickaxe = BigInt(mina) >= 2n;
+        const addressMina = utxos.reduce((sum, utxo) => utxo.pathIndex === 0 &&
+          utxo.addressIndex === 0 && utxo.token &&
+          String(utxo.token.category).toLowerCase() === rewardCategory
+          ? sum + BigInt(utxo.token.amount || 0) : sum, 0n);
+        const rewardAddress = registeredRewardAddress;
+        let mined = 0;
+        if (rewardAddress && addressMina >= 3n) {
+          const response = await fetch(`${API_BASE_URL}/api/mina-mined?address=${encodeURIComponent(rewardAddress)}`, { cache: 'no-store' });
+          if (!response.ok) throw new Error('Mining reward history is unavailable.');
+          const result = await response.json();
+          if (!Number.isSafeInteger(result.mined) || result.mined < 0) throw new Error('Invalid mining reward history.');
+          mined = result.mined;
+        }
+        if (!walletReady || manager !== scanManager || registeredRewardAddress !== rewardAddress) {
+          throw new Error('Wallet or reward address changed during the balance scan.');
+        }
+        minaPickaxe = mined >= 3;
         updateGameRewardAddress(registeredRewardAddress);
         notifyTokenReceipts(utxos);
       }

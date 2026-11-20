@@ -74,6 +74,23 @@ class RewardTests(unittest.TestCase):
             self.assertEqual(client.get("/api/mina-ranking").status_code, 503)
             self.assertFalse(missing.exists())
 
+    def test_mined_count_only_includes_paid_rewards_for_the_address_and_category(self):
+        path = Path(self.tmp.name) / "netcraft.sqlite3"
+        address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE mining_rewards (cash_address TEXT, category TEXT, sent_at TEXT)")
+            db.executemany("INSERT INTO mining_rewards VALUES (?, ?, ?)", [
+                (address, "b" * 64, "now"), (address, "b" * 64, "now"),
+                (address, "b" * 64, None), (address, "a" * 64, "now"),
+                ("other", "b" * 64, "now"),
+            ])
+        client = TestClient(backend.app)
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path)):
+            self.assertEqual(client.get("/api/mina-mined", params={"address": address}).json(), {"mined": 2})
+            self.assertEqual(client.get("/api/mina-mined", params={"address": "invalid"}).status_code, 400)
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path) + "-missing"):
+            self.assertEqual(client.get("/api/mina-mined", params={"address": address}).status_code, 503)
+
     def test_craft_social_preview_uses_artwork_without_a_donation_qr(self):
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
         client = TestClient(backend.app)

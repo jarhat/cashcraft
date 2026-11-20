@@ -154,6 +154,7 @@ test('game audio starts ambience from a gesture and mutes both ambience and effe
   assert.equal($('sound-toggle').attributes['aria-label'], 'Disable sound');
   assert.equal(music.paused, false);
   assert.equal(music.loop, true);
+  assert.equal(music.volume, .30);
   assert.deepEqual(nodes, []);
   context.Module.playBlockSound(0);
   assert.equal(nodes.filter((node) => node === 'effect').length, 1);

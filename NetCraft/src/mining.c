@@ -10,6 +10,7 @@
 
 static double mining_started = 0;
 static double mining_swing_started = 0;
+static double next_swing_sound = 0;
 static bool has_pickaxe = false;
 static bool holding_mine_button = false;
 static int building_progress = 0;
@@ -28,6 +29,7 @@ int target_w = 0;
 
 extern void on_mine(void);
 extern void on_build(void);
+extern void on_mining_swing(void);
 extern int get_targeted_block(int *x, int *y, int *z, int *face);
 
 #ifdef __EMSCRIPTEN__
@@ -81,7 +83,12 @@ void mining_tick() {
             return;
         }
 
-        double hardness = is_hardness(target_w) * (has_pickaxe ? 0.5 : 1.0);
+        double now = glfwGetTime();
+        if (has_pickaxe && now >= next_swing_sound) {
+            on_mining_swing();
+            next_swing_sound = now + .18;
+        }
+        double hardness = is_hardness(target_w) * (has_pickaxe ? 0.25 : 1.0);
         double elapsed = glfwGetTime() - mining_started;
 
         // Block break indicator
@@ -101,6 +108,7 @@ void mining_start() {
     holding_mine_button = true;
     mining_started = glfwGetTime();
     mining_swing_started = mining_started;
+    next_swing_sound = mining_started;
 
     (void) get_targeted_block(&mining_x, &mining_y, &mining_z, &target_face);
 }

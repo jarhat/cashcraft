@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#define PICKAXE_MAX_VERTICES (16 * 16 * 6)
+#define PICKAXE_MAX_VERTICES (32 * 32 * 6)
 #define PICKAXE_VERTEX_COMPONENTS 5
 
 typedef struct {

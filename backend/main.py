@@ -1058,3 +1058,25 @@ def mina_ranking() -> dict:
         raise HTTPException(status_code=503, detail="Ranking unavailable.") from exc
     return {"players": [{"name": name, "rewards": count} for name, count in rows]}
 
+
+@app.get("/api/mina-mined")
+def mina_mined(address: str) -> dict:
+    try:
+        address, _, _ = validate_token_aware_cashaddr(address)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not NETCRAFT_DB_PATH:
+        raise HTTPException(status_code=503, detail="Mining rewards unavailable.")
+    try:
+        uri = Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+            count = db.execute(
+                "SELECT COUNT(*) FROM mining_rewards WHERE cash_address = ? "
+                "AND category = ? AND sent_at IS NOT NULL",
+                (address, BCH_REWARD_CATEGORY),
+            ).fetchone()[0]
+    except sqlite3.Error as exc:
+        logger.error("Could not read mining rewards: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Mining rewards unavailable.") from exc
+    return {"mined": count}
+

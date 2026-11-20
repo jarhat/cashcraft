@@ -7,6 +7,7 @@ static double now;
 static int target = 1;
 static int target_x_value;
 static int mined;
+static int swings;
 
 double glfwGetTime(void) { return now; }
 float is_hardness(int block) { return block == 2 ? INFINITY : 2.0f; }
@@ -17,6 +18,7 @@ int get_targeted_block(int *x, int *y, int *z, int *face) {
 }
 void on_mine(void) { mined++; }
 void on_build(void) {}
+void on_mining_swing(void) { swings++; }
 
 static void check_rate(double step) {
     now = 0;
@@ -82,19 +84,24 @@ int main(void) {
     mining_set_pickaxe(1);
     assert(mining_has_pickaxe());
     mining_start();
-    now = 200.99;
-    assert(fabs(mining_swing_elapsed() - .99) < .0001);
+    now = 200.2;
+    assert(fabs(mining_swing_elapsed() - .2) < .0001);
     mining_tick();
     assert(mined == 2);
-    now = 201;
+    assert(swings == 1);
+    now = 200.3;
+    mining_tick();
+    assert(swings == 1);
+    now = 200.5;
     mining_tick();
     assert(mined == 3);
+    assert(swings == 2);
     mining_set_pickaxe(0);
     assert(!mining_has_pickaxe());
-    now = 202.01;
+    now = 201.51;
     mining_tick();
     assert(mined == 3);
-    now = 203.01;
+    now = 202.51;
     mining_tick();
     assert(mined == 4);
     target = 2;

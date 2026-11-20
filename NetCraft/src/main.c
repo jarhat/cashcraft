@@ -676,6 +676,17 @@ static bool chunk_is_ready(const Chunk *chunk) {
 #endif
 }
 
+#ifdef __EMSCRIPTEN__
+static int syncing_chunk_count(void) {
+    int count = 0;
+    for (int i = 0; i < g->chunk_count; ++i) {
+        count += g->chunks[i].sync_pending != 0;
+    }
+    return count;
+}
+#define MAX_SYNCING_CHUNKS 8
+#endif
+
 typedef struct {
     int p;
     int q;
@@ -1770,7 +1781,8 @@ void force_chunks(Player *player) {
 
     for (int i = 0; i < candidate_count && created < MAX_NEW_CHUNKS_FRAME; ++i) {
         Chunk *chunk = find_chunk(candidates[i].p, candidates[i].q);
-        if (chunk && chunk->needs_resync && online_ready) {
+        if (chunk && chunk->needs_resync && online_ready &&
+            syncing_chunk_count() < MAX_SYNCING_CHUNKS) {
             chunk->needs_resync = 0;
             map_free(&chunk->map);
             map_free(&chunk->lights);
@@ -1816,6 +1828,10 @@ void force_chunks(Player *player) {
             g->chunk_count >= MAX_CHUNKS) {
             break;
         }
+#ifdef __EMSCRIPTEN__
+        if (g->mode == MODE_ONLINE && online_ready &&
+            syncing_chunk_count() >= MAX_SYNCING_CHUNKS) break;
+#endif
 
         chunk = g->chunks + g->chunk_count++;
         create_chunk(chunk, p, q);
@@ -2376,7 +2392,16 @@ static int crosshair_width, crosshair_height, crosshair_scale;
 static GLuint pickaxe_buffers[2];
 static int pickaxe_counts[2];
 
+void on_mining_swing(void) {
+#ifdef __EMSCRIPTEN__
+    if (g->mode != MODE_ONLINE || online_ready) {
+        EM_ASM(if (Module.playGameSound) Module.playGameSound('mine'););
+    }
+#endif
+}
+
 static void render_pickaxe(Attrib *attrib) {
+    if (!mining_has_pickaxe()) return;
     int mina = mining_has_pickaxe() ? 1 : 0;
     if (!pickaxe_buffers[mina]) {
         float vertices[PICKAXE_MAX_VERTICES * PICKAXE_VERTEX_COMPONENTS];

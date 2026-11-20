@@ -39,17 +39,17 @@ int main(void) {
         int height = i ? 844 : 720;
         PickaxePose rest = pickaxe_pose(width, height, false, 1);
         PickaxePose start = pickaxe_pose(width, height, true, 0);
-        PickaxePose forward = pickaxe_pose(width, height, true, .06);
-        PickaxePose back = pickaxe_pose(width, height, true, .18);
-        PickaxePose returned = pickaxe_pose(width, height, true, .24);
-        assert(near(rest.size, fminf(width, height) * .5f));
-        assert(near(rest.x + rest.size * .9375f, width));
+        PickaxePose forward = pickaxe_pose(width, height, true, .045);
+        PickaxePose back = pickaxe_pose(width, height, true, .135);
+        PickaxePose returned = pickaxe_pose(width, height, true, .18);
+        assert(near(rest.size, fminf(width * .4f, height * .65f)));
+        assert(near(rest.x, 0));
         assert(near(rest.y, 0));
         assert(near(rest.x, start.x) && near(rest.y, start.y));
         assert(near(returned.x, rest.x) && near(returned.y, rest.y));
         assert(near(forward.x, rest.x) && near(back.x, rest.x));
         assert(near(forward.y, rest.y) && near(back.y, rest.y));
-        assert(near(forward.angle, .13f) && near(back.angle, -.13f));
+        assert(near(forward.angle, .08f) && near(back.angle, -.08f));
         assert(near(returned.angle, 0));
     }
     return 0;

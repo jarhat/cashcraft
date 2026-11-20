@@ -21,17 +21,23 @@ test('MINA pickaxe follows the scanned fungible balance and clears on scan failu
   const updates = [];
   const context = {
     $, walletReady: true, manager: {}, refreshPromise: null,
-    registeredRewardAddress: 'address', minaPickaxe: false, rewardCategory: 'mina',
+    registeredRewardAddress: 'address', minaPickaxe: false, rewardCategory: 'mina', API_BASE_URL: '',
     deriveScanAddresses: () => [],
     scanWallet: async () => ({ addresses: [], utxos: context.nextUtxos }),
     renderBalances() {}, loadRewardCategory: async () => {}, notifyTokenReceipts() {},
     updateGameRewardAddress: () => updates.push(context.minaPickaxe),
+    fetch: async () => ({ ok: true, json: async () => ({ mined: context.mined }) }),
+    mined: 3,
   };
   runInNewContext(source.slice(start, end), context);
-  const token = (category, amount) => ({ satoshis: 1, token: { category, amount } });
+  const token = (category, amount, pathIndex = 0, addressIndex = 0) =>
+    ({ satoshis: 1, pathIndex, addressIndex, token: { category, amount } });
   for (const [utxos, expected] of [
     [[token('mina', 1), token('other', 100)], false],
-    [[token('MINA', 1), token('mina', 1)], true],
+    [[token('MINA', 1), token('mina', 1)], false],
+    [[token('MINA', 2), token('mina', 1)], true],
+    [[token('mina', 2), token('mina', 10, 1)], false],
+    [[token('mina', 2), token('mina', 10, 0, 1)], false],
     [[token('mina', 0)], false],
   ]) {
     context.nextUtxos = utxos;
@@ -39,6 +45,14 @@ test('MINA pickaxe follows the scanned fungible balance and clears on scan failu
     assert.equal(context.minaPickaxe, expected);
     assert.equal(updates.at(-1), expected);
   }
+  context.mined = 2;
+  context.nextUtxos = [token('mina', 3)];
+  await context.refreshBalances({ quiet: true });
+  assert.equal(context.minaPickaxe, false);
+  context.mined = 3;
+  context.fetch = async () => ({ ok: false });
+  await context.refreshBalances({ quiet: true });
+  assert.equal(context.minaPickaxe, false);
   context.minaPickaxe = true;
   context.scanWallet = async () => { throw new Error('scan failed'); };
   await assert.rejects(context.refreshBalances({ quiet: true }), /scan failed/);
