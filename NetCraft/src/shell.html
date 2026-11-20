@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>NetCraft</title>
+    <title>CashCraft</title>
     <style>
       body {
         font-family: arial;
@@ -12,12 +12,20 @@
         /* not scrollable, workaround https://github.com/satoshinm/NetCraft/issues/3 space = pages down */
         overflow: hidden;
       }
+      body > a, #spinner, #status, #progress, #output { display: none !important; }
+      #loading-screen { display: grid !important; position: fixed; inset: 0; z-index: 40; place-content: center; justify-items: center; gap: 18px; background: linear-gradient(#07151077, #071510bb), url('/craft-loading.webp') center / cover no-repeat #101e1b; color: #fff; font: 600 16px system-ui, sans-serif; text-align: center; text-shadow: 0 2px 6px #000; transition: opacity .3s ease, visibility 0s linear .3s; }
+      #loading-screen.is-ready { opacity: 0; visibility: hidden; pointer-events: none; }
+      #loading-screen[hidden] { display: none !important; }
+      .loading-circle { width: 48px; height: 48px; border: 5px solid #ffffff66; border-top-color: #fff; border-radius: 50%; animation: rotation .8s linear infinite; }
+      #loading-progress { width: min(240px, 70vw); height: 6px; accent-color: #8ce2a8; }
+      #loading-progress[hidden] { display: none; }
+      @media (prefers-reduced-motion: reduce) { .loading-circle { animation: none; } #loading-screen { transition: none; } }
 
       .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
       div.emscripten { text-align: center; }      
-      div.emscripten_border { border: 1px solid black; }
+      div.emscripten_border { border: 0; }
       /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
-      canvas.emscripten { border: 0px none; background-color: black; }
+      canvas.emscripten { border: 0px none; background-color: #101e1b; touch-action: none; user-select: none; -webkit-touch-callout: none; }
 
       #emscripten_logo {
         display: inline-block;
@@ -101,6 +109,45 @@
         font-family: 'Lucida Console', Monaco, monospace;
         outline: none;
       }
+      .mobile-controls { display: none; position: fixed; inset: 0; z-index: 20; pointer-events: none; -webkit-touch-callout: none; }
+      .mobile-controls button, .mobile-stick {
+        pointer-events: auto; touch-action: none; user-select: none;
+        background: rgba(15, 32, 38, .82); border: 1px solid #a8e4ff;
+        color: #e9f4ff; border-radius: 50%; box-shadow: 0 3px 8px #0006;
+      }
+      .mobile-stick { position: absolute; left: max(20px, env(safe-area-inset-left)); bottom: max(28px, env(safe-area-inset-bottom)); width: 150px; height: 150px; background: rgba(222,231,237,.6); }
+      .mobile-stick-icon { position: absolute; left: 22px; top: 22px; width: calc(100% - 44px); height: calc(100% - 44px); pointer-events: none; color: #2c3e48; opacity: .75; }
+      .mobile-stick::before { content: ""; position: absolute; inset: -12px; }
+      .block-scroll-strip { position: absolute; right: 0; top: 18%; height: 40%; width: 64px; pointer-events: auto; touch-action: none; user-select: none; background: rgba(15, 32, 38, .18); border-left: 1px dashed #a8e4ff88; }
+      .mobile-stick-knob { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px; border-radius: 50%; background: #617683; pointer-events: none; }
+      .mobile-controls button { position: absolute; width: 72px; height: 72px; font-size: 15px; }
+      #mobile-mine { right: 16px; bottom: 20px; width: 84px; height: 84px; }
+      #mobile-mine:active { transform: scale(.92) rotate(-8deg); }
+      #mobile-build { right: 112px; bottom: 20px; }
+      #mobile-jump { right: 22px; bottom: 116px; }
+      .mobile-controls svg, #sound-toggle svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      #mobile-mine svg { width: 36px; height: 36px; }
+      #sound-toggle { display: grid !important; place-items: center; position: fixed; right: 12px; top: 68px; z-index: 25; width: 48px; height: 48px; padding: 9px; border: 1px solid #a8e4ff; border-radius: 50%; background: rgba(15, 32, 38, .82); color: #e9f4ff; cursor: pointer; }
+      #sound-toggle[aria-pressed="true"] .sound-muted { display: none; }
+      #connection-status { display: block !important; position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 26; max-width: 90%; padding: 8px 12px; background: rgba(0,0,0,.8); color: white; text-align: center; }
+      #connection-status[hidden] { display: none !important; }
+      #game-error { display: block !important; position: fixed; top: 110px; left: 50%; transform: translateX(-50%); z-index: 41; width: min(90%, 600px); padding: 14px; background: #351c1c; color: white; font: 14px system-ui, sans-serif; text-align: center; overflow-wrap: anywhere; }
+      #game-error[hidden] { display: none !important; }
+      @media (any-pointer: coarse) { .mobile-controls { display: block !important; } }
+      @media (max-width: 420px) {
+        .mobile-controls button { width: 64px; height: 64px; }
+        #mobile-mine { width: 76px; height: 76px; }
+        #mobile-build { right: 104px; }
+        #mobile-jump { bottom: 108px; }
+      }
+      @media (max-height: 400px) {
+        .mobile-stick { width: 116px; height: 116px; }
+        .mobile-controls button { width: 56px; height: 56px; }
+        #mobile-mine { width: 64px; height: 64px; }
+        #mobile-build { right: 92px; }
+        #mobile-jump { bottom: 96px; }
+      }
+      .mobile-controls.touch-enabled { display: block !important; }
     </style>
   </head>
   <body>
@@ -1212,6 +1259,24 @@
     </div>
     <textarea id="output" rows="8"></textarea>
 
+    <div id="loading-screen" role="status" aria-live="polite">
+      <div class="loading-circle" aria-hidden="true"></div>
+      <span id="loading-message">Preparing your world...</span>
+      <progress id="loading-progress" aria-label="Game download progress" hidden></progress>
+    </div>
+    <div id="connection-status" role="status" hidden></div>
+    <div id="game-error" role="alert" hidden></div>
+    <button id="sound-toggle" type="button" aria-pressed="true" aria-label="Sound enabled" title="Sound enabled">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3zM16 8a6 6 0 0 1 0 8"/><path class="sound-muted" d="M17 3 3 21"/></svg>
+    </button>
+    <div class="mobile-controls" aria-label="Touch controls">
+      <div id="block-scroll-strip" class="block-scroll-strip" aria-label="Drag up or down to change block"></div>
+      <div id="mobile-stick" class="mobile-stick" aria-label="Move"><svg class="mobile-stick-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20M12 2l-3 3m3-3 3 3M12 22l-3-3m3 3 3-3M2 12l3-3m-3 3 3 3M22 12l-3-3m3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><div id="mobile-stick-knob" class="mobile-stick-knob"></div></div>
+      <button id="mobile-mine" type="button" aria-label="Mine" title="Hold to mine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21 15 8M3 9c4-5 12-8 18-3-5-1-8 1-11 5M3 9l2 2m14-5 2 2"/></svg></button>
+      <button id="mobile-build" type="button" aria-label="Build" title="Build"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4v10l-8 4-8-4V7zM4 7l8 4 8-4m-8 4v10"/></svg></button>
+      <button id="mobile-jump" type="button" aria-label="Jump" title="Jump"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6M5 21h14"/></svg></button>
+    </div>
+
     <script type='text/javascript'>
       var statusElement = document.getElementById('status');
       var progressElement = document.getElementById('progress');
@@ -1220,6 +1285,36 @@
       var Module = {
         preRun: [],
         postRun: [],
+        websocket: {},
+        connectionState: 'Server connection not started',
+        gameReady: false,
+        gameError: '',
+        setConnectionStatus: function(text, state) {
+          if (state) Module.connectionState = state;
+          var element = document.getElementById('connection-status');
+          element.textContent = text;
+          element.hidden = !text;
+          if (text) document.getElementById('loading-message').textContent = text;
+          Module.updateGameError();
+        },
+        updateGameError: function() {
+          var element = document.getElementById('game-error');
+          element.hidden = !Module.gameError;
+          if (Module.gameError) element.textContent = Module.gameError + ' ' + Module.connectionState + '.';
+        },
+        reportGameError: function(message) {
+          if (!Module.gameError) Module.gameError = message;
+          Module.updateGameError();
+        },
+        setGameReady: function() {
+          Module.gameReady = true;
+          var loading = document.getElementById('loading-screen');
+          loading.setAttribute('aria-hidden', 'true');
+          loading.classList.add('is-ready');
+        },
+        onAbort: function(reason) {
+          Module.reportGameError('Game stopped: ' + String(reason).slice(0, 200) + '. Reload the game.');
+        },
         print: (function() {
           var element = document.getElementById('output');
           if (element) element.value = ''; // clear browser cache
@@ -1248,32 +1343,39 @@
         canvas: (function() {
           var canvas = document.getElementById('canvas');
 
-          // As a default initial behavior, pop up an alert when webgl context is lost. To make your
-          // application robust, you may want to override this behavior before shipping!
-          // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
-          canvas.addEventListener("webglcontextlost", function(e) { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
+          canvas.addEventListener('webglcontextlost', function() {
+            Module.graphicsLost = true;
+            Module.reportGameError('Graphics context lost. Reload the game to restore rendering.');
+          }, false);
 
           return canvas;
         })(),
         setStatus: function(text) {
+          var loadingProgress = document.getElementById('loading-progress');
           if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
-          if (text === Module.setStatus.text) return;
+          if (text === Module.setStatus.last.text) return;
           var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
           var now = Date.now();
-          if (m && now - Date.now() < 30) return; // if this is a progress update, skip it if too soon
+          if (m && now - Module.setStatus.last.time < 30) return;
+          Module.setStatus.last = { time: now, text: text };
           if (m) {
             text = m[1];
             progressElement.value = parseInt(m[2])*100;
             progressElement.max = parseInt(m[4])*100;
             progressElement.hidden = false;
             spinnerElement.hidden = false;
+            loadingProgress.value = Number(m[2]);
+            loadingProgress.max = Number(m[4]);
+            loadingProgress.hidden = false;
           } else {
             progressElement.value = null;
             progressElement.max = null;
             progressElement.hidden = true;
+            loadingProgress.hidden = true;
             if (!text) spinnerElement.style.display = 'none';
           }
-          statusElement.innerHTML = text;
+          statusElement.textContent = text;
+          if (text) document.getElementById('loading-message').textContent = text;
         },
         totalDependencies: 0,
         monitorRunDependencies: function(left) {
@@ -1281,15 +1383,308 @@
           Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
         }
       };
-      Module.setStatus('Downloading...');
-      window.onerror = function(event) {
-        // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
-        Module.setStatus('Exception thrown, see JavaScript console');
-        spinnerElement.style.display = 'none';
-        Module.setStatus = function(text) {
-          if (text) Module.printErr('[post-exception status] ' + text);
+      (function() {
+        var pending;
+        var pendingPickaxe;
+        var ready = false;
+        function notifyUserGesture(event) {
+          if (event.isTrusted && !event.repeat && window.parent !== window) {
+            window.parent.postMessage({ type: 'netcraft-user-gesture' }, '*');
+          }
+        }
+        document.addEventListener('pointerdown', notifyUserGesture);
+        document.addEventListener('keydown', notifyUserGesture);
+        Module.applyPendingRewardAddress = function() {
+          ready = true;
+          if (pending !== undefined) {
+            Module.ccall('netcraft_set_reward_address', null, ['string'], [pending]);
+            pending = undefined;
+          }
+          if (pendingPickaxe !== undefined) {
+            Module.ccall('mining_set_pickaxe', null, ['number'], [pendingPickaxe ? 1 : 0]);
+            pendingPickaxe = undefined;
+          }
         };
+        window.addEventListener('message', function(event) {
+          if (event.source !== window.parent || !event.data ||
+              event.data.type !== 'netcraft-reward-address' || typeof event.data.address !== 'string') return;
+          pending = event.data.address;
+          pendingPickaxe = event.data.pickaxe === true;
+          if (ready) Module.applyPendingRewardAddress();
+        });
+      })();
+      Module.setStatus('Downloading...');
+      window.onerror = function(message) {
+        var stage = Module.gameReady ? 'Game error after rendering started' : 'Game renderer could not start';
+        Module.reportGameError(stage + ': ' + String(message).slice(0, 200) + '. Check the browser console and reload if needed.');
+        spinnerElement.style.display = 'none';
       };
+
+        document.addEventListener('contextmenu', function(event) { event.preventDefault(); });
+
+        (function() {
+          var context = null;
+          var enabled = true;
+          var buffers = {};
+          var button = document.getElementById('sound-toggle');
+          var loading = null;
+          var music = null;
+          async function unlock() {
+            if (!enabled) return;
+            var AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) throw new Error('Audio is not supported');
+            context = context || new AudioContext();
+            await context.resume();
+            if (!enabled) return;
+            if (context.state !== 'running') throw new Error('Audio requires a user gesture');
+            if (!Module.FS) return;
+            if (!loading) {
+              loading = Promise.all(['mine', 'build', 'step'].map(async function(name) {
+                var bytes = Module.FS.readFile('/sounds/' + name + '.wav');
+                buffers[name] = await context.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+              })).catch(function(error) { loading = null; throw error; });
+            }
+            await loading;
+            if (!enabled) return;
+            if (!music) {
+              var musicBytes = Module.FS.readFile('/sounds/forest-ambience.mp3');
+              var musicBlob = new Blob([musicBytes], { type: 'audio/mpeg' });
+              music = new Audio(URL.createObjectURL(musicBlob));
+              music.loop = true;
+              music.volume = 0.30;
+            }
+            if (music.paused) await music.play();
+            if (!enabled) {
+              music.pause();
+              return;
+            }
+            button.setAttribute('aria-label', 'Disable sound');
+            button.title = 'Disable sound';
+          }
+          function unlockOnGesture(event) {
+            if (!event.isTrusted || !enabled) return;
+            unlock().catch(function(error) {
+              console.error('Game audio could not start:', error);
+              button.setAttribute('aria-label', 'Sound unavailable; tap to retry');
+              button.title = 'Sound unavailable; tap to retry';
+            });
+          }
+          document.addEventListener('pointerdown', unlockOnGesture, true);
+          document.addEventListener('keydown', unlockOnGesture, true);
+          button.addEventListener('click', function() {
+            enabled = !enabled;
+            if (!enabled && music) music.pause();
+            button.setAttribute('aria-pressed', String(enabled));
+            var label = enabled ? 'Sound enabled; interact with the game to hear it' : 'Enable sound';
+            button.setAttribute('aria-label', label);
+            button.title = label;
+            if (enabled) {
+              unlock().catch(function(error) {
+                console.error('Game audio could not start:', error);
+                button.setAttribute('aria-label', 'Sound unavailable; tap to retry');
+                button.title = 'Sound unavailable; tap to retry';
+              });
+            }
+          });
+          Module.playGameSound = function(name) {
+            if (!enabled || !context || context.state !== 'running') return;
+            if (!buffers[name]) {
+              unlock().catch(function(error) { console.error('Game sound could not load:', error); });
+              return;
+            }
+            var source = context.createBufferSource();
+            source.buffer = buffers[name];
+            var rate = name === 'step' ? .88 : name === 'mine' ? .96 : .92;
+            source.playbackRate.value = rate + Math.random() * (name === 'step' ? .2 : .1);
+            var effectGain = context.createGain();
+            effectGain.gain.value = (name === 'step' ? .15 : .25) * (.9 + Math.random() * .2);
+            source.connect(effectGain);
+            effectGain.connect(context.destination);
+            source.start();
+          };
+          Module.playBlockSound = function(placed) { Module.playGameSound(placed ? 'build' : 'mine'); };
+        })();
+
+        (function() {
+          var controls = document.querySelector('.mobile-controls');
+          var stick = document.getElementById('mobile-stick');
+          var knob = document.getElementById('mobile-stick-knob');
+          var stickPointer = null;
+          var stickOrigin = null;
+          var stickTouch = false;
+          window.addEventListener('pointerdown', function(event) {
+            if (event.pointerType === 'touch') controls.classList.add('touch-enabled');
+          });
+          if (!window.PointerEvent) {
+            window.addEventListener('touchstart', function() { controls.classList.add('touch-enabled'); }, { passive: true });
+          }
+          function call(name, args) {
+            if (Module['_' + name]) Module.ccall(name, null, args.map(function() { return 'number'; }), args);
+          }
+          function move(event) {
+            var rect = stick.getBoundingClientRect();
+            var radius = rect.width / 2;
+            var x = (event.clientX - stickOrigin.x) / (rect.width / 2);
+            var z = (event.clientY - stickOrigin.y) / ((rect.height || rect.width) / 2);
+            var length = Math.hypot(x, z);
+            if (length > 1) { x /= length; z /= length; }
+            knob.style.transform = 'translate(' + (x * radius * .55) + 'px,' + (z * radius * .55) + 'px)';
+            if (length < .18) x = z = 0;
+            call('touch_set_move', [x, z]);
+          }
+          function releaseStick() {
+            stickPointer = null;
+            stickOrigin = null;
+            stickTouch = false;
+            stick.style.transform = '';
+            knob.style.transform = '';
+            call('touch_set_move', [0, 0]);
+          }
+          function capturePointer(element, pointerId) {
+            try {
+              element.setPointerCapture(pointerId);
+            } catch (error) {
+              if (error.name !== 'InvalidStateError' && error.name !== 'NotFoundError') throw error;
+              console.warn('Pointer capture unavailable; using window release events.', error.name);
+            }
+          }
+          function startStick(event) {
+            if (stickPointer !== null) return;
+            if (event.cancelable) event.preventDefault();
+            document.getElementById('canvas').focus({ preventScroll: true });
+            var rect = stick.getBoundingClientRect();
+            stickPointer = event.pointerId;
+            stickTouch = Boolean(event.touchFallback);
+            stickOrigin = { x: event.clientX, y: event.clientY };
+            stick.style.transform = 'translate(' + (event.clientX - rect.left - rect.width / 2) +
+              'px,' + (event.clientY - rect.top - (rect.height || rect.width) / 2) + 'px)';
+            if (!event.touchFallback) capturePointer(stick, event.pointerId);
+            move(event);
+          }
+          stick.addEventListener('pointerdown', function(event) {
+            if (event.pointerType !== 'touch') startStick(event);
+          });
+          window.addEventListener('pointermove', function(event) {
+            if (!stickTouch && event.pointerId === stickPointer) {
+              if (event.cancelable) event.preventDefault();
+              move(event);
+            }
+          }, { passive: false });
+          ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(type) {
+            stick.addEventListener(type, function(event) { if (!stickTouch && event.pointerId === stickPointer) releaseStick(); });
+          });
+          ['pointerup', 'pointercancel'].forEach(function(type) {
+            window.addEventListener(type, function(event) { if (!stickTouch && event.pointerId === stickPointer) releaseStick(); });
+          });
+          function hold(id, name) {
+            var button = document.getElementById(id);
+            var pointer = null;
+            var keyboardHeld = false;
+            function start(event) {
+              if (pointer !== null || keyboardHeld) return;
+              if (event.cancelable) event.preventDefault();
+              pointer = event.pointerId;
+              if (!event.touchFallback) capturePointer(button, pointer);
+              call(name, [1]);
+            }
+            button.addEventListener('pointerdown', start);
+            function release(event) {
+              if (event.pointerId !== pointer) return;
+              pointer = null;
+              call(name, [0]);
+            }
+            ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(type) {
+              button.addEventListener(type, release);
+            });
+            ['pointerup', 'pointercancel'].forEach(function(type) { window.addEventListener(type, release); });
+            button.addEventListener('keydown', function(event) {
+              if ((event.key === ' ' || event.key === 'Enter') && !keyboardHeld && pointer === null) {
+                event.preventDefault();
+                keyboardHeld = true;
+                call(name, [1]);
+              }
+            });
+            function releaseKeyboard() {
+              if (!keyboardHeld) return;
+              keyboardHeld = false;
+              call(name, [0]);
+            }
+            button.addEventListener('keyup', function(event) {
+              if (event.key === ' ' || event.key === 'Enter') {
+                event.preventDefault();
+                releaseKeyboard();
+              }
+            });
+            button.addEventListener('blur', releaseKeyboard);
+            window.addEventListener('blur', function() {
+              if (pointer !== null) release({ pointerId: pointer });
+              releaseKeyboard();
+            });
+            if (!window.PointerEvent) touchFallback(button, start, null, release);
+          }
+          function touchFallback(element, start, drag, end) {
+            [['touchstart', start], ['touchmove', drag], ['touchend', end], ['touchcancel', end]]
+              .forEach(function(binding) {
+                if (!binding[1]) return;
+                element.addEventListener(binding[0], function(event) {
+                  if (event.cancelable) event.preventDefault();
+                  for (var i = 0; i < event.changedTouches.length; i++) {
+                    var touch = event.changedTouches[i];
+                    binding[1]({ pointerId: touch.identifier, clientX: touch.clientX,
+                      clientY: touch.clientY, touchFallback: true });
+                  }
+                }, { passive: false });
+              });
+          }
+          touchFallback(stick, startStick,
+            function(event) { if (event.pointerId === stickPointer) move(event); },
+            function(event) { if (event.pointerId === stickPointer) releaseStick(); });
+          hold('mobile-mine', 'touch_set_mine');
+          hold('mobile-jump', 'touch_set_jump');
+          function tap(id, name) {
+            var button = document.getElementById(id);
+            function activate(event) {
+              if (event.cancelable) event.preventDefault();
+              call(name, []);
+            }
+            button.addEventListener('pointerdown', activate);
+            button.addEventListener('click', function(event) { if (event.detail === 0) activate(event); });
+            if (!window.PointerEvent) touchFallback(button, activate, null, null);
+          }
+          tap('mobile-build', 'touch_build');
+          var scrollStrip = document.getElementById('block-scroll-strip');
+          var scrollY = null;
+          var scrollRemainder = 0;
+          var SCROLL_STEP_PX = 28;
+          scrollStrip.addEventListener('touchstart', function(event) {
+            event.preventDefault();
+            scrollY = event.touches[0].clientY;
+            scrollRemainder = 0;
+          }, { passive: false });
+          scrollStrip.addEventListener('touchmove', function(event) {
+            event.preventDefault();
+            if (scrollY === null) return;
+            var y = event.touches[0].clientY;
+            scrollRemainder += scrollY - y;
+            scrollY = y;
+            var steps = Math.trunc(scrollRemainder / SCROLL_STEP_PX);
+            if (steps) {
+              scrollRemainder -= steps * SCROLL_STEP_PX;
+              call('touch_scroll_items', [steps]);
+            }
+          }, { passive: false });
+          ['touchend', 'touchcancel'].forEach(function(type) {
+            scrollStrip.addEventListener(type, function() { scrollY = null; });
+          });
+          ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function(type) {
+            controls.addEventListener(type, function(event) { event.stopPropagation(); }, { passive: true });
+          });
+          window.addEventListener('blur', function() {
+            releaseStick();
+            call('touch_set_mine', [0]);
+            call('touch_set_jump', [0]);
+          });
+        })();
     </script>
     {{{ SCRIPT }}}
   </body>

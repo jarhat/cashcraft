@@ -25,7 +25,7 @@
 
 static bool client_enabled = false;
 static bool running = 0;
-static int sd = 0;
+static int sd = -1;
 static int bytes_sent = 0;
 #ifndef __EMSCRIPTEN__
 static int bytes_received = 0;
@@ -34,6 +34,16 @@ static thrd_t recv_thread;
 #endif
 static char *queue = 0;
 static int qsize = 0;
+static bool position_sent = false;
+#ifdef __EMSCRIPTEN__
+static char pending[65536];
+static size_t pending_used = 0;
+extern void client_connection_failed(void);
+
+bool client_is_socket(int fd) {
+    return sd >= 0 && fd == sd;
+}
+#endif
 
 void client_enable() {
     client_enabled = true;
@@ -58,7 +68,6 @@ int client_sendall(int sd, char *data, int length) {
             return -1;
         }
         count += n;
-        length -= n;
         bytes_sent += n;
     }
     return 0;
@@ -70,7 +79,11 @@ void client_send(char *data) {
     }
     if (client_sendall(sd, data, strlen(data)) == -1) {
         perror("client_sendall");
+#ifdef __EMSCRIPTEN__
+        client_connection_failed();
+#else
         exit(1);
+#endif
     }
 }
 
@@ -103,9 +116,10 @@ void client_position(float x, float y, float z, float rx, float ry) {
         (pz - z) * (pz - z) +
         (prx - rx) * (prx - rx) +
         (pry - ry) * (pry - ry);
-    if (distance < 0.0001) {
+    if (position_sent && distance < 0.0001) {
         return;
     }
+    position_sent = true;
     px = x; py = y; pz = z; prx = rx; pry = ry;
     char buffer[1024];
     snprintf(buffer, 1024, "P,%.2f,%.2f,%.2f,%.2f,%.2f\n", x, y, z, rx, ry);
@@ -162,16 +176,29 @@ void client_talk(const char *text) {
 
 #ifdef __EMSCRIPTEN__
 void client_message(int fd, void *userData) {
+    if (!client_is_socket(fd)) return;
     char buf[16384];
-    int len = recv(fd, &buf, sizeof(buf), 0);
-
-    //fprintf(stderr, "read %d bytes\n", len);
-    if (len == -1) return;
-
-    buf[len] = 0;
-
-    void (*parse_buffer)(char *, int) = (void (*)(char *, int))userData;
-    parse_buffer(buf, len);
+    int len;
+    while ((len = recv(fd, buf, sizeof(buf), 0)) > 0) {
+        if (pending_used + (size_t)len >= sizeof(pending)) {
+            fprintf(stderr, "Server packet exceeds receive buffer\n");
+            client_connection_failed();
+            return;
+        }
+        memcpy(pending + pending_used, buf, (size_t)len);
+        pending_used += (size_t)len;
+        size_t complete = pending_used;
+        while (complete && pending[complete - 1] != '\n') complete--;
+        if (!complete) continue;
+        char next = pending[complete];
+        pending[complete] = '\0';
+        void (*parse_buffer)(char *, int) = (void (*)(char *, int))userData;
+        parse_buffer(pending, (int)complete);
+        if (!client_is_socket(fd)) return;
+        pending[complete] = next;
+        memmove(pending, pending + complete, pending_used - complete);
+        pending_used -= complete;
+    }
 }
 #else
 char *client_recv() {
@@ -240,7 +267,12 @@ void client_connect(char *hostname, int port) {
     struct sockaddr_in address;
     if ((host = gethostbyname(hostname)) == 0) {
         perror("gethostbyname");
+#ifdef __EMSCRIPTEN__
+        client_connection_failed();
+        return;
+#else
         exit(1);
+#endif
     }
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
@@ -252,7 +284,12 @@ void client_connect(char *hostname, int port) {
     address.sin_port = htons(port);
     if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("socket");
+#ifdef __EMSCRIPTEN__
+        client_connection_failed();
+        return;
+#else
         exit(1);
+#endif
     }
 #ifdef __EMSCRIPTEN__
     // Override the address passed to connect(), for WebSockets:
@@ -272,7 +309,6 @@ void client_connect(char *hostname, int port) {
             }
             const host = getString($0);
             const port = $1;
-            console.log('websocket inputs, host='+host+', port='+port);
             const ws = 'ws:' + String.fromCharCode(47) + String.fromCharCode(47); // to avoid //
             const wss = 'wss:' + String.fromCharCode(47) + String.fromCharCode(47);
             if (host === '-' || host.length === 0) {
@@ -286,9 +322,8 @@ void client_connect(char *hostname, int port) {
                 Module['websocket']['url'] = host;
             } else {
                 // hostname
-                Module['websocket']['url'] = ws + host + ':' + port + '/craftws';
+                Module['websocket']['url'] = (document.location.protocol === 'https:' ? wss : ws) + host + ':' + port + '/craftws';
             }
-            console.log('websocket url:', Module['websocket']['url']);
         }, hostname, port);
 #pragma clang diagnostic pop
 #endif
@@ -297,9 +332,13 @@ void client_connect(char *hostname, int port) {
 #ifdef __EMSCRIPTEN__
         // Websockets are async, so connect() always returns EINPROGRESS
         if (errno == EINPROGRESS) return;
-#endif
+        perror("connect");
+        client_connection_failed();
+        return;
+#else
         perror("connect");
         exit(1);
+#endif
     }
 }
 
@@ -308,9 +347,10 @@ void client_start() {
         return;
     }
     running = true;
+    position_sent = false;
+#ifndef __EMSCRIPTEN__
     queue = (char *)calloc(QUEUE_SIZE, sizeof(char));
     qsize = 0;
-#ifndef __EMSCRIPTEN__ // emscripten gets async message callbacks instead, no receiver thread
     mtx_init(&mutex, mtx_plain);
     if (thrd_create(&recv_thread, recv_worker, NULL) != thrd_success) {
         perror("thrd_create");
@@ -320,11 +360,20 @@ void client_start() {
 }
 
 void client_stop() {
+#ifndef __EMSCRIPTEN__
     if (!client_enabled) {
         return;
     }
+#endif
     running = false;
-    close(sd);
+    if (sd >= 0) {
+        int old_sd = sd;
+        sd = -1;
+        close(old_sd);
+    }
+#ifdef __EMSCRIPTEN__
+    pending_used = 0;
+#else
     // if (thrd_join(recv_thread, NULL) != thrd_success) {
     //     perror("thrd_join");
     //     exit(1);
@@ -332,6 +381,8 @@ void client_stop() {
     // mtx_destroy(&mutex);
     qsize = 0;
     free(queue);
+    queue = NULL;
+#endif
     // printf("Bytes Sent: %d, Bytes Received: %d\n",
     //     bytes_sent, bytes_received);
 }

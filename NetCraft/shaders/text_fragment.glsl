@@ -4,6 +4,7 @@ precision mediump float;
 
 uniform sampler2D sampler;
 uniform bool is_sign;
+uniform float opacity;
 
 varying vec2 fragment_uv;
 
@@ -15,7 +16,7 @@ void main() {
         }
     }
     else {
-        color.a = max(color.a, 0.4);
+        color.a = max(color.a, 0.4) * opacity;
     }
     gl_FragColor = color;
 }

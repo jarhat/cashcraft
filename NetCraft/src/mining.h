@@ -1,8 +1,11 @@
 int mining_get_target(int *x, int *y, int *z, int *face);
 bool is_mining(void);
+bool mining_has_pickaxe(void);
+double mining_swing_elapsed(void);
 void mining_stop(void);
 void mining_tick(void);
 void mining_start(void);
+void mining_set_pickaxe(int enabled);
 void building_stop(void);
 void building_tick(void);
 void building_start(void);

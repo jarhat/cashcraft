@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchChainStatus, setupChainTicker } from '../src/chain-ticker.js';
+import { fetchChainStatus, fetchMinaRewardsSent, fetchPayoutBalance, setupChainTicker } from '../src/chain-ticker.js';
 
 const status = {
   network: 'mainnet', blocks: 800000, headers: 800002,
@@ -16,7 +16,25 @@ test('chain status rejects malformed or unavailable node responses', async (t) =
   await assert.rejects(fetchChainStatus(), /Invalid blockchain status/);
 });
 
-test('chain ticker renders node data and replaces stale data on failure', async (t) => {
+test('MINA totals require a nonnegative integer string', async (t) => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ sent: '9007199254740993' }) });
+  assert.equal(await fetchMinaRewardsSent(), 9007199254740993n.toLocaleString());
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ sent: '-1' }) });
+  await assert.rejects(fetchMinaRewardsSent(), /Invalid MINA/);
+});
+
+test('payout balance preserves exact satoshis and rejects invalid values', async (t) => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ satoshis: '100000001' }) });
+  assert.equal(await fetchPayoutBalance(), '1.00000001 BCH');
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ satoshis: '-1' }) });
+  await assert.rejects(fetchPayoutBalance(), /Invalid payout balance/);
+});
+
+test('chain ticker renders node and payout data independently', async (t) => {
   const original = { fetch: globalThis.fetch, document: globalThis.document, setInterval: globalThis.setInterval };
   t.after(() => Object.assign(globalThis, original));
   class Element {
@@ -31,7 +49,7 @@ test('chain ticker renders node data and replaces stale data on failure', async 
     createElement: () => new Element(),
     addEventListener(_type, callback) { visibility = callback; },
   };
-  globalThis.fetch = async () => ({ ok: true, json: async () => status });
+  globalThis.fetch = async (url) => ({ ok: true, json: async () => url.includes('mina-rewards') ? { sent: '1234' } : url.includes('payout-balance') ? { satoshis: '120000000' } : status });
   globalThis.setInterval = (callback, delay) => { refresh = callback; interval = delay; };
   const container = new Element();
   setupChainTicker(container, { warn() {} });
@@ -42,13 +60,20 @@ test('chain ticker renders node data and replaces stale data on failure', async 
   assert.equal(first.children[2].children[1].title, status.best_block_hash);
   assert.equal(first.children[4].children[1].textContent, 'Syncing');
   assert.equal(first.children[5].children[0].textContent, 'Headers');
+  assert.equal(first.children[6].children[0].textContent, 'MINA rewards sent');
+  assert.equal(first.children[6].children[1].textContent, (1234).toLocaleString());
+  assert.equal(first.children[7].children[1].textContent, '1.20000000 BCH');
   assert.equal(duplicate.attributes['aria-hidden'], 'true');
   globalThis.fetch = async () => ({ ok: false, status: 503 });
   await refresh();
-  assert.equal(container.textContent, 'Blockchain status unavailable.');
+  assert.equal(container.children[0].children[0].children[0].children[1].textContent, 'Unavailable');
+  assert.equal(container.children[0].children[0].children[1].children[1].textContent, 'Unavailable');
   globalThis.document.hidden = false;
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ ...status, syncing: false, headers: status.blocks }) });
+  globalThis.fetch = async (url) => url.includes('mina-rewards')
+    ? { ok: false, status: 503 }
+    : { ok: true, json: async () => ({ ...status, syncing: false, headers: status.blocks }) };
   visibility();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(container.children[0].children[0].children[4].children[1].textContent, 'Synced');
+  assert.equal(container.children[0].children[0].children[5].children[1].textContent, 'Unavailable');
 });

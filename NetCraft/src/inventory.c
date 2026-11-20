@@ -7,7 +7,7 @@ void Inventory_reset(Inventory *m) {
 }
 
 int Inventory_collect(Inventory *m, int w) {
-    if(m->count[w] < 255) {
+    if(w > 0 && w < INVENTORY_COUNT_LEN && m->count[w] < UINT32_MAX) {
         m->count[w]++;
         return 1;
     } else {
@@ -16,7 +16,7 @@ int Inventory_collect(Inventory *m, int w) {
 }
 
 int Inventory_use(Inventory *m, int w) {
-    if(m->count[w]) {
+    if(w > 0 && w < INVENTORY_COUNT_LEN && m->count[w]) {
         m->count[w]--;
         return 1;
     } else {
@@ -24,6 +24,14 @@ int Inventory_use(Inventory *m, int w) {
     }
 }
 
-uint8_t Inventory_getCount(Inventory *m, int w) {
-    return m->count[w];
+uint32_t Inventory_getCount(Inventory *m, int w) {
+    return w > 0 && w < INVENTORY_COUNT_LEN ? m->count[w] : 0;
+}
+
+int Inventory_items(Inventory *m, int *items) {
+    int count = 0;
+    for (int w = 1; w < INVENTORY_COUNT_LEN; w++) {
+        if (m->count[w]) items[count++] = w;
+    }
+    return count;
 }

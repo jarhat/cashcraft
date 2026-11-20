@@ -69,24 +69,6 @@ static void maximize_canvas() {
 
 
 void on_window_size(GLFWwindow* window, int width, int height) {
-#ifdef __EMSCRIPTEN__
-    static int wasFullscreen = 0;
-
-    int isInFullscreen = EM_ASM_INT_V(return !!(document.fullscreenElement || document.mozFullScreenElement || document.webkitFullscreenElement || document.msFullscreenElement));
-    if (isInFullscreen && !wasFullscreen) {
-        printf("Successfully transitioned to fullscreen mode!\n");
-        wasFullscreen = isInFullscreen;
-
-        // Set canvas size to full screen, all the pixels
-        EM_ASM("Browser.setCanvasSize(screen.width, screen.height)");
-    }
-
-    if (wasFullscreen && !isInFullscreen) {
-        wasFullscreen = isInFullscreen;
-        maximize_canvas();
-    }
-#endif
-
     vr_update_viewport(width, height);
 }
 

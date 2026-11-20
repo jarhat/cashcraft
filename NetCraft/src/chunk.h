@@ -14,6 +14,10 @@ typedef struct {
     int faces;
     int sign_faces;
     int dirty;
+#ifdef __EMSCRIPTEN__
+    int needs_resync;
+    int sync_pending;
+#endif
     int miny;
     int maxy;
     GLuint buffer;
