@@ -68,10 +68,18 @@
           <path class="mesh-lines" />
         </svg>
       </div>
-      <div class="topbar-tools topbar-tools-left">
-        <button id="wiki-open" class="theme-toggle" type="button" aria-label="CashTokens wiki" aria-haspopup="dialog" aria-controls="wiki-dialog">
-          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-2-2-5-2-9-1v13c4-1 7-1 9 1m0-13c2-2 5-2 9-1v13c-4-1-7-1-9 1m0-13v13"/></svg>
-        </button>
+      <div id="topbar-tools-left" class="topbar-tools topbar-tools-left">
+        <div class="tool-menu">
+          <button id="language-toggle" class="theme-toggle" type="button" aria-label="Choose language" aria-expanded="false" aria-controls="language-menu">
+            <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 4 6 4 9s-1 6-4 9c-3-3-4-6-4-9s1-6 4-9Z"/></svg>
+          </button>
+          <div id="language-menu" class="tool-dropdown" hidden>
+            <button type="button" data-language-option="en" lang="en">English</button>
+            <button type="button" data-language-option="es" lang="es">Español</button>
+            <button type="button" data-language-option="fr" lang="fr">Français</button>
+            <button type="button" data-language-option="de" lang="de">Deutsch</button>
+          </div>
+        </div>
       </div>
       <nav id="quick-nav" class="quick-nav" aria-label="Wallet actions" data-wallet-panel hidden>
         <button id="top-send" class="quick-action" type="button" aria-controls="send-panel">
@@ -105,23 +113,15 @@
       </aside>
     </header>
 
-    <div class="game-toolbar">
-      <div class="tool-menu game-launcher">
+    <div id="game-toolbar" class="game-toolbar">
+      <button id="wiki-open" class="theme-toggle" type="button" aria-label="CashTokens wiki" aria-haspopup="dialog" aria-controls="wiki-dialog">
+        <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-2-2-5-2-9-1v13c4-1 7-1 9 1m0-13c2-2 5-2 9-1v13c-4-1-7-1-9 1m0-13v13"/></svg>
+      </button>
+      <div id="game-launcher" class="tool-menu game-launcher">
         <button id="games-toggle" class="theme-toggle" type="button" aria-label="Choose a game" aria-expanded="false" aria-controls="games-menu">🎲</button>
         <div id="games-menu" class="tool-dropdown" hidden>
           <button id="game-netcraft" type="button">⛏️ CashCraft</button>
           <button id="game-pk2" type="button" hidden>🐔 Pekka Kana 2</button>
-        </div>
-      </div>
-      <div class="tool-menu">
-        <button id="language-toggle" class="theme-toggle" type="button" aria-label="Choose language" aria-expanded="false" aria-controls="language-menu">
-          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 4 6 4 9s-1 6-4 9c-3-3-4-6-4-9s1-6 4-9Z"/></svg>
-        </button>
-        <div id="language-menu" class="tool-dropdown" hidden>
-          <button type="button" data-language-option="en" lang="en">English</button>
-          <button type="button" data-language-option="es" lang="es">Español</button>
-          <button type="button" data-language-option="fr" lang="fr">Français</button>
-          <button type="button" data-language-option="de" lang="de">Deutsch</button>
         </div>
       </div>
       <div id="game-minimized-controls" class="game-minimized-controls" hidden>
@@ -155,7 +155,7 @@
           <details class="wizard-game-help">
             <summary>Game controls, rewards and crafting</summary>
             <ul>
-              <li><strong>Dice button</strong>: choose a game. The language menu sits beside it.</li>
+              <li><strong>Dice button</strong>: choose a game.</li>
               <li><strong>Joystick (touch)</strong>: move; the four-way arrow shows the direction pad.</li>
               <li><strong>Mine</strong> (hold): break blocks. <strong>Build</strong>: place the selected block. <strong>Jump</strong>: jump.</li>
               <li><strong>Block selection</strong>: scroll the mouse wheel, or drag up or down on the right edge of the screen on touch devices.</li>
@@ -546,8 +546,8 @@
 
     <pre id="log" role="status"></pre>
     <p id="game-status" class="game-toast fine" role="status"></p>
-    <aside id="media-gallery" class="media-gallery" aria-label="Bitcoin Cash media" data-wallet-panel hidden>
-      <details id="media-gallery-disclosure">
+    <aside id="media-gallery" class="media-gallery" aria-label="Bitcoin Cash media">
+      <details id="media-gallery-disclosure" open>
       <summary class="media-gallery-heading">
         <div><p class="eyebrow">BCH COMMUNITY</p><h2>Explore the artwork</h2></div>
       </summary>
@@ -567,7 +567,7 @@
       </div>
       <p class="media-credit">Artwork from <a href="https://bch.now" target="_blank" rel="noopener noreferrer">bch.now ↗</a></p>
       </details>
-      <p class="swap-note">Have BTC? You can swap it for BCH with <a href="https://sideshift.ai" target="_blank" rel="noopener noreferrer">SideShift ↗</a>. This independent service uses mainnet; check the rate, fees and recipient address.</p>
+      <p class="swap-note" data-wallet-panel hidden>Have BTC? You can swap it for BCH with <a href="https://sideshift.ai" target="_blank" rel="noopener noreferrer">SideShift ↗</a>. This independent service uses mainnet; check the rate, fees and recipient address.</p>
     </aside>
     <div class="chain-decoration" aria-hidden="true">
       <svg class="chain-art" viewBox="0 0 640 160" fill="none">
