@@ -19,10 +19,63 @@ const slides = [
   ['your-shopping-your-permanent-record', '07ff61755c', 'Your Shopping, Your Permanent Record', 'Privacy', 'A woman pays by card at a supermarket checkout surrounded by security cameras.'],
 ];
 
+function setupMediaRails($) {
+  const rails = [$('media-rail-left'), $('media-rail-right')];
+  if (rails.some((rail) => !rail)) return;
+  const wide = window.matchMedia('(min-width: 1500px)');
+
+  function populate() {
+    if (!wide.matches || rails[0].childElementCount) return;
+    rails.forEach((rail, side) => {
+      const artwork = slides.filter((_, index) => index % 2 === side);
+      for (const repeat of [false, true]) {
+        const group = document.createElement('div');
+        group.className = 'media-rail-set';
+        if (repeat) group.setAttribute('aria-hidden', 'true');
+        for (const [slug, hash, name, , alt] of artwork) {
+          const link = document.createElement('a');
+          link.className = 'media-slide media-image';
+          link.href = `https://bch.now/media/${slug}`;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.title = name;
+          if (repeat) link.tabIndex = -1;
+          const image = document.createElement('img');
+          const fallback = document.createElement('span');
+          fallback.textContent = name;
+          fallback.hidden = true;
+          image.addEventListener('error', () => {
+            image.hidden = true;
+            fallback.hidden = false;
+          });
+          image.alt = alt;
+          image.width = image.height = 480;
+          image.loading = 'lazy';
+          image.decoding = 'async';
+          image.src = `${MEDIA_BASE}${slug}/${hash}/thumb.webp`;
+          link.append(image, fallback);
+          group.append(link);
+        }
+        rail.append(group);
+      }
+    });
+  }
+
+  const syncVisibility = () => {
+    for (const rail of rails) rail.classList.toggle('media-rail-paused', document.hidden);
+  };
+  document.addEventListener('visibilitychange', syncVisibility);
+  syncVisibility();
+  wide.addEventListener('change', populate);
+  populate();
+}
+
 export function setupMediaSlideshow($) {
   const gallery = $('media-gallery');
   const disclosure = $('media-gallery-disclosure');
-  const cards = [...$('media-strip').querySelectorAll('.media-slide')].map((card) => ({
+  const strip = $('media-strip');
+  setupMediaRails($);
+  const cards = [...strip.querySelectorAll('.media-slide')].map((card) => ({
     image: card.querySelector('img'),
     unavailable: card.querySelector('.media-unavailable'),
     link: card.querySelector('a'),
@@ -34,7 +87,7 @@ export function setupMediaSlideshow($) {
   let visible = !('IntersectionObserver' in window);
   if ('IntersectionObserver' in window) {
     const observer = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; });
-    observer.observe(gallery);
+    observer.observe(strip);
   }
 
   function show(card, slide) {

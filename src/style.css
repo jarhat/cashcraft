@@ -2487,6 +2487,35 @@ body.wallet-connected #transfer-section { grid-column: 1 / -1; }
 .cauldron-link img { width: 22px; height: 22px; vertical-align: middle; margin-right: 4px; }
 .swap-note a { color: var(--ice); }
 .media-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(10px, 1.618vw, 18px); }
+.media-rails { display: none; }
+@media (min-width: 1500px) {
+  body:not(.wallet-connected, .cashcraft-playing) .media-rails:has(.media-rail-set) { display: block; }
+  body:not(.wallet-connected, .cashcraft-playing) .media-strip:has(+ .media-rails .media-rail-set) { display: none; }
+  .media-rail {
+    position: fixed;
+    inset-block: 64px 64px;
+    width: clamp(128px, calc((100% - 1180px) / 2 - 24px), 240px);
+    max-height: 1000px;
+    overflow: hidden;
+  }
+  .media-rail-left { right: calc(50% + 606px); }
+  .media-rail-right { left: calc(50% + 606px); }
+  .media-rail-track { animation: media-rail-scroll 84s linear infinite; }
+  .media-rail-right .media-rail-track { animation-direction: reverse; }
+  .media-rail:hover .media-rail-track, .media-rail-paused { animation-play-state: paused; }
+  .media-rail-set { display: grid; gap: 12px; padding: 0 2px 12px; }
+  .media-rail .media-image { height: auto; aspect-ratio: 1; text-align: center; }
+  .media-rail:has(:focus-visible) { overflow-y: auto; scrollbar-width: thin; }
+  .media-rail:has(:focus-visible) .media-rail-track { animation: none; }
+  .media-rail:has(:focus-visible) .media-rail-set[aria-hidden="true"] { display: none; }
+  .media-rail a:focus-visible { outline-offset: -3px; }
+  @media (prefers-reduced-motion: reduce) {
+    .media-rail { overflow-y: auto; scrollbar-width: thin; }
+    .media-rail-track { animation: none; }
+    .media-rail-set[aria-hidden="true"] { display: none; }
+  }
+}
+@keyframes media-rail-scroll { to { transform: translateY(-50%); } }
 .media-slide { min-width: 0; }
 .media-image { height: auto; aspect-ratio: 1; }
 .media-caption { display: block; min-height: 76px; }
@@ -3137,10 +3166,10 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
   display: flex;
   gap: 4px;
   padding: 4px;
-  border: 1px solid #c0cbd2;
+  border: 1px solid #5bea9a;
   border-radius: 999px;
-  background: linear-gradient(160deg, #e1e9ee, #8897a3 48%, #4e616d 50%, #b4c3cd);
-  box-shadow: inset 0 1px #fff, 0 4px 14px #0008;
+  background: #080e0b;
+  box-shadow: 0 4px 14px #0008;
 }
 .game-toolbar > .game-controls-right {
   position: static;
@@ -3155,8 +3184,13 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
   min-width: 0;
   min-height: 0;
   padding: 0;
-  border-color: #d3dce598;
+  border-color: #329560;
+  background: #080e0b;
+  color: #82ffc0;
 }
+.game-controls-right button:hover,
+.game-controls-right button:active { background: #142b1e; color: #b7ffda; border-color: #82ffc0; }
+.game-controls-right button:focus-visible { outline-color: #b7ffda; }
 .game-controls-right button[hidden] { display: none; }
 .game-controls-right button svg, .game-controls-right button img { width: 56%; height: 56%; }
 #game-invite svg { width: 56%; height: 56%; }
