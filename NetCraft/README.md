@@ -255,9 +255,11 @@ python3 NetCraft/builder.py
 ```
 
 This requires Python 3 and a C compiler and creates `data/netcraft.db` for
-Compose. It adds a central sky park, dragon, green coin, four floating gardens,
-bridges, seven gold spheres and static water cascades above the normal generated terrain.
-The pillar is one block wide; double-tap jump to fly to the platform. To add
+Compose. It adds a sky island over 100 blocks across with layered cliffs, twin
+waterfalls and a raised green coin. Four railed wooden bridges lead to pavilion
+gardens and seven numbered amber sunstones. An original winged dragon circles
+above the park. The waterfalls are decorative, not simulated. Follow the
+one-block marker pillar and double-tap jump to fly up to the park. To add
 the donation QR, set `DONATION_ADDRESS` in `builder.py` to the desired address
 and install Python's `segno` package before building. The QR is omitted when
 the address is blank. Check it with a phone in the actual game before use;

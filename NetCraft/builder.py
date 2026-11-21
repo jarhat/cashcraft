@@ -13,15 +13,15 @@ Stop the server before running either command. --init-park creates a new
 database; --add-park requires an existing Rust-server world and preserves
 existing block, light and sign edits, skipping park blocks at those positions.
 Back up existing worlds before building.
-It requires a C compiler and the checked-in terrain sources so it can clear
-only blocks that actually exist in the server's generated terrain.
+It requires a C compiler and the checked-in terrain sources to check that
+the islands fit above generated terrain.
 
 Customize PARK_*, SKY_Y, TOWER_Z and the drawing functions in make_park().
 Coordinates are block coordinates, with (0, 0) at the player spawn. The
 central park connects to four floating garden islands by bridges. A single
-pillar supports the upper platform; double-tap the keyboard jump key to fly.
+pillar marks the route up; double-tap the keyboard jump key to fly.
 Set DONATION_ADDRESS below to add a block-built donation QR (requires segno).
-The seven gold spheres are decorative, not interactive. Block IDs match NetCraft/src/item.h;
+The seven amber sunstones are decorative, not interactive. Block IDs match NetCraft/src/item.h;
 the original shape helpers are also available. The natural world remains
 outside the tower.
 Always test changes in a new world and back up any world you want to keep.
@@ -71,20 +71,24 @@ COLOR_GREEN = 45
 COLOR_RED = 46
 COLOR_BLACK = 47
 
-# Platform and tower coordinates. Keep the platform below the 255-block limit.
-PARK_HALF_WIDTH = 28
-PARK_Z_MIN = -25
-PARK_Z_MAX = 28
-WORLD_HALF_WIDTH = 70
-WORLD_Z_MIN = -70
-WORLD_Z_MAX = 70
+PARK_HALF_WIDTH = 52
+PARK_HALF_LENGTH = 48
+GARDEN_DISTANCE = 92
+WORLD_HALF_WIDTH = 120
+WORLD_Z_MIN = -120
+WORLD_Z_MAX = 120
 SKY_Y = 180
 TOWER_Z = -12
 DONATION_ADDRESS = ""  # Set a Bitcoin Cash donation address before building the QR.
 DONATION_QR_Z = 24
-TREE_POSITIONS = [(-21, -11), (21, -11), (-21, 14), (21, 14)]
-SPHERE_POSITIONS = [(-58, -4), (-58, 4), (58, -4), (58, 4),
-                    (-5, -58), (5, -58), (-5, 58)]
+TREE_POSITIONS = [(-31, -21), (33, -19), (-20, 32), (18, 33),
+                  (-34, 12), (35, 13), (-17, -34), (19, -35)]
+SPHERE_POSITIONS = [(-92, -11), (-92, 11), (92, -11), (92, 11),
+                    (-11, -92), (11, -92), (11, 92)]
+ORB_HEIGHT = 10
+ORB_RADIUS = 6
+CLIFF_DEPTH = 62
+MAIN_WATER_DROP = 76
 
 OFFSETS = [
     (-0.5, -0.5, -0.5),
@@ -239,7 +243,7 @@ def get_client():
     return client
 
 def terrain_in_park():
-    """Use exactly the server's C generator, including trees and other plants."""
+    """Sample spawn and sky-park elevations with the server's C generator."""
     root = Path(__file__).resolve().parent
     sources = [root / "deps/noise/noise.c"]
     sources.extend(root / "src/worldgen" / name for name in (
@@ -264,16 +268,215 @@ def terrain_in_park():
             ctypes.c_int, ctypes.c_int, callback_type, ctypes.c_void_p,
         ]
         generator.create_world.restype = None
-        for p in range(-WORLD_HALF_WIDTH // 32, WORLD_HALF_WIDTH // 32 + 1):
+        for p in range((-WORLD_HALF_WIDTH) // 32, WORLD_HALF_WIDTH // 32 + 1):
             for q in range(WORLD_Z_MIN // 32, WORLD_Z_MAX // 32 + 1):
                 def collect(x, y, z, w, _):
                     if (x // 32 == p and z // 32 == q and
                             -WORLD_HALF_WIDTH <= x <= WORLD_HALF_WIDTH and
-                            WORLD_Z_MIN <= z <= WORLD_Z_MAX and w > 0):
+                            WORLD_Z_MIN <= z <= WORLD_Z_MAX and w > 0 and
+                            (x == z == 0 or y >= SKY_Y - MAIN_WATER_DROP)):
                         terrain[x, y, z] = w
                 callback = callback_type(collect)
                 generator.create_world(p, q, callback, None)
     return terrain
+
+
+def build_dragon(put, floor):
+    """Sculpt the park's original winged dragon from a curved, tapered body."""
+    def dot(point, radius, block):
+        x, y, z = point
+        for px, py, pz in sphere(x, y, z, radius, fill=True):
+            put(px, floor + py, pz, block)
+
+    def stroke(a, b, block, radius=1):
+        steps = max(abs(v - u) for u, v in zip(a, b))
+        for i in range(steps + 1):
+            point = tuple(round(u + (v - u) * i / max(steps, 1)) for u, v in zip(a, b))
+            dot(point, radius, block)
+
+    # The wings are voxelized triangular sails sharing spars at the shoulders.
+    for side in (-1, 1):
+        root = (-25, 38, -40)
+        elbow = (-18, 52, -40 + 22 * side)
+        tip = (10, 59, -40 + 49 * side)
+        scallop = (4, 49, -40 + 30 * side)
+        edge = (20, 47, -40 + 21 * side)
+        heel = (3, 35, -40 + 3 * side)
+        membrane = {}
+        for a, b, c in ((root, elbow, scallop), (elbow, tip, scallop),
+                        (root, scallop, edge), (root, edge, heel)):
+            ax, ay, az = a
+            bx, by, bz = b
+            cx, cy, cz = c
+            area = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz)
+            for x in range(min(ax, bx, cx), max(ax, bx, cx) + 1):
+                for z in range(min(az, bz, cz), max(az, bz, cz) + 1):
+                    u = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / area
+                    v = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / area
+                    w = 1 - u - v
+                    if min(u, v, w) >= -1e-9:
+                        membrane[x, z] = (round(u * ay + v * by + w * cy),
+                                          COLOR_CYAN if u + v < .65 else COLOR_GREEN)
+        for (x, z), (y, block) in membrane.items():
+            # Fill steps between adjacent columns so steep sails have no gaps.
+            bottom = min(membrane.get(p, (y, block))[0] for p in
+                         ((x, z), (x - 1, z), (x + 1, z), (x, z - 1), (x, z + 1)))
+            for layer in range(bottom, y + 1):
+                put(x, floor + layer, z, block)
+        for a, b in ((root, elbow), (elbow, tip), (root, scallop), (root, edge)):
+            stroke(a, b, COLOR_GREEN, 2)
+        dot(tip, 2, COLOR_GOLD)
+
+    # Sample a spline through the spine, then assign each voxel to its nearest
+    # sample so the light belly stays continuous where the segments overlap.
+    spine = [(-50, 47, -36, 6), (-33, 39, -40, 6), (-11, 34, -39, 6),
+             (12, 39, -28, 5), (35, 46, -32, 5), (50, 43, -49, 4),
+             (47, 33, -66, 3), (33, 30, -73, 2), (23, 35, -69, 2),
+             (24, 43, -62, 1)]
+    samples = []
+    for i, (b, c) in enumerate(zip(spine, spine[1:])):
+        a = spine[max(0, i - 1)]
+        d = spine[min(i + 2, len(spine) - 1)]
+        steps = max(abs(v - u) for u, v in zip(b, c))
+        for step in range(steps):
+            t = step / steps
+            samples.append(tuple(
+                round((2 * v + (-u + w) * t + (2*u - 5*v + 4*w - k) * t*t +
+                       (-u + 3*v - 3*w + k) * t*t*t) / 2)
+                for u, v, w, k in zip(a, b, c, d)
+            ))
+    samples.append(spine[-1])
+    body = {}
+    for x, y, z, radius in samples:
+        for p in sphere(x, y, z, radius, fill=True):
+            distance = sum((v - u) ** 2 for u, v in zip((x, y, z), p)) / radius**2
+            block = COLOR_WHITE if p[1] < y - radius * .55 else COLOR_GREEN
+            if block == COLOR_GREEN and (p[0] + p[1] // 2 + p[2]) % 7 == 0:
+                block = COLOR_CYAN
+            if p not in body or distance < body[p][0]:
+                body[p] = distance, block
+    for (x, y, z), (_, block) in body.items():
+        put(x, floor + y, z, block)
+    for x, y, z, radius in samples[3::5]:
+        stroke((x, y + radius - 1, z), (x + 2, y + radius + 1, z), COLOR_GOLD)
+    stroke((24, 43, -62), (19, 46, -60), COLOR_CYAN, 2)
+    stroke((24, 43, -62), (27, 47, -58), COLOR_CYAN, 2)
+
+    dot((-51, 47, -36), 7, COLOR_GREEN)
+    stroke((-54, 45, -36), (-62, 43, -36), COLOR_WHITE, 4)
+    stroke((-54, 47, -36), (-62, 46, -36), COLOR_GREEN, 4)
+    for side in (-1, 1):
+        z = -36 + 6 * side
+        dot((-53, 49, z), 2, COLOR_GOLD)
+        dot((-54, 49, z + side), 1, COLOR_BLACK)
+        stroke((-55, 51, z), (-49, 52, z), COLOR_GREEN, 2)
+        dot((-64, 47, -36 + 2 * side), 1, COLOR_BLACK)
+        stroke((-47, 51, -36 + 4 * side), (-44, 58, -36 + 7 * side), COLOR_GOLD, 2)
+        stroke((-44, 58, -36 + 7 * side), (-48, 62, -36 + 9 * side), COLOR_GOLD)
+        stroke((-44, 58, -36 + 7 * side), (-40, 61, -36 + 8 * side), COLOR_GOLD)
+        for x, y, lz in ((-28, 37, -40), (19, 40, -29)):
+            elbow = (x + 5, y - 6, lz + side * 7)
+            paw = (x + 2, y - 10, lz + side * 11)
+            stroke((x, y, lz), elbow, COLOR_GREEN, 3)
+            stroke(elbow, paw, COLOR_GREEN, 2)
+            for dz in (-2, 0, 2):
+                stroke(paw, (paw[0] - 3, paw[1] - 1, paw[2] + dz), COLOR_WHITE)
+
+def build_island(put, cx, cz, floor, rx, rz, depth):
+    """Build a scalloped grass shelf and layered rock tapering to a jagged tip."""
+    surface = set()
+    for dx in range(-rx - 3, rx + 4):
+        for dz in range(-rz - 3, rz + 4):
+            x, z = cx + dx, cz + dz
+            angle = math.atan2(dz, dx)
+            radius = math.hypot(dx / rx, dz / rz)
+            rim = 1 + .045 * math.sin(5 * angle) + .035 * math.cos(8 * angle)
+            if radius > rim:
+                continue
+            surface.add((x, z))
+            put(x, floor, z, GRASS)
+            rock = max(3, round(depth * (1 - radius / rim)**.75
+                                + 3 * math.sin(dx / 3) * math.cos(dz / 4)))
+            for dy in range(1, rock + 1):
+                stratum = (dy + x // 5 - z // 7) % 13
+                block = DIRT if dy <= 2 or stratum == 4 else COBBLE if stratum < 4 else STONE
+                put(x, floor - dy, z, block)
+    for x, z in sorted(surface):
+        for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            if (x + dx, z + dz) not in surface and (x * 7 + z * 11) % 5 == 0:
+                for dy in range(1, 5 + (x * 11 + z * 13) % 9):
+                    put(x + dx, floor - dy, z + dz, LEAVES)
+    return surface
+
+
+def build_waterfall(put, surface, terrain, cx, cz, floor, axis, side, offset, source, width, drop):
+    def at(distance, lane):
+        return ((cx + side * distance, cz + lane) if axis == "x"
+                else (cx + lane, cz + side * distance))
+
+    for lane in range(offset - width // 2, offset + width // 2 + 1):
+        distance = source + abs(lane - offset) // 2
+        while at(distance, lane) in surface:
+            x, z = at(distance, lane)
+            put(x, floor, z, WATER)
+            distance += 1
+        x, z = at(distance, lane)
+        end = drop - 2 * abs(lane - offset)
+        for dy in range(end + 1):
+            if terrain.get((x, floor - dy, z), EMPTY) not in (EMPTY, CLOUD):
+                break
+            put(x, floor - dy, z, WATER)
+
+
+def build_bridge(put, edits, main, garden, floor, axis, side):
+    def at(distance, offset):
+        return (side * distance, offset) if axis == "x" else (offset, side * distance)
+
+    def full_width(surface, distance):
+        return all(at(distance, offset) in surface for offset in range(-3, 4))
+
+    start = max(d for d in range(GARDEN_DISTANCE) if full_width(main, d)) - 2
+    end = next(d for d in range(start, GARDEN_DISTANCE) if full_width(garden, d)) + 2
+
+    def deck_y(d):
+        return floor - round(4 * math.sin(math.pi * (d - start) / (end - start)))
+
+    for d in range(start, end + 1):
+        y = deck_y(d)
+        rail_top = max(deck_y(max(start, d - 1)), y, deck_y(min(end, d + 1))) + 1
+        post = (d - start) % 5 == 0 or d == end
+        for offset in range(-3, 4):
+            x, z = at(d, offset)
+            put(x, y, z, PLANK)
+            # Cut headroom through islands and overhanging cliff foliage.
+            for clear_y in range(y + 1, max(floor, y + 2) + 1):
+                if (x, clear_y, z) in edits:
+                    put(x, clear_y, z, EMPTY)
+            if post:
+                put(x, y - 1, z, WOOD)
+            if abs(offset) == 3:
+                for rail_y in range(y + 1, rail_top + 1):
+                    put(x, rail_y, z, WOOD)
+                if post:
+                    put(x, y + 2, z, WOOD)
+                    put(x, y + 3, z, COLOR_GOLD)
+
+
+def build_sunstone(put, x, y, z, number):
+    # Amber facets and numbered bands of red inlays distinguish the seven orbs.
+    for bx, by, bz in sphere(x, y, z, ORB_RADIUS, fill=True):
+        band = abs(by - y) <= 1
+        block = BRICK if band else COLOR_GOLD
+        if by >= y + 3 and bx == x - 2 and bz in (z - 3, z - 2):
+            block = COLOR_WHITE
+        put(bx, by, bz, block)
+    for mark in range(number):
+        angle = math.tau * mark / number
+        mx = x + round((ORB_RADIUS - .1) * math.sin(angle))
+        mz = z + round((ORB_RADIUS - .1) * math.cos(angle))
+        for point in sphere(mx, y, mz, 1, fill=True):
+            put(*point, COLOR_RED)
+
 
 def make_park(terrain):
     """Return absolute block edits; the last drawing at a position wins."""
@@ -283,10 +486,8 @@ def make_park(terrain):
         raise ValueError("Could not find natural ground at the park spawn")
     base = max(ground)
     floor = SKY_Y
-    if not 31 <= base < floor - 4 or floor + 36 > 255:
+    if not 31 <= base < floor - CLIFF_DEPTH or floor + 63 > 255 or floor - MAIN_WATER_DROP < 1:
         raise ValueError("Tower and park do not fit between spawn and world height limit")
-    if any(y >= floor and w != CLOUD for (x, y, z), w in terrain.items()):
-        raise ValueError("Sky platform intersects natural terrain; raise SKY_Y")
     edits = {}
 
     def put(x, y, z, block):
@@ -299,33 +500,29 @@ def make_park(terrain):
         for position in cuboid(x1, x2, y1, y2, z1, z2):
             put(*position, block)
 
-    # A one-block pillar supports the underside of a floating hemisphere.
-    for y in range(base + 1, floor - 14):
-        put(0, y, TOWER_Z, CEMENT)
-    for x, y, z in sphere(0, floor, TOWER_Z, 15, fill=True):
-        if y < floor:
-            put(x, y, z, COBBLE if y < floor - 3 else DIRT)
+    def tree(tx, tz, height):
+        box(tx - 1, tx + 1, floor + 1, floor + height, tz - 1, tz + 1, WOOD)
+        for dx, dy, dz, radius in ((0, 0, 0, 5), (3, 2, 0, 4), (-3, -1, 2, 4),
+                                    (0, 4, -2, 4)):
+            for x, y, z in sphere(tx + dx, floor + height + dy, tz + dz, radius, fill=True):
+                put(x, y, z, LEAVES)
 
-    for x in range(-PARK_HALF_WIDTH, PARK_HALF_WIDTH + 1):
-        for z in range(PARK_Z_MIN, PARK_Z_MAX + 1):
-            path = abs(x) <= 3 or abs(z) <= 2
-            put(x, floor, z, CEMENT if path else GRASS)
-            if x in (-PARK_HALF_WIDTH, PARK_HALF_WIDTH) or z in (PARK_Z_MIN, PARK_Z_MAX):
-                put(x, floor + 1, z, COLOR_WHITE)
+    def garden_cover(surface):
+        for x, z in sorted(surface):
+            if edits[x, floor, z] == GRASS and (x, floor + 1, z) not in edits:
+                seed = (x * 17 + z * 31 + x * z * 3) % 61
+                if seed < 4:
+                    put(x, floor + 1, z, (YELLOW_FLOWER, RED_FLOWER, TALL_GRASS, TALL_GRASS)[seed])
 
-    # Four layered evergreen trees with trunks, ornaments and golden stars.
+    main = build_island(put, 0, 0, floor, PARK_HALF_WIDTH, PARK_HALF_LENGTH, CLIFF_DEPTH)
+    for x, z in sorted(main):
+        distance = x*x + (z - 8)**2
+        if abs(x) <= 3 or abs(z) <= 3 or 15**2 <= distance <= 19**2:
+            put(x, floor, z, CEMENT)
     for tx, tz in TREE_POSITIONS:
-        box(tx, tx, floor + 1, floor + 14, tz, tz, WOOD)
-        for dy in range(3, 15):
-            radius = max(0, (15 - dy) // 3)
-            for dx in range(-radius, radius + 1):
-                for dz in range(-radius, radius + 1):
-                    if abs(dx) + abs(dz) <= radius + 1 and (dx or dz):
-                        ornament = (abs(dx) + abs(dz) == radius and
-                                    (dx + dz + dy) % 4 == 0)
-                        put(tx + dx, floor + dy, tz + dz,
-                            COLOR_RED if ornament else LEAVES)
-        put(tx, floor + 15, tz, COLOR_GOLD)
+        tree(tx, tz, 10 + (tx + tz) % 4)
+    for x in (-28, 28):
+        build_waterfall(put, main, terrain, 0, 0, floor, "z", 1, x, 20, 7, MAIN_WATER_DROP)
 
     if DONATION_ADDRESS:
         try:
@@ -341,91 +538,61 @@ def make_park(terrain):
                 put(column - len(rows) // 2, floor + len(rows) - row,
                     DONATION_QR_Z, COLOR_BLACK if pixel else COLOR_WHITE)
 
-    # A gold-rimmed CashToken-inspired coin with a block-letter B.
-    cx, cz = 0, 12
-    for dx in range(-6, 7):
-        for dy in range(-6, 7):
+    # A layered plinth and a thick CashToken-inspired coin.
+    cz = 8
+    for dy, radius in ((1, 10), (2, 9), (3, 8)):
+        for point in circle_y(0, floor + dy, cz, radius, fill=True):
+            put(*point, COBBLE if dy == 2 else CEMENT)
+    for dx in range(-13, 14):
+        for dy in range(-13, 14):
             distance = dx * dx + dy * dy
-            if distance <= 36:
-                put(cx + dx, floor + 9 + dy, cz,
-                    COLOR_GOLD if distance >= 25 else COLOR_GREEN)
+            if distance <= 169:
+                box(dx, dx, floor + 16 + dy, floor + 16 + dy, cz - 2, cz + 2,
+                    COLOR_GOLD if distance >= 121 else COLOR_GREEN)
     letter = ("11110", "10001", "10001", "11110", "10001", "10001", "11110")
     for dy, pixels in enumerate(letter):
         for dx, pixel in enumerate(pixels):
             if pixel == "1":
-                put(cx - 2 + dx, floor + 12 - dy, cz - 1, COLOR_WHITE)
-    box(cx - 1, cx + 1, floor + 1, floor + 2, cz, cz, COBBLE)
+                for face in (-1, 1):
+                    x = face * (dx * 2 - 4)
+                    box(min(x, x + face), max(x, x + face),
+                        floor + 21 - 2*dy, floor + 22 - 2*dy, cz + 3*face, cz + 3*face,
+                        COLOR_WHITE)
 
-    # An original winged sky dragon, made of rounded segments and broad wings.
-    # Change the body curve, colors and wing sweep here to customize it.
-    for x in range(-22, 24):
-        y = floor + 25 + round(2 * math.sin(x / 7))
-        radius = 4 if x < 12 else 3
-        for point in sphere(x, y, 0, radius, fill=True):
-            put(*point, COLOR_GREEN)
-        put(x, y - radius + 1, 0, COLOR_WHITE)
-        if x % 4 == 0:
-            put(x, y + radius, 0, COLOR_GOLD)
-    box(-27, -21, floor + 23, floor + 29, -4, 4, COLOR_GREEN)
-    box(-31, -27, floor + 22, floor + 25, -3, 3, COLOR_GREEN)
-    for z in (-4, 4):
-        put(-26, floor + 27, z, COLOR_WHITE)
-        put(-27, floor + 27, z, COLOR_BLACK)
-        box(-23, -22, floor + 30, floor + 33, z, z, COLOR_GOLD)
-    for side in (-1, 1):
-        for x in range(-12, 14):
-            for distance in range(3, 19 - abs(x) // 2):
-                put(x, floor + 28 + distance // 4, side * distance,
-                    COLOR_GOLD if distance == 3 else COLOR_GREEN)
-    for x in range(24, 35):
-        put(x, floor + 24 - (x - 24) // 2, 0, COLOR_GREEN)
+    build_dragon(put, floor)
 
-    # Four floating gardens linked to the central park, inspired by the
-    # preview's green islands, waterfalls and small explorer structures.
     for axis, side in (("x", -1), ("x", 1), ("z", -1), ("z", 1)):
-        cx, cz = (side * 53, 0) if axis == "x" else (0, side * 53)
-        for dx in range(-11, 12):
-            for dz in range(-11, 12):
-                distance = dx * dx + dz * dz
-                if distance > 121:
-                    continue
-                put(cx + dx, floor, cz + dz, GRASS)
-                for depth in range(1, 6):
-                    if distance <= (11 - depth) ** 2:
-                        put(cx + dx, floor - depth, cz + dz,
-                            DIRT if depth < 3 else COBBLE)
-                if distance < 80 and (dx * 17 + dz * 13) % 29 == 0:
-                    put(cx + dx, floor + 1, cz + dz,
-                        (YELLOW_FLOWER, RED_FLOWER)[(dx + dz) % 2])
-        start = PARK_HALF_WIDTH if axis == "x" else (PARK_Z_MAX if side > 0 else -PARK_Z_MIN)
-        for distance in range(start, 44):
-            for offset in range(-2, 3):
-                x, z = (side * distance, offset) if axis == "x" else (offset, side * distance)
-                put(x, floor, z, PLANK)
-                put(x, floor + 1, z, EMPTY)
-                if abs(offset) == 2 and distance % 3 == 0:
-                    put(x, floor + 1, z, COLOR_WHITE)
-        # A small open pavilion and a tree keep the islands recognizable
-        # without turning the entire sky into dense geometry.
-        for dx in (-3, 3):
-            for dz in (-3, 3):
-                box(cx + dx, cx + dx, floor + 1, floor + 5, cz + dz, cz + dz, WOOD)
-        box(cx - 4, cx + 4, floor + 6, floor + 6, cz - 4, cz + 4, PLANK)
-        box(cx - 3, cx + 3, floor + 7, floor + 7, cz - 3, cz + 3, COLOR_RED)
-        put(cx, floor + 8, cz, COLOR_GOLD)
-        tx, tz = cx + 6, cz + 5
-        box(tx, tx, floor + 1, floor + 6, tz, tz, WOOD)
-        for dx in range(-2, 3):
-            for dz in range(-2, 3):
-                for dy in range(4, 8):
-                    if abs(dx) + abs(dz) + abs(dy - 5) <= 4 and (dx or dz):
-                        put(tx + dx, floor + dy, tz + dz, LEAVES)
-        # Water blocks form a static cascade; the game does not simulate flow.
-        wx, wz = (cx + side * 9, cz) if axis == "x" else (cx, cz + side * 9)
-        box(wx, wx, floor - 18, floor - 1, wz, wz, WATER)
-    for gx, gz in SPHERE_POSITIONS:
-        for point in sphere(gx, floor + 5, gz, 3, fill=True):
-            put(*point, COLOR_GOLD)
+        cx, cz = (side * GARDEN_DISTANCE, 0) if axis == "x" else (0, side * GARDEN_DISTANCE)
+        garden = build_island(put, cx, cz, floor, 21, 21, 33)
+        for x, z in sorted(garden):
+            if abs(z if axis == "x" else x) <= 3:
+                put(x, floor, z, CEMENT)
+        for dx in (-4, 4):
+            for dz in (-4, 4):
+                box(cx + dx, cx + dx, floor + 1, floor + 7, cz + dz, cz + dz, WOOD)
+        for dy in range(6):
+            radius = 6 - dy
+            box(cx - radius, cx + radius, floor + 8 + dy, floor + 8 + dy,
+                cz - radius, cz + radius, PLANK if dy == 0 else COLOR_RED)
+        put(cx, floor + 14, cz, COLOR_GOLD)
+        tx, tz = (cx + side * 14, cz - 4) if axis == "x" else (cx - 4, cz + side * 14)
+        tree(tx, tz, 9)
+        build_waterfall(put, garden, terrain, cx, cz, floor, axis, side, 8, 6, 5, 48)
+        build_bridge(put, edits, main, garden, floor, axis, side)
+        garden_cover(garden)
+    garden_cover(main)
+    for number, (x, z) in enumerate(SPHERE_POSITIONS, 1):
+        box(x - 3, x + 3, floor + 1, floor + 1, z - 3, z + 3, COBBLE)
+        box(x - 1, x + 1, floor + 2, floor + 3, z - 1, z + 1, CEMENT)
+        build_sunstone(put, x, floor + ORB_HEIGHT, z, number)
+
+    if any(pos in edits and block != CLOUD for pos, block in terrain.items()):
+        raise ValueError("Sky park intersects natural terrain; raise SKY_Y")
+    # Keep the original marker pillar separate from the island collision check.
+    for y in range(base + 1, floor):
+        if (0, y, TOWER_Z) in edits:
+            break
+        put(0, y, TOWER_Z, CEMENT)
     return edits
 
 def park_rows(edits):

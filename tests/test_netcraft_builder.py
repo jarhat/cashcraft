@@ -15,15 +15,13 @@ spec.loader.exec_module(builder)
 
 
 class PreviewWorldTests(unittest.TestCase):
-    def test_pillar_spheres_and_donation_qr(self):
+    def test_pillar_and_donation_qr(self):
         import segno
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
         with patch.object(builder, "DONATION_ADDRESS", address):
             edits = builder.make_park({(0, 40, 0): builder.GRASS})
         self.assertEqual(edits[0, 100, builder.TOWER_Z], builder.CEMENT)
         self.assertNotIn((1, 100, builder.TOWER_Z), edits)
-        for x, z in builder.SPHERE_POSITIONS:
-            self.assertEqual(edits[x, builder.SKY_Y + 5, z], builder.COLOR_GOLD)
         rows = list(segno.make(address, error="m", micro=False).matrix_iter(border=4))
         for row, pixels in enumerate(rows):
             for col, dark in enumerate(pixels):
@@ -32,15 +30,62 @@ class PreviewWorldTests(unittest.TestCase):
                     builder.COLOR_BLACK if dark else builder.COLOR_WHITE,
                 )
 
-    def test_expanded_islands_have_bridges_and_fit_world_bounds(self):
+    def test_islands_have_deep_cliffs_waterfalls_and_walkable_bridges(self):
         edits = builder.make_park({(0, 40, 0): builder.GRASS})
         floor = builder.SKY_Y
-        for x, z in ((53, 0), (-53, 0), (0, 53), (0, -53)):
-            self.assertEqual(edits[x, floor, z], builder.GRASS)
-            self.assertEqual(edits[x, floor + 8, z], builder.COLOR_GOLD)
-        for x, z in ((35, 0), (-35, 0), (0, 35), (0, -35)):
-            self.assertEqual(edits[x, floor, z], builder.PLANK)
+        self.assertIn(edits[0, floor - 60, 0], (builder.STONE, builder.COBBLE, builder.DIRT))
+        for side in (-1, 1):
+            streams = [(x, z) for (x, y, z), w in edits.items()
+                       if y == floor - 70 and w == builder.WATER and x * side > 0]
+            self.assertGreaterEqual(len(streams), 5)
+            for x, z in streams:
+                self.assertTrue(all(edits[x, y, z] == builder.WATER
+                                    for y in range(floor - 70, floor + 1)))
+        for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            deck = sorted((x * dx + z * dz, y) for (x, y, z), block in edits.items()
+                          if block == builder.PLANK and x * dz == z * dx
+                          and 40 <= x * dx + z * dz <= 80 and y <= floor)
+            self.assertGreaterEqual(len(deck), 16)
+            self.assertEqual(deck[0][1], floor)
+            self.assertEqual(deck[-1][1], floor)
+            self.assertLess(min(y for _, y in deck), floor)
+            for (d, y), (next_d, next_y) in zip(deck, deck[1:]):
+                self.assertEqual(next_d, d + 1)
+                self.assertLessEqual(abs(next_y - y), 1)
+                self.assertTrue(all(edits.get((d * dx, y + dy, d * dz), builder.EMPTY)
+                                    == builder.EMPTY for dy in (1, 2)))
+                self.assertEqual(edits[d * dx + 3 * dz, y + 1, d * dz + 3 * dx], builder.WOOD)
+            self.assertEqual(edits[dx * builder.GARDEN_DISTANCE, floor + 14,
+                                   dz * builder.GARDEN_DISTANCE], builder.COLOR_GOLD)
         self.assertTrue(all(1 <= y <= 255 for _, y, _ in edits))
+
+    def test_seven_large_sunstones_have_distinct_inlays(self):
+        edits = builder.make_park({(0, 40, 0): builder.GRASS})
+        self.assertEqual(len(set(builder.SPHERE_POSITIONS)), 7)
+        y = builder.SKY_Y + builder.ORB_HEIGHT
+        previous = 0
+        for x, z in builder.SPHERE_POSITIONS:
+            self.assertEqual(edits[x, y + 6, z], builder.COLOR_GOLD)
+            self.assertEqual(edits[x, y - 6, z], builder.COLOR_GOLD)
+            red = sum(edits.get((x + dx, y, z + dz)) == builder.COLOR_RED
+                      for dx in range(-7, 8) for dz in range(-7, 8))
+            self.assertGreater(red, previous)
+            previous = red
+
+    def test_dragon_is_a_single_large_sculpture(self):
+        dragon = set()
+        builder.build_dragon(lambda x, y, z, _: dragon.add((x, y, z)), builder.SKY_Y)
+        self.assertGreaterEqual(max(x for x, _, _ in dragon) - min(x for x, _, _ in dragon), 110)
+        self.assertGreaterEqual(max(z for _, _, z in dragon) - min(z for _, _, z in dragon), 95)
+        frontier = [dragon.pop()]
+        while frontier:
+            x, y, z = frontier.pop()
+            for pos in ((x - 1, y, z), (x + 1, y, z), (x, y - 1, z),
+                        (x, y + 1, z), (x, y, z - 1), (x, y, z + 1)):
+                if pos in dragon:
+                    dragon.remove(pos)
+                    frontier.append(pos)
+        self.assertFalse(dragon, f"{len(dragon)} detached dragon voxels")
 
     def test_default_command_creates_compose_world(self):
         with patch.object(sys, "argv", ["builder.py"]), \
