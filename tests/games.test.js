@@ -38,16 +38,18 @@ test('game buttons minimize and restore without unloading the active game', asyn
     return { ok: true, headers: { get: () => 'text/html' }, text: async () => '<html>game</html>' };
   };
   const documentListeners = {};
+  const toolbar = { after() {}, appendChild(child) { child.parentNode = this; } };
   let gameToolbarSelected = false;
   globalThis.document = {
     documentElement: { classList: { remove() {} } }, body: { classList: { toggle() {} } }, fullscreenElement: null,
-    querySelector(selector) { gameToolbarSelected = selector === '.game-toolbar'; return { after() {} }; },
+    querySelector(selector) { gameToolbarSelected = selector === '.game-toolbar'; return toolbar; },
     addEventListener(type, fn) { documentListeners[type] = fn; },
     async exitFullscreen() { this.fullscreenElement = null; documentListeners.fullscreenchange(); },
   };
   let address = 'bitcoincash:ztest';
   $('top-send').parentNode = $('quick-nav');
   $('top-receive').parentNode = $('quick-nav');
+  $('game-controls-right').parentNode = toolbar;
   $('game-ranking').parentNode = { insertBefore(child) { child.parentNode = this; } };
   setupGames($, { translate: (text) => text, getRewardAddress: () => address });
   assert.equal(gameToolbarSelected, true);
@@ -59,6 +61,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); documentListeners.fullscreenchange(); };
   await $('game-fullscreen').listeners.click();
   assert.equal(document.fullscreenElement, $('game-stage'));
+  assert.equal($('game-controls-right').parentNode, $('game-stage'));
   assert.equal($('top-send').parentNode, $('quick-nav'));
   const parent = { insertBefore(child) { child.parentNode = this; } };
   $('invite-dialog').parentNode = parent;
@@ -71,6 +74,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   assert.equal($('game-fullscreen')['aria-pressed'], 'true');
   await $('game-fullscreen').listeners.click();
   assert.equal(document.fullscreenElement, null);
+  assert.equal($('game-controls-right').parentNode, toolbar);
   assert.equal($('game-fullscreen')['aria-label'], 'Enter fullscreen');
   assert.equal($('game-fullscreen')['aria-pressed'], 'false');
   $('game-stage').requestFullscreen = async () => { throw new Error('denied'); };

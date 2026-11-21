@@ -16,6 +16,8 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   const sound = $('game-sound');
   const prompt = $('mining-prompt');
   const toolbar = document.querySelector('.game-toolbar');
+  const controls = $('game-controls-right');
+  const controlsHome = controls.parentNode || toolbar;
   const setPlayingUi = () => {
     const playing = dialog.open && !dialog.hidden;
     document.body.classList.toggle('cashcraft-playing', playing);
@@ -296,6 +298,8 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   $('ranking-close').addEventListener('click', () => $('ranking-dialog').close());
   document.addEventListener('fullscreenchange', () => {
     const active = document.fullscreenElement === stage;
+    const controlsHost = active ? stage : controlsHome;
+    if (controls.parentNode !== controlsHost) controlsHost.appendChild(controls);
     stage.classList.toggle('is-fullscreen', active);
     dialog.classList.toggle('is-fullscreen', active);
     setPlayingUi();

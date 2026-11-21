@@ -109,12 +109,15 @@
       </aside>
     </header>
 
+    <div class="game-panel">
     <div id="game-toolbar" class="game-toolbar">
       <button id="wiki-open" class="theme-toggle" type="button" aria-label="CashTokens wiki" aria-haspopup="dialog" aria-controls="wiki-dialog">
         <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-2-2-5-2-9-1v13c4-1 7-1 9 1m0-13c2-2 5-2 9-1v13c-4-1-7-1-9 1m0-13v13"/></svg>
       </button>
       <div id="game-launcher" class="tool-menu game-launcher">
-        <button id="games-toggle" class="theme-toggle" type="button" aria-label="Choose a game" aria-expanded="false" aria-controls="games-menu">🎲</button>
+        <button id="games-toggle" class="theme-toggle" type="button" aria-label="Choose a game" aria-expanded="false" aria-controls="games-menu">
+          <img src="/pickaxe.svg" alt="" width="24" height="24">
+        </button>
         <div id="games-menu" class="tool-dropdown" hidden>
           <button id="game-netcraft" type="button">⛏️ CashCraft</button>
           <button id="game-pk2" type="button" hidden>🐔 Pekka Kana 2</button>
@@ -131,6 +134,32 @@
           </button>
         </div>
       </div>
+      <div id="game-controls-right" class="game-controls game-controls-right" role="group" aria-label="CashCraft controls">
+        <button id="game-close" type="button" aria-label="Minimize CashCraft" title="Minimize CashCraft">−</button>
+        <button id="game-crafting" type="button" aria-label="Open crafting with 10 MINA" title="Open crafting with 10 MINA" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+        </button>
+        <button id="game-ranking" class="game-ranking-button" type="button" aria-label="Ranking" title="Ranking" aria-haspopup="dialog" aria-controls="ranking-dialog" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v3a4 4 0 0 1-8 0zm0 1H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4M12 11v5m-4 4h8m-7-4h6v4"/></svg>
+        </button>
+        <button id="game-invite" type="button" aria-label="Invite to CashCraft" title="Invite to CashCraft" aria-haspopup="dialog" aria-controls="invite-dialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>
+        </button>
+        <button id="game-sound" type="button" aria-label="Game sound" title="Game sound" aria-pressed="true" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="sound-waves" d="M16 9a5 5 0 0 1 0 6m2-8a7.25 7.25 0 0 1 0 10"/><path class="sound-muted" d="m16 10 4 4m0-4-4 4"/></svg>
+        </button>
+        <button id="game-notifications" type="button" aria-label="Wallet and notifications" title="Wallet and notifications" aria-haspopup="dialog" aria-controls="notifications-dialog">
+          <img src="/mina-gem.svg" alt="">
+          <span id="game-notification-indicator" class="visually-hidden" hidden>Unread wallet notification</span>
+        </button>
+        <button id="game-fullscreen" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/></svg>
+        </button>
+        <button id="game-guide-open" type="button" aria-label="Open wizard guide" title="Open wizard guide" aria-controls="game-guide">
+          <img src="/wizard.svg" alt="">
+        </button>
+      </div>
+    </div>
     </div>
 
       <div id="wizard-dialog" class="wizard-dialog" hidden>
@@ -573,9 +602,6 @@
   </main>
 
   <dialog id="game-dialog" class="notifications-dialog game-dialog" aria-label="CashCraft game">
-    <div class="notifications-heading">
-      <button id="game-close" class="small-button close-notifications" type="button" aria-label="Minimize CashCraft" title="Minimize CashCraft">−</button>
-    </div>
     <nav class="game-switcher" aria-label="Choose a game" hidden>
       <button id="switch-netcraft" class="small-button" type="button" aria-pressed="false">⛏️ CashCraft</button>
       <button id="switch-pk2" class="small-button" type="button" aria-pressed="false">🐔 Pekka Kana 2</button>
@@ -584,32 +610,6 @@
     <div id="game-stage" class="game-stage">
       <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="autoplay *; fullscreen; gamepad *" allowfullscreen></iframe>
       <nav id="game-wallet-actions" class="game-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
-      <div id="game-controls-right" class="game-controls game-controls-right" role="group" aria-label="CashCraft controls">
-        <button id="game-crafting" type="button" aria-label="Open crafting with 10 MINA" title="Open crafting with 10 MINA" hidden>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
-        </button>
-        <button id="game-ranking" class="game-ranking-button" type="button" aria-label="Ranking" title="Ranking" aria-haspopup="dialog" aria-controls="ranking-dialog" hidden>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v3a4 4 0 0 1-8 0zm0 1H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4M12 11v5m-4 4h8m-7-4h6v4"/></svg>
-        </button>
-        <button id="game-invite" type="button" aria-label="Invite to CashCraft" title="Invite to CashCraft" aria-haspopup="dialog" aria-controls="invite-dialog">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>
-        </button>
-        <button id="game-notifications" type="button" aria-label="Wallet and notifications" title="Wallet and notifications" aria-haspopup="dialog" aria-controls="notifications-dialog">
-          <img src="/mina-gem.svg" alt="">
-          <span id="game-notification-indicator" class="visually-hidden" hidden>Unread wallet notification</span>
-        </button>
-        <button id="game-fullscreen" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/></svg>
-        </button>
-        <button id="game-guide-open" type="button" aria-label="Open wizard guide" title="Open wizard guide" aria-controls="game-guide">
-          <img src="/wizard.svg" alt="">
-        </button>
-      </div>
-      <div class="game-controls game-sound-controls">
-        <button id="game-sound" type="button" aria-label="Game sound" title="Game sound" aria-pressed="true" hidden>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="sound-waves" d="M16 9a5 5 0 0 1 0 6m2-8a7.25 7.25 0 0 1 0 10"/><path class="sound-muted" d="m16 10 4 4m0-4-4 4"/></svg>
-        </button>
-      </div>
       <dialog id="game-guide" class="game-guide" aria-labelledby="game-guide-title">
         <div class="game-guide-body">
           <div class="notifications-heading">
