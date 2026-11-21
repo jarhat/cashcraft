@@ -7,7 +7,7 @@ use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{self, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const CHUNK_SIZE: i32 = 32;
 const MAX_CLIENTS: usize = 64;
@@ -23,6 +23,11 @@ const REDSTONE_ORE: i32 = 49;
 const GOLD_ORE: i32 = 70;
 const LAPIS_LAZULI_ORE: i32 = 73;
 const ANIMAL_TICK: Duration = Duration::from_secs(1);
+const DAY_LENGTH: u64 = 600;
+const PLAYER_LIVES: u8 = 10;
+const ATTACK_INTERVAL: u64 = 2;
+// Central sky park footprint from builder.py; lower terrain remains spawnable.
+const PARK_FLOOR: i32 = 180;
 type Blocks = HashMap<(i32, i32, i32), i32>;
 
 extern "C" {
@@ -82,6 +87,9 @@ struct Player {
     reward_address: Option<String>,
     guest_id: Option<String>,
     inventory: [u32; 256],
+    lives: u8,
+    last_attack_tick: Option<u64>,
+    last_pickaxe: Option<Instant>,
 }
 
 struct State {
@@ -93,6 +101,7 @@ struct State {
     next_animal_id: u32,
     animal_tick: u64,
     animal_cursor: usize,
+    night: Option<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -103,19 +112,21 @@ struct Animal {
     y: f64,
     z: f64,
     heading: u8,
+    pacified: bool,
 }
 
 impl Animal {
     fn message(&self) -> String {
         format!(
-            "M,{},{:.2},{:.2},{:.2},{},{}...{}\n",
+            "M,{},{:.2},{:.2},{:.2},{},{}...{},{}\n",
             self.id,
             self.x,
             self.y,
             self.z,
             self.heading,
             &self.txid[..6],
-            &self.txid[58..]
+            &self.txid[58..],
+            u8::from(self.pacified)
         )
     }
 }
@@ -281,11 +292,106 @@ fn animal_ground(
     Ok(None)
 }
 
+fn hit_animal(
+    server: &Server,
+    player_id: u32,
+    animal_id: u32,
+    seconds: u64,
+    now: Instant,
+) -> rusqlite::Result<()> {
+    if !is_night(seconds) {
+        return Ok(());
+    }
+    let mut terrain = server.terrain.lock().unwrap();
+    let mut state = server.state.lock().unwrap();
+    let Some(player) = state.players.get_mut(&player_id) else {
+        return Ok(());
+    };
+    if player.last_pickaxe.is_some_and(|last| now.duration_since(last) < Duration::from_millis(250)) {
+        return Ok(());
+    }
+    player.last_pickaxe = Some(now);
+    let [x, y, z, rx, ry] = player.position;
+    let Some(index) = state.animals.iter().position(|a| a.id == animal_id && !a.pacified) else {
+        return Ok(());
+    };
+    let animal = &state.animals[index];
+    let (ax, ay, az) = (animal.x, animal.y, animal.z);
+    let (vx, vy, vz) = (
+        (rx - std::f64::consts::FRAC_PI_2).cos() * ry.cos(),
+        ry.sin(),
+        (rx - std::f64::consts::FRAC_PI_2).sin() * ry.cos(),
+    );
+    let mut previous = None;
+    for step in 0..=128 {
+        let distance = f64::from(step) / 32.0;
+        let (px, py, pz) = (x + vx * distance, y + vy * distance, z + vz * distance);
+        let block = (px.round() as i32, py.round() as i32, pz.round() as i32);
+        if previous != Some(block) {
+            previous = Some(block);
+            let (bx, by, bz) = block;
+            let (p, q) = (chunked(bx), chunked(bz));
+            let edited: Option<i32> = state.db.query_row(
+                "SELECT w FROM block WHERE p=?1 AND q=?2 AND x=?3 AND y=?4 AND z=?5",
+                params![p, q, bx, by, bz],
+                |row| row.get(0),
+            ).optional()?;
+            let w = edited.unwrap_or_else(|| *terrain.chunk(p, q).get(&block).unwrap_or(&0));
+            if w > 0 {
+                break;
+            }
+        }
+        if (px - ax).abs() <= 0.8 && (pz - az).abs() <= 0.8 && py >= ay && py <= ay + 2.1 {
+            state.animals[index].pacified = true;
+            broadcast(&state, None, &state.animals[index].message());
+            return Ok(());
+        }
+    }
+    Ok(())
+}
+
+fn is_night(seconds: u64) -> bool {
+    let time = seconds % DAY_LENGTH;
+    time < DAY_LENGTH / 4 || time >= DAY_LENGTH * 85 / 100
+}
+
+fn is_sky_park(x: i32, y: i32, z: i32) -> bool {
+    (-28..=28).contains(&x) && (-25..=28).contains(&z) && y >= PARK_FLOOR
+}
+
+fn world_time() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 fn update_animals(server: &Server) -> rusqlite::Result<()> {
+    update_animals_at(server, world_time())
+}
+
+fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
     let mut terrain = server.terrain.lock().unwrap();
     let mut state = server.state.lock().unwrap();
     state.animal_tick += 1;
     let tick = state.animal_tick;
+    let night = is_night(seconds);
+    if state.night != Some(night) {
+        state.night = Some(night);
+        broadcast(&state, None, &format!("ZN,{}\n", u8::from(night)));
+        if !night {
+            let mut updates = String::new();
+            for animal in &mut state.animals {
+                if animal.pacified {
+                    animal.pacified = false;
+                    updates.push_str(&animal.message());
+                }
+            }
+            if !updates.is_empty() {
+                broadcast(&state, None, &updates);
+            }
+        }
+    }
     let positions: Vec<_> = state
         .players
         .values()
@@ -316,14 +422,49 @@ fn update_animals(server: &Server) -> rusqlite::Result<()> {
     let State { animals, db, .. } = &mut *state;
     for offset in 0..count.min(ANIMAL_MOVES_PER_TICK) {
         let animal = &mut animals[(start + offset) % count];
-        if (tick + u64::from(animal.id)) % 5 == 0 {
-            animal.heading = ((tick / 5 + u64::from(animal.id) * 3) % 4) as u8;
-        }
-        let (dx, dz) = match animal.heading {
-            0 => (0.0, -0.6),
-            1 => (0.6, 0.0),
-            2 => (0.0, 0.6),
-            _ => (-0.6, 0.0),
+        let target = if night && !animal.pacified {
+            positions
+                .iter()
+                .filter(|p| (p[1] - animal.y).abs() <= 2.5)
+                .min_by(|a, b| {
+                    let distance =
+                        |p: &&[f64; 5]| (p[0] - animal.x).powi(2) + (p[2] - animal.z).powi(2);
+                    distance(a).total_cmp(&distance(b))
+                })
+        } else {
+            None
+        };
+        let (dx, dz) = if let Some(target) = target {
+            let dx = target[0] - animal.x;
+            let dz = target[2] - animal.z;
+            let distance = dx.hypot(dz);
+            if distance > 0.001 {
+                animal.heading = if dx.abs() > dz.abs() {
+                    if dx > 0.0 {
+                        1
+                    } else {
+                        3
+                    }
+                } else if dz > 0.0 {
+                    2
+                } else {
+                    0
+                };
+                let step = (distance - 1.0).clamp(0.0, 0.9) / distance;
+                (dx * step, dz * step)
+            } else {
+                (0.0, 0.0)
+            }
+        } else {
+            if (tick + u64::from(animal.id)) % 5 == 0 {
+                animal.heading = ((tick / 5 + u64::from(animal.id) * 3) % 4) as u8;
+            }
+            match animal.heading {
+                0 => (0.0, -0.6),
+                1 => (0.6, 0.0),
+                2 => (0.0, 0.6),
+                _ => (-0.6, 0.0),
+            }
         };
         let (x, z) = (animal.x + dx, animal.z + dz);
         if let Some(y) = animal_ground(&mut terrain, db, x.round() as i32, z.round() as i32)? {
@@ -341,6 +482,59 @@ fn update_animals(server: &Server) -> rusqlite::Result<()> {
         updates.push_str(&animal.message());
     }
     state.animal_cursor = (start + ANIMAL_MOVES_PER_TICK) % count.max(1);
+
+    if night {
+        let attackers: Vec<_> = state.animals.iter()
+            .filter(|a| !a.pacified)
+            .map(|a| (a.x, a.y, a.z))
+            .collect();
+        let mut hit = Vec::new();
+        for (id, player) in &state.players {
+            let [x, y, z, _, _] = player.position;
+            if y <= 1.0
+                || player
+                    .last_attack_tick
+                    .is_some_and(|last| tick - last < ATTACK_INTERVAL)
+            {
+                continue;
+            }
+            for &(ax, ay, az) in &attackers {
+                if (x - ax).hypot(z - az) <= 1.3
+                    && (y - ay).abs() <= 2.5
+                    && animal_ground(
+                        &mut terrain,
+                        &state.db,
+                        ((x + ax) / 2.0).round() as i32,
+                        ((z + az) / 2.0).round() as i32,
+                    )?
+                    .is_some_and(|ground| f64::from(ground) <= ay.floor())
+                {
+                    hit.push(*id);
+                    break;
+                }
+            }
+        }
+        let mut respawned = Vec::new();
+        for id in hit {
+            if let Some(player) = state.players.get_mut(&id) {
+                player.last_attack_tick = Some(tick);
+                player.lives -= 1;
+                if player.lives == 0 {
+                    player.position = [0.0; 5];
+                    player.lives = PLAYER_LIVES;
+                    send(
+                        player,
+                        b"ZD\nT,You lost all your lives and respawned.\n".to_vec(),
+                    );
+                    respawned.push(id);
+                }
+                send(player, format!("HP,{}\n", player.lives));
+            }
+        }
+        for id in respawned {
+            broadcast(&state, Some(id), &format!("P,{id},0,0,0,0,0\n"));
+        }
+    }
 
     if !positions.is_empty() && state.animals.len() < state.mempool.len() {
         let active: HashSet<_> = state.animals.iter().map(|a| a.txid.as_str()).collect();
@@ -361,6 +555,9 @@ fn update_animals(server: &Server) -> rusqlite::Result<()> {
             let x = (p[0] + angle.cos() * radius).round() as i32;
             let z = (p[2] + angle.sin() * radius).round() as i32;
             if let Some(y) = animal_ground(&mut terrain, &state.db, x, z)? {
+                if is_sky_park(x, y, z) {
+                    continue;
+                }
                 state.next_animal_id = state.next_animal_id.wrapping_add(1).max(1);
                 let animal = Animal {
                     id,
@@ -369,6 +566,7 @@ fn update_animals(server: &Server) -> rusqlite::Result<()> {
                     y: f64::from(y) + 0.5,
                     z: f64::from(z),
                     heading: (id % 4) as u8,
+                    pacified: false,
                 };
                 updates.push_str(&animal.message());
                 state.animals.push(animal);
@@ -1003,6 +1201,11 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
     let command = parts.next().unwrap_or("");
     let args: Vec<&str> = parts.collect();
     match command {
+        "ZA" if args.len() == 1 => {
+            if let Ok(animal_id) = args[0].parse() {
+                hit_animal(server, id, animal_id, world_time(), Instant::now())?;
+            }
+        }
         "V" if args == ["1"] => {}
         "V" => return Ok(false),
         "C" if args.len() == 2 || args.len() == 3 => {
@@ -1202,14 +1405,14 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
             reward_address: None,
             guest_id: None,
             inventory: [0; 256],
+            lives: PLAYER_LIVES,
+            last_attack_tick: None,
+            last_pickaxe: None,
         };
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+        let now = world_time();
         send(
             &player,
-            format!("U,{id},0,0,0,0,0\nE,{now},600\nT,Welcome to NetCraft!\n").into_bytes(),
+            format!("U,{id},0,0,0,0,0\nE,{now},{DAY_LENGTH}\nZN,{}\nHP,{PLAYER_LIVES}\nT,Welcome to NetCraft!\n", u8::from(is_night(now))).into_bytes(),
         );
         let mut snapshot = String::new();
         for (other_id, other) in &state.players {
@@ -1331,6 +1534,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             next_animal_id: 1,
             animal_tick: 0,
             animal_cursor: 0,
+            night: None,
         }),
         terrain: Mutex::new(Terrain::default()),
         reward_categories,
@@ -1394,6 +1598,7 @@ mod tests {
                 next_animal_id: 1,
                 animal_tick: 0,
                 animal_cursor: 0,
+                night: Some(false),
             }),
             terrain: Mutex::new(Terrain::default()),
             reward_categories: HashMap::from([(MINA_ORE, "b".repeat(64))]),
@@ -1416,6 +1621,9 @@ mod tests {
                     reward_address: None,
                     guest_id: None,
                     inventory: [0; 256],
+                    lives: PLAYER_LIVES,
+                    last_attack_tick: None,
+                    last_pickaxe: None,
                 },
             );
             receivers.push(receiver);
@@ -2047,13 +2255,14 @@ mod tests {
                 y: 200.5,
                 z: 0.0,
                 heading: 0,
+                pacified: false,
             });
         }
-        update_animals(&server).unwrap();
+        update_animals_at(&server, 300).unwrap();
         let one = String::from_utf8(first.try_recv().unwrap()).unwrap();
         let two = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert_eq!(one, two);
-        assert!(one.contains("M,7,0.00,200.50,-0.60,0,012345...abcdef\n"));
+        assert!(one.contains("M,7,0.00,200.50,-0.60,0,012345...abcdef,0\n"));
         {
             let mut state = server.state.lock().unwrap();
             for player in state.players.values_mut() {
@@ -2061,7 +2270,7 @@ mod tests {
             }
             state.mempool.clear();
         }
-        update_animals(&server).unwrap();
+        update_animals_at(&server, 300).unwrap();
         assert_eq!(first.try_recv().unwrap(), b"MD,7\n");
         assert_eq!(second.try_recv().unwrap(), b"MD,7\n");
     }
@@ -2098,16 +2307,48 @@ mod tests {
             state
                 .db
                 .execute(
-                    "INSERT INTO block (p,q,x,y,z,w) VALUES (-1,-1,-8,200,-8,6)",
+                    "INSERT INTO block (p,q,x,y,z,w) VALUES (-1,-1,-8,179,-8,6)",
                     [],
                 )
                 .unwrap();
         }
-        update_animals(&server).unwrap();
+        update_animals_at(&server, 300).unwrap();
         let one = String::from_utf8(first.try_recv().unwrap()).unwrap();
         let two = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert_eq!(one, two);
-        assert_eq!(one, "M,1,-8.00,200.50,-8.00,1,aaaaaa...aaaaaa\n");
+        assert_eq!(one, "M,1,-8.00,179.50,-8.00,1,aaaaaa...aaaaaa,0\n");
+    }
+
+    #[test]
+    fn animals_do_not_spawn_on_the_central_sky_park() {
+        let (server, _, _) = setup();
+        {
+            let mut state = server.state.lock().unwrap();
+            state.mempool.insert("a".repeat(64));
+            for player in state.players.values_mut() {
+                player.position = [0.0, 182.0, 0.0, 0.0, 0.0];
+            }
+            state.db.execute(
+                "INSERT INTO block (p,q,x,y,z,w) VALUES (-1,-1,-8,180,-8,6)", [],
+            ).unwrap();
+        }
+        update_animals_at(&server, 300).unwrap();
+        assert!(server.state.lock().unwrap().animals.is_empty());
+        {
+            let mut state = server.state.lock().unwrap();
+            for player in state.players.values_mut() {
+                player.position[0] = 37.0;
+            }
+            state.db.execute(
+                "INSERT INTO block (p,q,x,y,z,w) VALUES (1,-1,44,180,-10,6)", [],
+            ).unwrap();
+        }
+        update_animals_at(&server, 300).unwrap();
+        assert_eq!(server.state.lock().unwrap().animals.len(), 1);
+        assert!(is_sky_park(-28, 180, -25));
+        assert!(is_sky_park(28, 200, 28));
+        assert!(!is_sky_park(29, 180, 0));
+        assert!(!is_sky_park(0, 179, 0));
     }
 
     #[test]
@@ -2126,14 +2367,14 @@ mod tests {
                 state
                     .db
                     .execute(
-                        "INSERT OR REPLACE INTO block (p,q,x,y,z,w) VALUES (?1,?2,?3,200,?4,6)",
+                        "INSERT OR REPLACE INTO block (p,q,x,y,z,w) VALUES (?1,?2,?3,179,?4,6)",
                         params![chunked(x), chunked(z), x, z],
                     )
                     .unwrap();
             }
             state.mempool = txids.clone();
         }
-        update_animals(&server).unwrap();
+        update_animals_at(&server, 300).unwrap();
         let mut state = server.state.lock().unwrap();
         assert_eq!(state.animals.len(), 12);
         assert_eq!(
@@ -2147,10 +2388,169 @@ mod tests {
         let survivor = state.animals[0].clone();
         state.mempool.retain(|txid| *txid == survivor.txid);
         drop(state);
-        update_animals(&server).unwrap();
+        update_animals_at(&server, 300).unwrap();
         let state = server.state.lock().unwrap();
         assert_eq!(state.animals.len(), 1);
         assert_eq!(state.animals[0].id, survivor.id);
+    }
+
+    #[test]
+    fn night_boundaries_match_the_daylight_cycle() {
+        assert!(is_night(0));
+        assert!(is_night(149));
+        assert!(!is_night(150));
+        assert!(!is_night(509));
+        assert!(is_night(510));
+        assert!(is_night(600));
+    }
+
+    #[test]
+    fn pickaxe_restores_a_zombie_until_the_next_night() {
+        let (server, first, _) = setup();
+        {
+            let mut state = server.state.lock().unwrap();
+            state.players.get_mut(&1).unwrap().position = [0.0, 202.0, 0.0, 0.0, 0.0];
+            state.players.get_mut(&2).unwrap().position = [20.0, 202.0, 0.0, 0.0, 0.0];
+            let txid = "a".repeat(64);
+            state.mempool.insert(txid.clone());
+            state.animals.push(Animal { id: 1, txid, x: 0.0, y: 200.5, z: -3.0, heading: 0, pacified: false });
+            state.db.execute("INSERT INTO block (p,q,x,y,z,w) VALUES (0,-1,0,202,-1,6)", []).unwrap();
+            for z in -2..=1 {
+                state.db.execute(
+                    "INSERT INTO block (p,q,x,y,z,w) VALUES (0,?1,0,200,?2,6)",
+                    params![chunked(z), z],
+                ).unwrap();
+            }
+        }
+        let now = Instant::now();
+        hit_animal(&server, 1, 1, 0, now).unwrap();
+        assert!(!server.state.lock().unwrap().animals[0].pacified);
+        {
+            let state = server.state.lock().unwrap();
+            state.db.execute("DELETE FROM block WHERE x=0 AND y=202 AND z=-1", []).unwrap();
+        }
+        hit_animal(&server, 1, 1, 150, now + Duration::from_secs(1)).unwrap();
+        assert!(!server.state.lock().unwrap().animals[0].pacified);
+        hit_animal(&server, 1, 1, 0, now + Duration::from_secs(2)).unwrap();
+        assert!(server.state.lock().unwrap().animals[0].pacified);
+        assert!(first.try_iter().any(|m| String::from_utf8(m).unwrap().contains(",aaaaaa...aaaaaa,1\n")));
+        {
+            let mut state = server.state.lock().unwrap();
+            state.animals[0].z = -0.8;
+            state.animals[0].heading = 2;
+        }
+        update_animals_at(&server, 0).unwrap();
+        assert_eq!(server.state.lock().unwrap().players[&1].lives, 10);
+        update_animals_at(&server, 150).unwrap();
+        assert!(!server.state.lock().unwrap().animals[0].pacified);
+        update_animals_at(&server, 510).unwrap();
+        assert_eq!(server.state.lock().unwrap().players[&1].lives, 9);
+    }
+
+    #[test]
+    fn zombies_chase_attack_and_respawn_only_the_target() {
+        let (server, first, second) = setup();
+        {
+            let mut state = server.state.lock().unwrap();
+            state.players.get_mut(&1).unwrap().position = [3.0, 202.0, 0.0, 0.0, 0.0];
+            state.players.get_mut(&2).unwrap().position = [20.0, 202.0, 0.0, 0.0, 0.0];
+            for x in 0..=3 {
+                state
+                    .db
+                    .execute(
+                        "INSERT INTO block (p,q,x,y,z,w) VALUES (0,0,?1,200,0,6)",
+                        [x],
+                    )
+                    .unwrap();
+            }
+            let txid = "a".repeat(64);
+            state.mempool.insert(txid.clone());
+            state.animals.push(Animal {
+                id: 1,
+                txid,
+                x: 0.0,
+                y: 200.5,
+                z: 0.0,
+                heading: 0,
+                pacified: false,
+            });
+        }
+        update_animals_at(&server, 0).unwrap();
+        assert!(server.state.lock().unwrap().animals[0].x > 0.0);
+        assert_eq!(server.state.lock().unwrap().players[&1].lives, 10);
+        update_animals_at(&server, 1).unwrap();
+        assert_eq!(server.state.lock().unwrap().players[&1].lives, 9);
+        update_animals_at(&server, 2).unwrap();
+        assert_eq!(server.state.lock().unwrap().players[&1].lives, 9);
+        assert_eq!(server.state.lock().unwrap().players[&2].lives, 10);
+        {
+            let mut state = server.state.lock().unwrap();
+            state.players.get_mut(&1).unwrap().lives = 1;
+        }
+        update_animals_at(&server, 3).unwrap();
+        let state = server.state.lock().unwrap();
+        assert_eq!(state.players[&1].lives, 10);
+        assert_eq!(state.players[&1].position, [0.0; 5]);
+        assert_eq!(state.players[&2].lives, 10);
+        drop(state);
+        let first_messages = first
+            .try_iter()
+            .map(|m| String::from_utf8(m).unwrap())
+            .collect::<String>();
+        let second_messages = second
+            .try_iter()
+            .map(|m| String::from_utf8(m).unwrap())
+            .collect::<String>();
+        assert!(first_messages.contains("ZN,1\n"));
+        assert!(first_messages.contains("HP,9\n"));
+        assert!(first_messages.contains("ZD\n"));
+        assert!(first_messages.contains("HP,10\n"));
+        assert!(!second_messages.contains("HP,"));
+        update_animals_at(&server, 150).unwrap();
+        assert!(first.try_iter().any(|m| m == b"ZN,0\n"));
+    }
+
+    #[test]
+    fn zombies_do_not_attack_through_walls_or_during_day() {
+        let (server, _, _) = setup();
+        {
+            let mut state = server.state.lock().unwrap();
+            state.players.get_mut(&1).unwrap().position = [1.2, 202.0, 0.0, 0.0, 0.0];
+            state.players.get_mut(&2).unwrap().position = [20.0, 202.0, 0.0, 0.0, 0.0];
+            for (x, y) in [(0, 200), (1, 200), (1, 201), (1, 202)] {
+                state
+                    .db
+                    .execute(
+                        "INSERT INTO block (p,q,x,y,z,w) VALUES (0,0,?1,?2,0,6)",
+                        params![x, y],
+                    )
+                    .unwrap();
+            }
+            let txid = "a".repeat(64);
+            state.mempool.insert(txid.clone());
+            state.animals.push(Animal {
+                id: 1,
+                txid,
+                x: 0.0,
+                y: 200.5,
+                z: 0.0,
+                heading: 1,
+                pacified: false,
+            });
+        }
+        update_animals_at(&server, 0).unwrap();
+        assert_eq!(server.state.lock().unwrap().players[&1].lives, 10);
+        {
+            let state = server.state.lock().unwrap();
+            state
+                .db
+                .execute("DELETE FROM block WHERE x=1 AND y>200", [])
+                .unwrap();
+        }
+        update_animals_at(&server, 150).unwrap();
+        assert_eq!(server.state.lock().unwrap().players[&1].lives, 10);
+        update_animals_at(&server, 510).unwrap();
+        assert_eq!(server.state.lock().unwrap().players[&1].lives, 9);
     }
 
     #[test]

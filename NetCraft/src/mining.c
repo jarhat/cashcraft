@@ -10,12 +10,14 @@
 
 static double mining_started = 0;
 static double mining_swing_started = 0;
+static bool has_swung = false;
 static double next_swing_sound = 0;
 static bool has_pickaxe = false;
 static bool wallet_pickaxe = false;
 static bool guest_pickaxe = false;
 static bool wallet_connected = false;
 static bool holding_mine_button = false;
+static bool attacking_animal = false;
 static int building_progress = 0;
 static bool holding_build_button = false;
 
@@ -33,6 +35,7 @@ int target_w = 0;
 extern void on_mine(void);
 extern void on_build(void);
 extern void on_mining_swing(void);
+extern bool on_pickaxe_attack(void);
 extern int get_targeted_block(int *x, int *y, int *z, int *face);
 
 static void update_pickaxe(void) {
@@ -66,7 +69,12 @@ void mining_set_wallet_connected(int enabled) {
 }
 
 bool is_mining() {
-    return holding_mine_button && target_w != 0;
+    return holding_mine_button && target_w != 0 && !attacking_animal;
+}
+
+bool mining_is_swinging(void) {
+    double elapsed = glfwGetTime() - mining_swing_started;
+    return holding_mine_button || (has_swung && elapsed >= 0 && elapsed < .18);
 }
 
 bool mining_has_pickaxe(void) {
@@ -79,6 +87,7 @@ double mining_swing_elapsed(void) {
 
 void mining_stop() {
     holding_mine_button = false;
+    attacking_animal = false;
     mining_started = 0;
     mining_stage = 0;
 }
@@ -88,6 +97,12 @@ void mining_tick() {
     target_w = get_targeted_block(&target_x, &target_y, &target_z, &target_face);
 
     if (holding_mine_button) {
+        attacking_animal = on_pickaxe_attack();
+        if (attacking_animal) {
+            mining_started = glfwGetTime();
+            mining_stage = 0;
+            return;
+        }
         if (target_x != mining_x || target_y != mining_y || target_z != mining_z) {
             mining_x = target_x;
             mining_y = target_y;
@@ -129,7 +144,9 @@ void mining_start() {
     holding_mine_button = true;
     mining_started = glfwGetTime();
     mining_swing_started = mining_started;
+    has_swung = true;
     next_swing_sound = mining_started;
+    attacking_animal = on_pickaxe_attack();
 
     (void) get_targeted_block(&mining_x, &mining_y, &mining_z, &target_face);
 }

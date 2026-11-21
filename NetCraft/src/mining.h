@@ -1,5 +1,6 @@
 int mining_get_target(int *x, int *y, int *z, int *face);
 bool is_mining(void);
+bool mining_is_swinging(void);
 bool mining_has_pickaxe(void);
 double mining_swing_elapsed(void);
 void mining_stop(void);

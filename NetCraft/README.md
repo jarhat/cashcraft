@@ -225,10 +225,16 @@ underlying error; a lost WebGL context requires reloading the game. After
 changing the client, rebuild the WASM files in `NETCRAFT_BUILD_PATH`; restarting
 only the server does not update the browser client.
 
-The server simulates up to eight passive, sheep-like animals near active
-players. Their movement is shared with all connected clients and follows the
-current terrain and block edits. Animals despawn when no players are nearby;
-they are not persisted across server restarts and have no survival interactions.
+The server simulates sheep-like animals for mempool transactions near active
+players. At night they become upright zombies that pursue and attack nearby
+players; at daybreak they become passive animals again. Aim and use the mining
+button or left click to hit a nearby zombie with the pickaxe and restore it to
+animal form for the rest of the night. Each player starts with 10 lives and can
+lose one every two seconds to zombie attacks. After the last life is lost, the
+player respawns at spawn with 10 lives. Animals do not spawn on the central sky
+park platform, though they can still spawn elsewhere. Movement and attacks are
+shared by the server and follow terrain and block edits. Animals despawn when no
+players are nearby and are not persisted across server restarts.
 
 ### Preview-inspired world
 

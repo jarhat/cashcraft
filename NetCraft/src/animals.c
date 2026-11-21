@@ -19,6 +19,7 @@ typedef struct {
     float to[3];
     double updated;
     int heading;
+    bool pacified;
     char name[ANIMAL_NAME_LENGTH + 1];
 } Animal;
 
@@ -26,6 +27,7 @@ static Animal *animals;
 static size_t animal_count;
 static size_t animal_capacity;
 static GLuint animal_buffer;
+static GLuint zombie_buffers[2];
 
 static void animal_position(const Animal *animal, double now, float *position) {
     float t = (float)(now - animal->updated);
@@ -45,7 +47,7 @@ static size_t animal_index(unsigned int id) {
     return lo;
 }
 
-void animals_update(unsigned int id, float x, float y, float z, int heading, const char *name) {
+void animals_update(unsigned int id, float x, float y, float z, int heading, const char *name, bool pacified) {
     if (!id || !isfinite(x) || !isfinite(y) || !isfinite(z) ||
         heading < 0 || heading > 3) return;
     size_t i = animal_index(id);
@@ -66,11 +68,31 @@ void animals_update(unsigned int id, float x, float y, float z, int heading, con
     }
     animals[i].to[0] = x; animals[i].to[1] = y; animals[i].to[2] = z;
     animals[i].heading = heading;
+    animals[i].pacified = pacified;
     animals[i].updated = now;
     if (strlen(name) == ANIMAL_NAME_LENGTH &&
         strspn(name, "0123456789abcdef.") == ANIMAL_NAME_LENGTH) {
         memcpy(animals[i].name, name, ANIMAL_NAME_LENGTH + 1);
     }
+}
+
+unsigned int animals_target(float x, float y, float z, float vx, float vy, float vz, float *distance) {
+    double now = glfwGetTime();
+    for (int step = 0; step <= 128; ++step) {
+        float d = step / 32.0f;
+        float px = x + vx * d, py = y + vy * d, pz = z + vz * d;
+        for (size_t i = 0; i < animal_count; ++i) {
+            if (animals[i].pacified) continue;
+            float pos[3];
+            animal_position(&animals[i], now, pos);
+            if (fabsf(px - pos[0]) <= .5f && fabsf(pz - pos[2]) <= .5f &&
+                py >= pos[1] && py <= pos[1] + 2.1f) {
+                *distance = d;
+                return animals[i].id;
+            }
+        }
+    }
+    return 0;
 }
 
 void animals_remove(unsigned int id) {
@@ -92,6 +114,10 @@ void animals_shutdown(void) {
     animal_capacity = 0;
     del_buffer(animal_buffer);
     animal_buffer = 0;
+    for (int i = 0; i < 2; ++i) {
+        del_buffer(zombie_buffers[i]);
+        zombie_buffers[i] = 0;
+    }
 }
 
 static void animal_part(float *data, float x, float y, float z,
@@ -119,10 +145,26 @@ static GLuint make_animal_buffer(void) {
     return gen_faces(10, ANIMAL_PARTS * 6, data);
 }
 
-void animals_render(Attrib *attrib, float *view, float x, float y, float z, int radius) {
+static GLuint make_zombie_buffer(int pose) {
+    GLfloat *data = malloc_faces(10, ANIMAL_PARTS * 6);
+    float stride = pose ? .15f : -.15f;
+    animal_part(data, 0, 1.05f, 0, .65f, .8f, .4f, 9);
+    animal_part(data + 360, 0, 1.75f, 0, .6f, .6f, .5f, 15);
+    animal_part(data + 2 * 360, -.19f, .32f, stride, .25f, .64f, .3f, 5);
+    animal_part(data + 3 * 360, .19f, .32f, -stride, .25f, .64f, .3f, 5);
+    animal_part(data + 4 * 360, -.43f, 1.15f, -.3f, .2f, .22f, .8f, 15);
+    animal_part(data + 5 * 360, .43f, 1.15f, -.3f, .2f, .22f, .8f, 15);
+    animal_part(data + 6 * 360, -.14f, 1.8f, -.26f, .09f, .09f, .03f, 13);
+    animal_part(data + 7 * 360, .14f, 1.8f, -.26f, .09f, .09f, .03f, 13);
+    return gen_faces(10, ANIMAL_PARTS * 6, data);
+}
+
+void animals_render(Attrib *attrib, float *view, float x, float y, float z, int radius, bool night) {
     if (!animal_count) return;
     if (!animal_buffer) animal_buffer = make_animal_buffer();
     double now = glfwGetTime();
+    int pose = ((int)(now * 3)) % 2;
+    if (night && !zombie_buffers[pose]) zombie_buffers[pose] = make_zombie_buffer(pose);
     for (size_t i = 0; i < animal_count; ++i) {
         float pos[3];
         animal_position(&animals[i], now, pos);
@@ -138,11 +180,11 @@ void animals_render(Attrib *attrib, float *view, float x, float y, float z, int 
         glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
         glUniform3f(attrib->camera, cosf(angle) * dx + sinf(angle) * dz,
             dy, -sinf(angle) * dx + cosf(angle) * dz);
-        draw_triangles_3d_ao(attrib, animal_buffer, ANIMAL_PARTS * 36);
+        draw_triangles_3d_ao(attrib, night && !animals[i].pacified ? zombie_buffers[pose] : animal_buffer, ANIMAL_PARTS * 36);
     }
 }
 
-void animals_render_names(Attrib *attrib, float *view, float x, float y, float z) {
+void animals_render_names(Attrib *attrib, float *view, float x, float y, float z, bool night) {
     const float glyph = .045f;
     const double now = glfwGetTime();
     float right[3] = {view[0], view[4], view[8]};
@@ -157,7 +199,7 @@ void animals_render_names(Attrib *attrib, float *view, float x, float y, float z
         animal_position(&animals[i], now, pos);
         float dx = pos[0] - x, dy = pos[1] - y, dz = pos[2] - z;
         if (dx * dx + dy * dy + dz * dz > 32 * 32) continue;
-        pos[1] += 1.45f;
+        pos[1] += night && !animals[i].pacified ? 2.2f : 1.45f;
         float clip[4], anchor[4] = {pos[0], pos[1], pos[2], 1};
         mat_vec_multiply(clip, view, anchor);
         if (clip[3] <= 0 || fabsf(clip[0]) > clip[3] || fabsf(clip[1]) > clip[3]) continue;

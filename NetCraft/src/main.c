@@ -226,6 +226,8 @@ typedef struct {
     char messages[MAX_MESSAGES][MAX_TEXT_LENGTH];
     double message_times[MAX_MESSAGES];
     uint32_t mina_mined;
+    int lives;
+    bool zombies_active;
     int width;
     int height;
     int observe1;
@@ -2330,9 +2332,9 @@ void render_players(Attrib *attrib, Attrib *names, Player *player) {
             draw_player(attrib, other);
         }
     }
-    animals_render(attrib, matrix, s->x, s->y, s->z, g->render_radius);
+    animals_render(attrib, matrix, s->x, s->y, s->z, g->render_radius, g->zombies_active);
     if (g->show_ui) {
-        animals_render_names(names, matrix, s->x, s->y, s->z);
+        animals_render_names(names, matrix, s->x, s->y, s->z, g->zombies_active);
     }
 }
 
@@ -2417,7 +2419,7 @@ static void render_pickaxe(Attrib *attrib) {
             pickaxe_counts[mina] * PICKAXE_VERTEX_COMPONENTS * sizeof(float), vertices);
     }
 
-    bool mining = is_mining();
+    bool mining = mining_is_swinging();
 #ifdef __EMSCRIPTEN__
     mining = mining && (g->mode != MODE_ONLINE || online_ready);
 #endif
@@ -3043,6 +3045,32 @@ void on_light() {
 int get_targeted_block(int *x, int *y, int *z, int *face) {
     int nx, ny, nz;
     return hit_test_face(g->players, x, y, z, face, &nx, &ny, &nz);
+}
+
+bool on_pickaxe_attack(void) {
+    if (g->mode != MODE_ONLINE || !g->zombies_active) return false;
+#ifdef __EMSCRIPTEN__
+    if (!online_ready) return false;
+#endif
+    State *s = &g->players->state;
+    float vx, vy, vz, distance;
+    get_sight_vector(s->rx, s->ry, &vx, &vy, &vz);
+    unsigned int id = animals_target(s->x, s->y, s->z, vx, vy, vz, &distance);
+    if (!id) return false;
+    for (float d = 0; d < distance; d += 1.0f / 32.0f) {
+        if (get_block(roundf(s->x + vx * d), roundf(s->y + vy * d),
+                roundf(s->z + vz * d)) > 0) return false;
+    }
+    static double last_attack = -1;
+    double now = glfwGetTime();
+    if (last_attack < 0 || now < last_attack || now - last_attack >= .3) {
+        last_attack = now;
+        client_position(s->x, s->y, s->z, s->rx, s->ry);
+        char message[32];
+        snprintf(message, sizeof(message), "ZA,%u\n", id);
+        client_send(message);
+    }
+    return true;
 }
 
 void on_mine() {
@@ -3750,13 +3778,25 @@ void parse_buffer(char *buffer, int len) {
     char *line = tokenize(buffer, "\n", &key);
     while (line) {
         int pid;
+        int value;
+        if (sscanf(line, "ZN,%d", &value) == 1 && (value == 0 || value == 1)) {
+            g->zombies_active = value;
+        }
+        if (sscanf(line, "HP,%d", &value) == 1 && value >= 0 && value <= 10) {
+            g->lives = value;
+        }
+        if (strcmp(line, "ZD") == 0) {
+            s->x = 0; s->y = 0; s->z = 0; s->rx = 0; s->ry = 0;
+            force_chunks(me);
+            s->y = highest_block(s->x, s->z) + 2;
+        }
         unsigned int animal_id;
         float ax, ay, az;
-        int heading;
+        int heading, pacified = 0;
         char animal_name[ANIMAL_NAME_LENGTH + 1] = {0};
-        if (line[0] == 'M' && sscanf(line, "M,%u,%f,%f,%f,%d,%15s",
-            &animal_id, &ax, &ay, &az, &heading, animal_name) >= 5) {
-            animals_update(animal_id, ax, ay, az, heading, animal_name);
+        if (line[0] == 'M' && sscanf(line, "M,%u,%f,%f,%f,%d,%15[^,],%d",
+            &animal_id, &ax, &ay, &az, &heading, animal_name, &pacified) >= 5) {
+            animals_update(animal_id, ax, ay, az, heading, animal_name, pacified != 0);
         }
         if (line[0] == 'M' && sscanf(line, "MD,%u", &animal_id) == 1) {
             animals_remove(animal_id);
@@ -4004,6 +4044,8 @@ void reset_model() {
     memset(g->messages, 0, sizeof(char) * MAX_MESSAGES * MAX_TEXT_LENGTH);
     memset(g->message_times, 0, sizeof(g->message_times));
     g->mina_mined = 0;
+    g->lives = 10;
+    g->zombies_active = false;
     g->message_index = 0;
     g->message_view_index = 0;
     g->day_length = DAY_LENGTH;
@@ -4645,6 +4687,8 @@ void render_scene() {
     if (g->show_ui && g->initialized) {
         snprintf(text_buffer, sizeof(text_buffer), "x%u", (unsigned)g->mina_mined);
         render_text(&text_attrib, ALIGN_LEFT, g->width / 2 + 5 * g->scale, g->height - 29 * g->scale, ts, text_buffer);
+        snprintf(text_buffer, sizeof(text_buffer), "Lives: %d/10", g->lives);
+        render_text(&text_attrib, ALIGN_RIGHT, g->width - 8 * g->scale, g->height - ts, ts, text_buffer);
     }
     if (g->show_info_text && g->show_ui && g->initialized) {
         static char *build_info_string =

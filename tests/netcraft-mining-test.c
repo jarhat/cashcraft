@@ -9,6 +9,7 @@ static int target_x_value;
 static int mined;
 static int swings;
 static int builds;
+static bool attacking;
 
 double glfwGetTime(void) { return now; }
 float is_hardness(int block) { return block == 2 ? INFINITY : 2.0f; }
@@ -20,6 +21,7 @@ int get_targeted_block(int *x, int *y, int *z, int *face) {
 void on_mine(void) { mined++; }
 void on_build(void) { builds++; }
 void on_mining_swing(void) { swings++; }
+bool on_pickaxe_attack(void) { return attacking; }
 
 static void check_rate(double step) {
     now = 0;
@@ -55,6 +57,12 @@ int main(void) {
     mining_start();
     mining_tick();
     assert(!is_mining());
+    assert(mining_is_swinging());
+    mining_stop();
+    assert(mining_is_swinging());
+    now += .2;
+    assert(!mining_is_swinging());
+    mining_start();
     target = 1;
     mining_tick();
     assert(is_mining());
@@ -132,5 +140,20 @@ int main(void) {
     assert(mining_has_pickaxe());
     mining_set_pickaxe(0);
     assert(!mining_has_pickaxe());
+    target = 1;
+    now = 500;
+    attacking = true;
+    int before = mined;
+    mining_start();
+    assert(!is_mining());
+    now = 503;
+    mining_tick();
+    assert(mined == before);
+    attacking = false;
+    mining_tick();
+    now = 505.1;
+    mining_tick();
+    assert(mined == before + 1);
+    mining_stop();
     return 0;
 }
