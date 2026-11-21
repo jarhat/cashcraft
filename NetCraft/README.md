@@ -385,8 +385,10 @@ Use `/receive` to select a configured MINA color and amount in the Receive tab,
 then generate a QR and one-week short link back in the game. Select **Done**
 to share both in a chat bubble with other online players. On desktop, press
 Escape to release the mouse before clicking **Open payment request**. The link
-opens the QR and fills the Send tab for review; it does not send a payment.
-Fullscreen shows a BCHN ticker below the game with the tip hash, header lag,
+opens the QR without leaving fullscreen and fills the Send tab for review.
+Select **View payment request** to go to the wallet. This does not send a payment.
+The BCHN ticker sits below the game controls in both windowed and fullscreen
+mode and shows the tip hash, header lag,
 difficulty, verification progress, median block time, chainwork, and storage stats.
 New joins appear in chat. The Sound button
 controls block and footstep sounds and the original looping tune after a user

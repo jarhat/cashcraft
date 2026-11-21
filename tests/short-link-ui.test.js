@@ -13,6 +13,7 @@ test('game Receive QR shares its persistent link only when Done is selected', as
     'receive-amount': { value: '3' },
     'receive-note': { value: '' },
     'payment-input-status': {},
+    'game-receive-dialog': { open: true, close() { this.open = false; } },
   };
   const shared = [];
   let popup;
@@ -32,12 +33,13 @@ test('game Receive QR shares its persistent link only when Done is selected', as
   await context.generateGameReceiveQr({ address, category, amount: '3', generation: 1 });
   assert.equal(popup.value, 'https://example.test/s/abc123456789');
   assert.equal(popup.label, 'Done');
+  assert.equal(fields['game-receive-dialog'].open, false);
   assert.deepEqual(shared, []);
   popup.action();
   assert.deepEqual(shared, ['abc123456789']);
 });
 
-test('opening a game payment link prefills Send and shows its QR after leaving the game', async () => {
+test('opening a game payment link shows its QR without leaving until review', async () => {
   const category = 'a'.repeat(64);
   const address = 'bitcoincash:ztest';
   const calls = [];
@@ -57,14 +59,15 @@ test('opening a game payment link prefills Send and shows its QR after leaving t
   };
   runInNewContext(source.slice(source.indexOf('async function openGamePaymentRequest'), source.indexOf("$('token-qr-close').addEventListener")), context);
   const request = { id: 'abc123456789', name: 'Miner', path: '/s/abc123456789' };
-  await context.openGamePaymentRequest(request, async () => false);
+  const leave = async () => { calls.push('leave'); return true; };
+  await context.openGamePaymentRequest(request, () => false, leave);
   assert.deepEqual(calls, []);
   assert.equal(popup, undefined);
-  await context.openGamePaymentRequest(request, async () => true);
+  await context.openGamePaymentRequest(request, (_dialog, show) => show(), leave);
   assert.deepEqual(calls, [[{ addr: address, category, amount: '3' }, 'MINA', false], 'send']);
   assert.equal(popup.value, 'https://example.test/s/abc123456789');
-  popup.action();
-  assert.equal(calls.at(-1), 'review');
+  await popup.action();
+  assert.deepEqual(calls.slice(-2), ['leave', 'review']);
 });
 
 test('one-time links use fixed expiry and replace the displayed QR, while stale responses are ignored', async () => {

@@ -644,6 +644,8 @@
     </nav>
     <p id="game-dialog-status" class="fine" role="status"></p>
     <div id="game-stage" class="game-stage">
+      <div id="game-fullscreen-toolbar" class="game-fullscreen-toolbar"></div>
+      <div id="game-chain-ticker" class="market-ticker game-chain-ticker" role="region" tabindex="0" aria-label="Detailed BCHN node statistics">Loading blockchain status…</div>
       <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="autoplay *; fullscreen; gamepad *" allowfullscreen></iframe>
       <div id="game-payment-bubble" class="game-payment-bubble" hidden>
         <p id="game-payment-speaker" aria-live="polite"></p>
@@ -652,12 +654,17 @@
         <p id="game-payment-status" class="fine" role="status"></p>
         <button id="game-payment-dismiss" class="small-button" type="button" aria-label="Dismiss payment request">×</button>
       </div>
-      <div id="game-chain-ticker" class="market-ticker game-chain-ticker" role="region" tabindex="0" aria-label="Detailed BCHN node statistics">Loading blockchain status…</div>
       <div id="game-wizard-speech" class="game-wizard-speech" role="status" aria-live="polite" hidden>
         <img src="/wizard.svg" alt="">
         <div><p id="game-wizard-message"></p><div id="game-wizard-ores" class="ore-stats" hidden></div></div>
       </div>
       <nav id="game-wallet-actions" class="game-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
+      <dialog id="game-receive-dialog" class="notifications-dialog game-receive-dialog" aria-labelledby="game-receive-title">
+        <div class="notifications-heading">
+          <h2 id="game-receive-title">Receive</h2>
+          <button id="game-receive-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
+        </div>
+      </dialog>
       <dialog id="game-send-dialog" class="notifications-dialog" aria-labelledby="game-send-title">
         <form id="game-send-form">
           <h2 id="game-send-title">Send tokens to a player</h2>

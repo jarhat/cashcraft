@@ -59,20 +59,30 @@ test('game buttons minimize and restore without unloading the active game', asyn
   $('game-frame').contentWindow = gameWindow;
   $('game-restore').click = () => $('game-restore').listeners.click();
   let reviewed;
+  let reviewPayment;
   setupGames($, {
     translate: (text) => text,
     getRewardAddress: () => address,
-    openPlayerTransfer: async (target, show, share) => {
+    openPlayerTransfer: async (target, show, share, leaveFullscreenGame) => {
       assert.equal(target, null);
+      assert.equal(typeof leaveFullscreenGame, 'function');
       const popup = $('token-qr-dialog');
       popup.parentNode = $('quick-nav');
       assert.equal(show(popup, () => popup.show()), true);
+      assert.equal(document.fullscreenElement, $('game-stage'));
+      assert.equal(popup.parentNode, $('game-stage'));
       popup.close();
       share('mine12345678');
     },
-    openGamePaymentRequest: async (request, leave) => {
-      assert.equal(await leave(), true);
-      reviewed = request.id;
+    openGamePaymentRequest: async (request, show, leave) => {
+      const popup = $('token-qr-dialog');
+      assert.equal(show(popup, () => popup.show()), true);
+      assert.equal(popup.parentNode, $('game-stage'));
+      reviewPayment = async () => {
+        popup.close();
+        assert.equal(await leave(), true);
+        reviewed = request.id;
+      };
     },
   });
   assert.equal(gameToolbarSelected, true);
@@ -84,7 +94,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); documentListeners.fullscreenchange(); };
   await $('game-fullscreen').listeners.click();
   assert.equal(document.fullscreenElement, $('game-stage'));
-  assert.equal($('game-controls-right').parentNode, $('game-stage'));
+  assert.equal($('game-controls-right').parentNode, $('game-fullscreen-toolbar'));
   assert.equal($('top-send').parentNode, $('quick-nav'));
   const parent = { insertBefore(child) { child.parentNode = this; } };
   $('invite-dialog').parentNode = parent;
@@ -110,7 +120,10 @@ test('game buttons minimize and restore without unloading the active game', asyn
   const gameUrl = '/games/netcraft/craftw.html#-+4080+bitcoincash%3Aztest';
   assert.equal($('game-frame').src, gameUrl);
   assert.equal($('game-frame').title, 'CashCraft');
+  $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); documentListeners.fullscreenchange(); };
+  await $('game-fullscreen').listeners.click();
   await $('game-receive').listeners.click();
+  assert.equal(document.fullscreenElement, $('game-stage'));
   assert.deepEqual(postedMessages.at(-1), { type: 'netcraft-share-payment', id: 'mine12345678' });
   const payment = { type: 'netcraft-payment-request', name: 'Miner', id: 'abc123456789' };
   await receiveGameEvent({ source: {}, data: payment });
@@ -121,6 +134,9 @@ test('game buttons minimize and restore without unloading the active game', asyn
   assert.equal($('game-payment-qr').src, '/api/qr.png?s=abc123456789');
   assert.equal($('game-payment-link').href, '/s/abc123456789');
   await $('game-payment-link').listeners.click({ preventDefault() {} });
+  assert.equal(document.fullscreenElement, $('game-stage'));
+  assert.equal($('game-dialog').hidden, false);
+  await reviewPayment();
   assert.equal(reviewed, payment.id);
   assert.equal($('game-payment-bubble').hidden, true);
   assert.equal($('game-dialog').hidden, true);

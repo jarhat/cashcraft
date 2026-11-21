@@ -18,6 +18,15 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   const toolbar = document.querySelector('.game-toolbar');
   const controls = $('game-controls-right');
   const controlsHome = controls.parentNode || toolbar;
+  const showStageDialog = (popup, show) => {
+    if (popup.parentNode !== stage) {
+      const home = popup.parentNode;
+      const next = popup.nextSibling;
+      stage.appendChild(popup);
+      popup.addEventListener('close', () => home.insertBefore(popup, next), { once: true });
+    }
+    show();
+  };
   const setPlayingUi = () => {
     const playing = dialog.open && !dialog.hidden;
     document.body.classList.toggle('cashcraft-playing', playing);
@@ -43,8 +52,13 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     $('game-payment-status').textContent = '';
     const session = generation;
     try {
-      await openGamePaymentRequest(request, async () => {
+      await openGamePaymentRequest(request, (popup, show) => {
         if (session !== generation || dialog.hidden || request !== paymentRequest) return false;
+        document.exitPointerLock?.();
+        showStageDialog(popup, show);
+        return true;
+      }, async () => {
+        if (session !== generation || dialog.hidden) return false;
         if (!await minimize() || session !== generation) return false;
         if (request === paymentRequest) dismissPayment();
         return true;
@@ -157,7 +171,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '', pickaxe: connected && hasMinaPickaxe(), connected, guestId, embeddedSound: true }, '*');
     }
   };
-  const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'ranking-dialog', 'game-guide', 'mining-prompt'];
+  const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'ranking-dialog', 'game-guide', 'mining-prompt', 'game-receive-dialog', 'token-qr-dialog'];
   const canFocusGame = () => dialog.open && !dialog.hidden && activeGame &&
     !overlayDialogs.some((id) => $(id).open);
   frame.addEventListener('load', () => {
@@ -298,24 +312,23 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     if (!openPlayerTransfer || dialog.hidden || activeGame !== 'netcraft') return;
     document.exitPointerLock?.();
     const session = generation;
-    if (!await minimize() || session !== generation) return;
+    const fullscreen = document.fullscreenElement === stage;
+    if (fullscreen && !target && $('game-receive-dialog').open) return;
+    if (!fullscreen && (!await minimize() || session !== generation)) return;
     const currentSession = () => session === generation && activeGame === 'netcraft' && dialog.open;
     await openPlayerTransfer(target, (popup, show) => {
       if (!currentSession()) return false;
-      restore.click();
-      const home = popup.parentNode;
-      const next = popup.nextSibling;
-      stage.appendChild(popup);
-      popup.addEventListener('close', () => home.insertBefore(popup, next), { once: true });
-      show();
+      if (dialog.hidden) restore.click();
+      showStageDialog(popup, show);
       return true;
     }, (id) => {
       if (!currentSession() || dialog.hidden) return;
       frame.contentWindow?.postMessage({ type: 'netcraft-share-payment', id }, '*');
       frame.focus({ preventScroll: true });
-    });
+    }, fullscreen ? () => currentSession() && minimize() : null);
   };
   $('game-receive').addEventListener('click', () => openTransfer(null));
+  $('game-receive-close').addEventListener('click', () => $('game-receive-dialog').close());
   $('game-send').addEventListener('click', () => {
     if (dialog.hidden || activeGame !== 'netcraft') return;
     document.exitPointerLock?.();
@@ -489,7 +502,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   $('ranking-close').addEventListener('click', () => $('ranking-dialog').close());
   document.addEventListener('fullscreenchange', () => {
     const active = document.fullscreenElement === stage;
-    const controlsHost = active ? stage : controlsHome;
+    const controlsHost = active ? $('game-fullscreen-toolbar') : controlsHome;
     if (controls.parentNode !== controlsHost) controlsHost.appendChild(controls);
     stage.classList.toggle('is-fullscreen', active);
     dialog.classList.toggle('is-fullscreen', active);
