@@ -32,7 +32,9 @@ and also natively, as with the original Craft:
 * Day / night cycles and a textured sky dome.
 * Classic rolling hills blended into regional biomes. Deep caves lead through
   openings in the bedrock into caverns with animated water and lava streams.
-* A swimmable valley lake east of spawn, with splash sounds in the browser, and palm trees in the desert.
+  Shafts in the cavern floor expose a deeper, lethal lava layer.
+* Spawn in the jungle near the western desert and its palm trees. Two large
+  valley lakes provide swimming and browser splash sounds.
 * World changes persisted in a sqlite3 database.
 * Multiplayer support!
 
@@ -395,6 +397,8 @@ controls block and footstep sounds and the original looping tune after a user
 gesture; the game panel also has a fullscreen button. The `?game=cashcraft` URL
 parameter opens the panel below the top bar; browser fullscreen still
 requires a user gesture.
+The wizard button glows green while the tutorial runs. Tips advance automatically,
+and the mining tip shows each ore's texture and live progress toward ten blocks.
 On desktop, click the game view to capture the mouse; Escape releases it.
 On a standard gamepad, the left stick and D-pad move, the right stick looks,
 A jumps, B crouches, and the triggers build and mine.

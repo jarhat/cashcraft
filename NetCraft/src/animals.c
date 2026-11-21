@@ -31,6 +31,7 @@ static size_t animal_count;
 static size_t animal_capacity;
 static GLuint animal_buffer;
 static GLuint zombie_buffers[2];
+enum { ZOMBIE_PARTS = 6 };
 static GLuint wildlife_buffers[SPECIES_COUNT];
 static int wildlife_parts[SPECIES_COUNT];
 
@@ -175,17 +176,15 @@ static GLuint make_animal_buffer(void) {
 }
 
 static GLuint make_zombie_buffer(int pose) {
-    GLfloat *data = malloc_faces(10, ANIMAL_PARTS * 6);
+    GLfloat *data = malloc_faces(10, ZOMBIE_PARTS * 6);
     float stride = pose ? .15f : -.15f;
     animal_part(data, 0, 1.05f, 0, .65f, .8f, .4f, 9);
-    animal_part(data + 360, 0, 1.75f, 0, .6f, .6f, .5f, 15);
+    animal_part(data + 360, 0, 1.75f, 0, .6f, .6f, .5f, block_id_by_name("Jack-o'-Lantern"));
     animal_part(data + 2 * 360, -.19f, .32f, stride, .25f, .64f, .3f, 5);
     animal_part(data + 3 * 360, .19f, .32f, -stride, .25f, .64f, .3f, 5);
     animal_part(data + 4 * 360, -.43f, 1.15f, -.3f, .2f, .22f, .8f, 15);
     animal_part(data + 5 * 360, .43f, 1.15f, -.3f, .2f, .22f, .8f, 15);
-    animal_part(data + 6 * 360, -.14f, 1.8f, -.26f, .09f, .09f, .03f, 13);
-    animal_part(data + 7 * 360, .14f, 1.8f, -.26f, .09f, .09f, .03f, 13);
-    return gen_faces(10, ANIMAL_PARTS * 6, data);
+    return gen_faces(10, ZOMBIE_PARTS * 6, data);
 }
 
 static GLuint make_wildlife_buffer(int species) {
@@ -272,7 +271,9 @@ void animals_render(Attrib *attrib, float *view, float x, float y, float z, int 
             if (!wildlife_buffers[species]) wildlife_buffers[species] = make_wildlife_buffer(species);
             draw_triangles_3d_ao(attrib, wildlife_buffers[species], wildlife_parts[species] * 36);
         } else {
-            draw_triangles_3d_ao(attrib, night && !animals[i].pacified ? zombie_buffers[pose] : animal_buffer, ANIMAL_PARTS * 36);
+            bool zombie = night && !animals[i].pacified;
+            draw_triangles_3d_ao(attrib, zombie ? zombie_buffers[pose] : animal_buffer,
+                (zombie ? ZOMBIE_PARTS : ANIMAL_PARTS) * 36);
         }
     }
 }

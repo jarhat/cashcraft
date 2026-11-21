@@ -10,6 +10,7 @@ globalThis.window = { addEventListener() {} };
 globalThis.localStorage = { getItem: () => guestId };
 
 test('game buttons minimize and restore without unloading the active game', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const originalFetch = globalThis.fetch;
   const originalDocument = globalThis.document;
   const originalRaf = globalThis.requestAnimationFrame;
@@ -17,14 +18,25 @@ test('game buttons minimize and restore without unloading the active game', asyn
   t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; globalThis.requestAnimationFrame = originalRaf; globalThis.window = originalWindow; });
   globalThis.requestAnimationFrame = () => {};
   const elements = new Map();
+  const classes = new Map();
   const $ = (id) => {
+    if (!classes.has(id)) classes.set(id, new Set());
     if (!elements.has(id)) elements.set(id, {
       listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute(name, value) { this[name] = value; },
       appendChild(child) { child.parentNode = this; },
       prepend(child) { child.parentNode = this; },
       insertBefore(child) { child.parentNode = this; },
-      classList: { add() {}, remove() {}, contains() { return false; }, toggle() {} },
+      classList: {
+        add: (name) => classes.get(id).add(name),
+        remove: (name) => classes.get(id).delete(name),
+        contains: (name) => classes.get(id).has(name),
+        toggle() {},
+      },
+      style: { setProperty(name, value) { this[name] = value; } },
+      children: [],
+      replaceChildren() { this.children = []; },
+      append(child) { this.children.push(child); },
       focus() { this.focused = true; },
       show() { this.open = true; }, close() { this.open = false; this.listeners.close(); },
       removeAttribute(name) { delete this[name]; },
@@ -44,6 +56,11 @@ test('game buttons minimize and restore without unloading the active game', asyn
   globalThis.document = {
     documentElement: { classList: { remove() {} } }, body: { classList: { toggle() {} } }, fullscreenElement: null,
     querySelector(selector) { gameToolbarSelected = selector === '.game-toolbar'; return toolbar; },
+    createElement() {
+      return { children: [], style: {}, setAttribute() {},
+        append(child) { this.children.push(child); },
+        prepend(child) { this.children.unshift(child); } };
+    },
     addEventListener(type, fn) { documentListeners[type] = fn; },
     async exitFullscreen() { this.fullscreenElement = null; documentListeners.fullscreenchange(); },
   };
@@ -120,6 +137,24 @@ test('game buttons minimize and restore without unloading the active game', asyn
   const gameUrl = '/games/netcraft/craftw.html#-+4080+bitcoincash%3Aztest';
   assert.equal($('game-frame').src, gameUrl);
   assert.equal($('game-frame').title, 'CashCraft');
+  const wizard = $('game-guide-open');
+  assert.equal(wizard.classList.contains('tutorial-active'), true);
+  assert.match($('game-wizard-message').textContent, /^Use WASD/);
+  const readingTime = Number.parseInt($('game-wizard-speech').style['--wizard-tip-duration']);
+  assert.ok(readingTime >= 7000);
+  t.mock.timers.tick(readingTime - 1);
+  assert.match($('game-wizard-message').textContent, /^Use WASD/);
+  t.mock.timers.tick(1);
+  assert.match($('game-wizard-message').textContent, /^Mine 10 natural blocks/);
+  await receiveGameEvent({ source: gameWindow, data: { type: 'netcraft-ore-progress', counts: [4, 2, 1] } });
+  const rows = $('game-wizard-ores').children;
+  assert.deepEqual(rows.map((row) => row.textContent), ['MINA ore: 4/10', 'Lapis ore: 2/10', 'Redstone ore: 1/10']);
+  assert.ok(rows.every((row) => row.children[0].className === 'wizard-ore-texture'));
+  for (let step = 0; step < 4; step++) {
+    t.mock.timers.tick(Number.parseInt($('game-wizard-speech').style['--wizard-tip-duration']));
+  }
+  assert.equal(wizard.classList.contains('tutorial-active'), false);
+  assert.equal($('game-wizard-speech').hidden, true);
   $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); documentListeners.fullscreenchange(); };
   await $('game-fullscreen').listeners.click();
   await $('game-receive').listeners.click();

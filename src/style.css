@@ -3043,16 +3043,26 @@ img[src="/bitcoin-cash-official.svg"] { filter: hue-rotate(95deg); }
 .topbar-tools-left .tool-dropdown { left: 0; right: auto; z-index: 20; }
 .game-wizard-art { width: 34px; height: 42px; vertical-align: middle; image-rendering: pixelated; }
 .game-wizard-speech {
-  position: absolute; z-index: 6; top: 14px; left: 50%; transform: translateX(-50%);
+  position: absolute; z-index: 6; top: calc(var(--game-ticker-height) + 14px); left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 8px; width: min(390px, calc(100% - 24px));
   padding: 8px; border: 2px solid #44de90; background: #10251e; color: #f0fff6;
   font: 14px/1.35 system-ui, sans-serif; pointer-events: none;
-  animation: game-wizard-fade 6s ease both;
+  animation: game-wizard-fade var(--wizard-tip-duration, 7s) ease both;
 }
+.game-stage:fullscreen .game-wizard-speech { top: calc(var(--game-control-size) + 38px + var(--game-ticker-height)); }
 .game-wizard-speech[hidden] { display: none; }
 .game-wizard-speech img { width: 34px; height: 42px; image-rendering: pixelated; }
 .game-wizard-speech p { margin: 0; }
+.game-wizard-speech .ore-stats label { grid-template-columns: 16px minmax(0, 1fr) minmax(3rem, 1fr); }
+.wizard-ore-texture {
+  width: 16px; height: 16px;
+  background: url('../NetCraft/textures/texture.png') no-repeat;
+  image-rendering: pixelated;
+}
 @keyframes game-wizard-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .game-wizard-speech { animation: none; }
+}
 #game-guide-title { display: flex; align-items: center; gap: 8px; }
 #game-guide-open svg { width: 28px; height: 32px; stroke: none; }
 .game-guide[open] { border-radius: 4px; border-width: 2px; box-shadow: 0 6px #07100b, 0 12px 30px #0009; }
@@ -3252,7 +3262,8 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
 #game-sound[aria-pressed="true"] .sound-muted,
 #game-sound[aria-pressed="false"] .sound-waves { display: none; }
 .game-wallet-actions { inset: calc(var(--game-control-size) + 24px) var(--game-controls-inset) auto auto; }
-.game-panel:has(#game-guide[open]) #game-guide-open {
+.game-panel:has(#game-guide[open]) #game-guide-open, #game-guide-open.tutorial-active {
+  background: #18583a;
   border-color: #43ed94; box-shadow: 0 0 0 3px rgb(67 237 148 / 45%), 0 0 16px #43ed94;
 }
 #game-guide-close, #mining-prompt-close {

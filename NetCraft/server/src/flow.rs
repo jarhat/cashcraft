@@ -28,7 +28,7 @@ pub fn natural_material((x, y, z): Cell) -> i32 {
 }
 
 pub fn can_spill((x, y, z): Cell) -> bool {
-    if !(crate::WORLD_MIN_Y + 1..=-8).contains(&y) {
+    if !(crate::DEEP_BEDROCK_Y + 1..=-8).contains(&y) {
         return false;
     }
     for dx in -7_i32..=7 {

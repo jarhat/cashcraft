@@ -84,10 +84,11 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   let firstBlockShown = false;
   let oreOverviewVisible = false;
   let oreCounts = [0, 0, 0];
+  // Atlas coordinates here are measured from the top of the PNG, not the OpenGL origin.
   const ores = [
-    ['green', 'MINA ore'],
-    ['blue', 'Lapis ore'],
-    ['red', 'Redstone ore'],
+    ['green', 'MINA ore', 11, 26],
+    ['blue', 'Lapis ore', 0, 26],
+    ['red', 'Redstone ore', 3, 19],
   ];
   let wizardTimer;
   let tutorialStep = 0;
@@ -99,28 +100,19 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     'Invite shares the game; Ranking shows ores mined; fullscreen expands the game; sound toggles audio.',
     'After earning 2 MINA, use the crafting table to review a 2 MINA payment for a permanent MINA pickaxe.',
   ];
-  const controlTips = {
-    'game-close': 'Minimize the game; use the game icon to return.',
-    'game-crafting': 'Craft a permanent MINA pickaxe for 2 MINA.',
-    'game-ranking': 'Ranking shows ores mined.',
-    'game-send': 'Send tokens to an online player by name.',
-    'game-receive': 'Create a MINA payment request.',
-    'game-invite': 'Invite shares the game.',
-    'game-sound': 'Sound toggles audio.',
-    'game-notifications': 'The gem opens your wallet and notifications.',
-    'game-fullscreen': 'Fullscreen expands the game.',
-    'mobile-stick': 'Drag the joystick to move.',
-    'mobile-mine': 'Hold the pickaxe button to mine the block you are looking at.',
-    'mobile-build': 'Hold the block button to build.',
-    'mobile-jump': 'Use jump to leap or swim upward.',
-    'block-scroll-strip': 'Drag the strip to choose a block.',
-  };
   function renderOreBars(container, counts, max, showGoal) {
     container.replaceChildren();
-    for (const [index, [color, name]] of ores.entries()) {
+    for (const [index, [color, name, column, row]] of ores.entries()) {
       const label = document.createElement('label');
       const bar = document.createElement('progress');
       label.textContent = `${translate(name)}: ${counts[index]}${showGoal ? `/${max}` : ''}`;
+      if (showGoal) {
+        const texture = document.createElement('span');
+        texture.className = 'wizard-ore-texture';
+        texture.setAttribute('aria-hidden', 'true');
+        texture.style.backgroundPosition = `-${column * 16}px -${row * 16}px`;
+        label.prepend(texture);
+      }
       bar.className = `ore-bar ore-${color}`;
       bar.max = max;
       bar.value = counts[index];
@@ -129,7 +121,28 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     }
   }
 
-  function showWizard(message, overview = false) {
+  function stopTutorial() {
+    clearTimeout(wizardTimer);
+    tutorialActive = false;
+    tutorialStep = 0;
+    $('game-guide-open').classList.remove('tutorial-active');
+    $('game-wizard-speech').hidden = true;
+    oreOverviewVisible = false;
+  }
+
+  function nextTutorialTip() {
+    if (tutorialStep === tutorialTips.length) {
+      stopTutorial();
+      return;
+    }
+    tutorialActive = true;
+    $('game-guide-open').classList.add('tutorial-active');
+    const step = tutorialStep++;
+    showWizard(tutorialTips[step], step === 1, nextTutorialTip);
+  }
+
+  function showWizard(message, overview = false, advance = null) {
+    if (tutorialActive && !advance) return;
     const bubble = $('game-wizard-speech');
     const bars = $('game-wizard-ores');
     clearTimeout(wizardTimer);
@@ -137,18 +150,16 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     oreOverviewVisible = overview;
     bars.hidden = !overview;
     if (overview) renderOreBars(bars, oreCounts, 10, true);
-    $('game-wizard-message').textContent = translate(message);
+    const text = translate(message);
+    const duration = Math.max(7000, 2000 + text.trim().split(/\s+/).length * 350);
+    $('game-wizard-message').textContent = text;
+    bubble.style.setProperty('--wizard-tip-duration', `${duration}ms`);
     void bubble.offsetWidth;
     bubble.hidden = false;
-    wizardTimer = setTimeout(() => {
+    wizardTimer = setTimeout(advance || (() => {
       bubble.hidden = true;
       oreOverviewVisible = false;
-    }, 6000);
-  }
-  for (const [id, message] of Object.entries(controlTips).filter(([id]) => id.startsWith('game-'))) {
-    for (const event of ['focus', 'mouseenter']) {
-      $(id).addEventListener(event, () => { if (tutorialActive) showWizard(message); });
-    }
+    }), duration);
   }
   let soundEnabled = true;
   const updateRewardAddress = (address) => {
@@ -216,6 +227,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         }
         if (request !== generation) return;
         dismissPayment();
+        stopTutorial();
         if (guide.open) guide.close();
         sound.hidden = true;
         status.textContent = '';
@@ -241,7 +253,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         setPlayingUi();
         if (id === 'netcraft' && !guideShown) {
           guideShown = true;
-          showWizard(tutorialTips[0]);
+          nextTutorialTip();
         }
       } catch (error) {
         if (request === generation) {
@@ -269,6 +281,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     }
     reopenGuide = guide.open;
     reopenPrompt = prompt.open;
+    if (tutorialActive) stopTutorial();
     guide.close();
     prompt.close();
     dialog.hidden = true;
@@ -352,11 +365,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     sound.setAttribute('aria-pressed', String(soundEnabled));
     frame.contentWindow?.postMessage({ type: 'netcraft-set-sound', enabled: soundEnabled }, '*');
   });
-  $('game-guide-open').addEventListener('click', () => {
-    tutorialActive = true;
-    showWizard(tutorialTips[tutorialStep]);
-    tutorialStep = (tutorialStep + 1) % tutorialTips.length;
-  });
+  $('game-guide-open').addEventListener('click', nextTutorialTip);
   $('game-guide-wallet').addEventListener('click', () => {
     openWallet();
   });
@@ -404,11 +413,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       sound.hidden = false;
       return;
     }
-    if (event.data?.type === 'netcraft-tutorial-control' && tutorialActive &&
-        Object.hasOwn(controlTips, event.data.control) && !event.data.control.startsWith('game-')) {
-      showWizard(controlTips[event.data.control]);
-      return;
-    }
     const connected = isWalletConnected ? isWalletConnected() : Boolean(getRewardAddress());
     if (event.data?.type === 'netcraft-ore-progress' &&
         Array.isArray(event.data.counts) && event.data.counts.length === 3 &&
@@ -417,7 +421,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       if (oreOverviewVisible) renderOreBars($('game-wizard-ores'), oreCounts, 10, true);
       return;
     }
-    if (event.data?.type === 'netcraft-block-mined' && !firstBlockShown &&
+    if (event.data?.type === 'netcraft-block-mined' && !tutorialActive && !firstBlockShown &&
         Number.isInteger(event.data.block) && event.data.block > 0 &&
         ![49, 70, 73, 83].includes(event.data.block)) {
       firstBlockShown = true;
@@ -531,6 +535,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     }
     generation++;
     activeGame = null;
+    stopTutorial();
     setPlayingUi();
     frame.removeAttribute('src');
     $('game-dialog-status').textContent = '';

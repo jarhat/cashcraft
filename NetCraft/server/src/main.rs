@@ -12,7 +12,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 mod flow;
 
 const CHUNK_SIZE: i32 = 32;
-const WORLD_MIN_Y: i32 = -24;
+const WORLD_MIN_Y: i32 = -27;
+const DEEP_BEDROCK_Y: i32 = -24;
 const WORLD_MAX_Y: i32 = 255;
 const BEDROCK: i32 = 65;
 const MAX_CLIENTS: usize = 64;
@@ -47,6 +48,7 @@ extern "C" {
     );
     fn world_stream(x: i32, z: i32, bottom: *mut i32, top: *mut i32) -> i32;
     fn world_stream_direction(x: i32) -> i32;
+    fn world_spawn_x() -> i32;
     fn biome_at_pos(x: i32, z: i32) -> std::ffi::c_uint;
 }
 
@@ -432,19 +434,24 @@ fn update_animals(server: &Server) -> rusqlite::Result<()> {
     update_animals_at(server, world_time())
 }
 
+fn spawn_position() -> [f64; 5] {
+    [f64::from(unsafe { world_spawn_x() }), 0.0, 0.0, 0.0, 0.0]
+}
+
 fn damage_player(state: &mut State, id: u32, amount: u8, death: &[u8]) {
     let Some(player) = state.players.get_mut(&id) else { return };
     player.lives = player.lives.saturating_sub(amount);
     let respawn = player.lives == 0;
     if respawn {
-        player.position = [0.0; 5];
+        player.position = spawn_position();
         player.lives = PLAYER_LIVES;
         player.inventory.fill(0);
         send(player, death.to_vec());
     }
     send(player, format!("HP,{}\n", player.lives));
     if respawn {
-        broadcast(state, Some(id), &format!("P,{id},0,0,0,0,0\n"));
+        let x = spawn_position()[0];
+        broadcast(state, Some(id), &format!("P,{id},{x},0,0,0,0\n"));
     }
 }
 
@@ -458,7 +465,11 @@ fn damage_from_lava(server: &Server) -> rusqlite::Result<()> {
             continue;
         }
         for offset in [0.0, 1.0, 1.5] {
-            let cell @ (bx, _, bz) = (x.round() as i32, (y - offset).round() as i32, z.round() as i32);
+            let cell @ (bx, by, bz) = (x.round() as i32, (y - offset).round() as i32, z.round() as i32);
+            if (WORLD_MIN_Y + 1..DEEP_BEDROCK_Y).contains(&by) {
+                hit.push((id, PLAYER_LIVES));
+                break;
+            }
             if !flow::can_spill(cell) {
                 continue;
             }
@@ -482,13 +493,13 @@ fn damage_from_lava(server: &Server) -> rusqlite::Result<()> {
                 }
             };
             if material == Some(13) {
-                hit.push(id);
+                hit.push((id, 5));
                 break;
             }
         }
     }
-    for id in hit {
-        damage_player(&mut state, id, 5, b"ZD\nT,Lava burned you. You respawned without your mined blocks.\n");
+    for (id, damage) in hit {
+        damage_player(&mut state, id, damage, b"ZD\nT,Lava burned you. You respawned without your mined blocks.\n");
     }
     Ok(())
 }
@@ -1036,7 +1047,7 @@ fn completed_mina_rewards(db: &Connection, player: &Player, category: &str) -> r
 fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusqlite::Result<()> {
     if x.unsigned_abs() > MAX_COORD as u32
         || z.unsigned_abs() > MAX_COORD as u32
-        || !(WORLD_MIN_Y + 1..=WORLD_MAX_Y).contains(&y)
+        || !(DEEP_BEDROCK_Y + 1..=WORLD_MAX_Y).contains(&y)
     {
         if let Some(player) = server.state.lock().unwrap().players.get(&id) {
             let (p, q) = (chunked(x), chunked(z));
@@ -1651,9 +1662,11 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                     .join(", ");
                 send(&player, format!("T,Players: {names}\n").into_bytes());
             } else if text == "/spawn" {
-                state.players.get_mut(&id).unwrap().position = [0.0; 5];
-                send(&player, format!("U,{id},0,0,0,0,0\n").into_bytes());
-                broadcast(&state, Some(id), &format!("P,{id},0,0,0,0,0\n"));
+                let position = spawn_position();
+                let x = position[0];
+                state.players.get_mut(&id).unwrap().position = position;
+                send(&player, format!("U,{id},{x},0,0,0,0\n").into_bytes());
+                broadcast(&state, Some(id), &format!("P,{id},{x},0,0,0,0\n"));
             } else if text == "/chat" {
                 send(&player, b"T,Use /chat MESSAGE or type a message without a command.\n".to_vec());
             } else if text.starts_with('/') && !text.starts_with("/chat ") {
@@ -1760,11 +1773,13 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
             .next_id
             .checked_add(1)
             .ok_or_else(|| io::Error::other("player IDs exhausted"))?;
+        let position = spawn_position();
+        let x = position[0];
         let player = Player {
             sender,
             socket,
             name: format!("guest{id}"),
-            position: [0.0; 5],
+            position,
             reward_address: None,
             guest_id: None,
             inventory: [0; 256],
@@ -1776,7 +1791,7 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
         let now = world_time();
         send(
             &player,
-            format!("U,{id},0,0,0,0,0\nN,{id},{}\nE,{now},{DAY_LENGTH}\nZN,{}\nHP,{PLAYER_LIVES}\nT,Welcome to NetCraft!\n",
+            format!("U,{id},{x},0,0,0,0\nN,{id},{}\nE,{now},{DAY_LENGTH}\nZN,{}\nHP,{PLAYER_LIVES}\nT,Welcome to NetCraft!\n",
                 player.name, u8::from(is_night(now))).into_bytes(),
         );
         let mut snapshot = String::new();
@@ -1797,7 +1812,7 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
             &state,
             None,
             &format!(
-                "P,{id},0,0,0,0,0\nN,{id},{}\nT,{} joined the game.\n",
+                "P,{id},{x},0,0,0,0\nN,{id},{}\nT,{} joined the game.\n",
                 player.name, player.name
             ),
         );
@@ -2267,8 +2282,23 @@ mod tests {
         assert!(!center.contains_key(&(80, top + 1, 0)));
         assert_eq!(center.get(&(64, top, 0)), Some(&12));
         assert_eq!(west.get(&(64, top, 0)), Some(&-12));
+        assert_eq!(west.get(&(48, top, 0)), Some(&12));
         let bank = terrain.chunk(3, 0);
         assert!((top + 1..=200).any(|y| bank.get(&(104, y, 0)).is_some()));
+
+        let north = terrain.chunk(-2, 3);
+        assert!((32..=180).filter(|&y| north.get(&(-42, y, 119)) == Some(&12)).count() >= 8);
+    }
+
+    #[test]
+    fn spawn_is_dry_rainforest_with_desert_nearby() {
+        let x = spawn_position()[0] as i32;
+        assert_eq!(unsafe { biome_at_pos(x, 0) }, 2);
+        assert!((1..=40).any(|dx| unsafe { biome_at_pos(x - dx, 0) } == 1));
+        let mut terrain = Terrain::default();
+        let chunk = terrain.chunk(chunked(x), 0);
+        assert!(!(32..=WORLD_MAX_Y).any(|y| chunk.get(&(x, y, 0)) == Some(&12)));
+        assert!((32..=WORLD_MAX_Y).any(|y| chunk.get(&(x, y, 0)) == Some(&1)));
     }
 
     #[test]
@@ -3070,7 +3100,7 @@ mod tests {
         update_animals_at(&server, 3).unwrap();
         let state = server.state.lock().unwrap();
         assert_eq!(state.players[&1].lives, 10);
-        assert_eq!(state.players[&1].position, [0.0; 5]);
+        assert_eq!(state.players[&1].position, spawn_position());
         assert_eq!(state.players[&1].inventory, [0; 256]);
         assert_eq!(state.players[&2].lives, 10);
         assert_eq!(state.players[&2].inventory[6], 3);
@@ -3151,8 +3181,23 @@ mod tests {
         assert!(messages.contains("ZD\nT,Lava burned you."));
         let state = server.state.lock().unwrap();
         assert_eq!(state.players[&1].lives, PLAYER_LIVES);
-        assert_eq!(state.players[&1].position, [0.0; 5]);
+        assert_eq!(state.players[&1].position, spawn_position());
         assert_eq!(state.players[&2].lives, PLAYER_LIVES);
+    }
+
+    #[test]
+    fn exposed_lava_below_bedrock_kills_on_the_first_damage_tick() {
+        let (server, first, _) = setup();
+        let chunk = server.terrain.lock().unwrap().chunk(0, 0);
+        assert_eq!(chunk.get(&(22, -24, 28)), Some(&BEDROCK));
+        assert!(!chunk.contains_key(&(24, -24, 28)));
+        assert_eq!(chunk.get(&(24, -25, 28)), Some(&13));
+        assert_eq!(chunk.get(&(24, -26, 28)), Some(&13));
+        assert_eq!(chunk.get(&(24, -27, 28)), Some(&BEDROCK));
+        move_to(&server, (24, -23, 28));
+        damage_from_lava(&server).unwrap();
+        assert!(first.try_recv().unwrap().starts_with(b"ZD\nT,Lava burned you."));
+        assert_eq!(server.state.lock().unwrap().players[&1].position, spawn_position());
     }
 
     #[test]

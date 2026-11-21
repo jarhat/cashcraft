@@ -43,8 +43,13 @@ static void generate_underworld(int x, int z, int flag, world_func func, void *a
     int height, top;
     int material = world_stream(x, z, &height, &top);
     func(x, WORLD_MIN_Y, z, Item_BEDROCK * flag, arg);
+    func(x, WORLD_MIN_Y + 1, z, Item_LAVA * flag, arg);
+    func(x, WORLD_MIN_Y + 2, z, Item_LAVA * flag, arg);
+    // Shafts off the stream banks expose the lava below the old floor.
+    int vent = abs(phase64(x) - 24) <= 1 && abs(phase64(z) - 28) <= 1;
+    if (!vent) func(x, DEEP_BEDROCK_Y, z, Item_BEDROCK * flag, arg);
     if (material) {
-        for (int y = WORLD_MIN_Y + 1; y < height; y++) {
+        for (int y = DEEP_BEDROCK_Y + 1; y < height; y++) {
             func(x, y, z, deep_stone(x, y, z) * flag, arg);
         }
         for (int y = height; y <= top; y++) {
@@ -57,10 +62,14 @@ static void generate_underworld(int x, int z, int flag, world_func func, void *a
         if (bank == -20 && simplex2(x * .05f, z * .05f, 2, .5f, 2) > .62f) {
             bank += 2;
         }
-        for (int y = WORLD_MIN_Y + 1; y <= bank; y++) {
+        for (int y = DEEP_BEDROCK_Y + 1; !vent && y <= bank; y++) {
             func(x, y, z, deep_stone(x, y, z) * flag, arg);
         }
     }
+}
+
+int world_spawn_x(void) {
+    return WORLD_SPAWN_X;
 }
 
 static int mina_deposit(int x, int z) {
@@ -83,9 +92,8 @@ static int terrain_height(int x, int z) {
 
 void create_world(int p, int q, world_func func, void *arg) {
     int pad = 1;
-    int lake_level = 31 + terrain_height(80, 0);
-    if (lake_level < 43) lake_level = 43;
-    if (lake_level > 180) lake_level = 180;
+    int east_level = fminf(180, fmaxf(44, 31 + terrain_height(80, 0)));
+    int north_level = fminf(180, fmaxf(44, 31 + terrain_height(-42, 119)));
 
     for (int dx = -pad; dx < CHUNK_SIZE + pad; dx++) {
         for (int dz = -pad; dz < CHUNK_SIZE + pad; dz++) {
@@ -106,9 +114,13 @@ void create_world(int p, int q, world_func func, void *arg) {
             if (h > max_h) h = max_h;
 
             float lake_radius = hypotf((float)x - 80.0f, (float)z);
-            if (lake_radius < 40.0f) {
-                float basin = lake_level - 7.0f + 8.0f * lake_radius * lake_radius / (22.0f * 22.0f);
-                float blend = lake_radius <= 22.0f ? 1.0f : (40.0f - lake_radius) / 18.0f;
+            float north_radius = hypotf((float)(x + 42) * 1.15f, (float)z - 119.0f);
+            int east_lake = lake_radius <= north_radius;
+            if (!east_lake) lake_radius = north_radius;
+            int lake_level = east_lake ? east_level : north_level;
+            if (lake_radius < 60.0f) {
+                float basin = lake_level - 10.0f + 9.0f * lake_radius * lake_radius / (38.0f * 38.0f);
+                float blend = lake_radius <= 42.0f ? 1.0f : (60.0f - lake_radius) / 18.0f;
                 h = (int)roundf((basin - 31.0f) * blend + h * (1.0f - blend));
                 if (h < 1) h = 1;
                 if (h > max_h) h = max_h;
@@ -122,7 +134,7 @@ void create_world(int p, int q, world_func func, void *arg) {
                 dx, dz, x, z, opening ? 4 : 1, 32, flag, func, arg
             );
 
-            if (lake_radius < 46.0f) {
+            if (lake_radius < 64.0f) {
                 for (int y = 32; y < 31 + h; y++) {
                     func(x, y, z, Item_DIRT * flag, arg);
                 }
@@ -131,7 +143,7 @@ void create_world(int p, int q, world_func func, void *arg) {
                     biome == Biome_DESERT ? Item_SAND :
                     biome == Biome_TAIGA ? Item_SNOW : Item_GRASS;
                 func(x, surface, z, ground * flag, arg);
-                for (int y = surface + 1; y <= lake_level && lake_radius < 40.0f; y++) {
+                for (int y = surface + 1; y <= lake_level && lake_radius < 60.0f; y++) {
                     func(x, y, z, Item_WATER * flag, arg);
                 }
             } else if (biome == Biome_TEMPERATE) {
@@ -153,13 +165,13 @@ void create_world(int p, int q, world_func func, void *arg) {
             }
 
             int surface = 31 + h;
-            if (lake_radius >= 46.0f && surface >= 32 && surface < 256 && mina_deposit(x, z)) {
+            if ((lake_radius >= 64.0f || surface >= lake_level) && surface >= 32 && surface < 256 && mina_deposit(x, z)) {
                 func(x, surface, z, Item_MINA_ORE * flag, arg);
             }
 
             /* Clouds */
             for (int y = 128; y < 132; y++) {
-                if (!(lake_radius < 40.0f && y <= lake_level) && simplex3(
+                if (!(lake_radius < 60.0f && y <= lake_level) && simplex3(
                     x * 0.01f, y * 0.1f, z * 0.01f,
                     8, 0.5f, 2.0f
                 ) > 0.75f) {
@@ -178,6 +190,13 @@ Biome biome_at_pos(int x, int z) {
     float biome_scale = 0.0005f / (float) BIOME_SIZE;
 
     float biomen = simplex2(-x * biome_scale, -z * biome_scale, 2, 0.35f, 2.0f);
+    float spawn_distance = hypotf((float)(x - WORLD_SPAWN_X), (float)z);
+    if (spawn_distance < 112.0f) {
+        float influence = fminf(1.0f, (112.0f - spawn_distance) / 48.0f);
+        float boundary = -65.0f + 18.0f * (simplex2(x * .025f, z * .025f, 2, .5f, 2) - .5f);
+        float local = fmaxf(.55f, fminf(.9f, .75f + ((float)x - boundary) * .006f));
+        biomen += (local - biomen) * influence;
+    }
 
     Biome biome = Biome_max;
 

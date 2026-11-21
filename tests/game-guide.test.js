@@ -22,6 +22,7 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
       append(...children) { this.children.push(...children); },
       replaceChildren(...children) { this.children = children; },
       classList: { add() {}, remove() {}, toggle() {} },
+      style: { setProperty() {} },
       show() { this.open = true; },
       close() { this.open = false; this.listeners.close?.(); },
       focus() {},
@@ -33,7 +34,13 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
     documentElement: { classList: { remove() {} } },
     body: { classList: { toggle() {} } }, fullscreenElement: null,
     querySelector() { return toolbar; }, addEventListener() {},
-    createElement() { return { children: [], append(child) { this.children.push(child); } }; },
+    createElement() {
+      return {
+        children: [], style: {}, setAttribute() {},
+        append(child) { this.children.push(child); },
+        prepend(child) { this.children.unshift(child); },
+      };
+    },
   };
   globalThis.requestAnimationFrame = () => {};
   let dismiss;
@@ -57,7 +64,7 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
   await $('game-netcraft').listeners.click();
   assert.equal($('game-guide').open, false);
   assert.equal($('game-wizard-speech').hidden, false);
-  dismiss();
+  for (let step = 0; step < 5; step++) dismiss();
   assert.equal($('game-wizard-speech').hidden, true);
   assert.equal($('game-notifications')['aria-controls'], 'connection-dialog');
   await $('game-close').listeners.click();
@@ -74,7 +81,7 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
   assert.deepEqual($('game-wizard-ores').children.map(row => row.textContent),
     ['MINA ore: 2/10', 'Lapis ore: 3/10', 'Redstone ore: 4/10']);
   message({ type: 'netcraft-ore-progress', counts: [2, 4, 4] });
-  assert.equal($('game-wizard-ores').children[1].children[0].value, 4);
+  assert.equal($('game-wizard-ores').children[1].children[1].value, 4);
   handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-mining-progress', blocks: 9, unlocked: false } });
   assert.equal($('game-guide-progress').textContent, 'MINA ore progress: 9 / 10');
   assert.match($('game-wizard-message').textContent, /10 natural blocks/);
@@ -91,10 +98,8 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
   assert.equal(connections, 1);
   $('game-guide-open').listeners.click();
   assert.equal($('game-wizard-speech').hidden, false);
-  $('game-fullscreen').listeners.focus();
-  assert.match($('game-wizard-message').textContent, /Fullscreen/);
-  handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-tutorial-control', control: 'mobile-mine' } });
-  assert.match($('game-wizard-message').textContent, /Hold the pickaxe/);
+  message({ type: 'netcraft-tutorial-control', control: 'mobile-mine' });
+  assert.match($('game-wizard-message').textContent, /^Use WASD/);
   $('game-guide-wallet').listeners.click();
   assert.equal(connections, 2);
   connected = true;

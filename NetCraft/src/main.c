@@ -2219,7 +2219,7 @@ static bool player_in_water(const State *s) {
 }
 
 void builder_block(int x, int y, int z, int w) {
-    if (y <= WORLD_MIN_Y || y > WORLD_MAX_Y || get_block(x, y, z) == Item_BEDROCK) {
+    if (y <= DEEP_BEDROCK_Y || y > WORLD_MAX_Y || get_block(x, y, z) == Item_BEDROCK) {
         return;
     }
     if (is_destructable(get_block(x, y, z))) {
@@ -3245,7 +3245,7 @@ void on_light() {
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(false, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (hy > WORLD_MIN_Y && hy <= WORLD_MAX_Y && is_destructable(hw)) {
+    if (hy > DEEP_BEDROCK_Y && hy <= WORLD_MAX_Y && is_destructable(hw)) {
         toggle_light(hx, hy, hz);
     }
 }
@@ -3287,7 +3287,7 @@ void on_mine() {
 #endif
     int hx, hy, hz, face;
     int hw = get_targeted_block(&hx, &hy, &hz, &face);
-    if (hw && hy > WORLD_MIN_Y && hy <= WORLD_MAX_Y && is_destructable(hw)) {
+    if (hw && hy > DEEP_BEDROCK_Y && hy <= WORLD_MAX_Y && is_destructable(hw)) {
         set_block(hx, hy, hz, 0);
         if (g->mode != MODE_ONLINE) {
             Inventory_collect(&g->inventory, hw);
@@ -3323,7 +3323,7 @@ void on_build() {
             if (!hw) return;
         }
 
-        if (hy > WORLD_MIN_Y && hy <= WORLD_MAX_Y && !player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
+        if (hy > DEEP_BEDROCK_Y && hy <= WORLD_MAX_Y && !player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
             if (!inventory_item_count) {
                 add_message("Mine a block before building.");
                 return;
@@ -3931,15 +3931,15 @@ void handle_movement(double dt) {
         g->lava_exposure = hot ? g->lava_exposure + dt : 0;
         if (g->lava_exposure >= .4) {
             g->lava_exposure = 0;
-            g->lives -= 5;
+            g->lives -= s->y < DEEP_BEDROCK_Y + .5f ? PLAYER_LIVES : 5;
             if (g->lives <= 0) {
                 mining_stop();
                 building_stop();
                 Inventory_reset(&g->inventory);
                 sync_inventory_items();
-                s->x = 0; s->y = 0; s->z = 0;
+                s->x = WORLD_SPAWN_X; s->y = 0; s->z = 0;
                 force_chunks(g->players);
-                s->y = highest_block(0, 0) + 2;
+                s->y = highest_block(s->x, s->z) + 2;
                 g->lives = PLAYER_LIVES;
                 add_message("Lava burned you. You respawned without your mined blocks.");
             }
@@ -4066,7 +4066,7 @@ void parse_buffer(char *buffer, int len) {
             pending_placement.active = false;
             Inventory_reset(&g->inventory);
             sync_inventory_items();
-            s->x = 0; s->y = 0; s->z = 0; s->rx = 0; s->ry = 0;
+            s->x = WORLD_SPAWN_X; s->y = 0; s->z = 0; s->rx = 0; s->ry = 0;
             force_chunks(me);
             s->y = highest_block(s->x, s->z) + 2;
         }
@@ -4779,6 +4779,7 @@ void main_inited() {
 
     // LOAD STATE FROM DATABASE //
     int loaded = db_load_state(&s->x, &s->y, &s->z, &s->rx, &s->ry);
+    if (!loaded) s->x = WORLD_SPAWN_X;
     force_chunks(me);
     if (!loaded) {
         s->y = highest_block(s->x, s->z) + 2;
