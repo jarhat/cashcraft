@@ -104,6 +104,11 @@ test('game buttons minimize and restore without unloading the active game', asyn
     },
   });
   assert.equal(gameToolbarSelected, true);
+  $('game-controls-toggle').listeners.click();
+  assert.equal($('game-extra-controls').hidden, true);
+  assert.equal($('game-controls-toggle')['aria-expanded'], 'false');
+  $('game-controls-toggle').listeners.click();
+  assert.equal($('game-extra-controls').hidden, false);
   let wallet = 0;
   $('connection-open').click = () => { wallet++; };
   $('notifications-toggle').click = () => {};
@@ -121,10 +126,11 @@ test('game buttons minimize and restore without unloading the active game', asyn
   $('invite-dialog').listeners.close();
   assert.equal($('invite-dialog').parentNode, parent);
   assert.equal($('game-frame').focused, true);
-  assert.equal($('game-fullscreen')['aria-label'], 'Exit fullscreen');
+  assert.equal($('game-fullscreen')['aria-label'], 'Minimize CashCraft');
   assert.equal($('game-fullscreen')['aria-pressed'], 'true');
   await $('game-fullscreen').listeners.click();
   assert.equal(document.fullscreenElement, null);
+  assert.equal($('game-dialog').hidden, true);
   assert.equal($('game-controls-right').parentNode, toolbar);
   assert.equal($('game-fullscreen')['aria-label'], 'Enter fullscreen');
   assert.equal($('game-fullscreen')['aria-pressed'], 'false');

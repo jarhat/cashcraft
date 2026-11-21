@@ -348,30 +348,43 @@ test('touch joystick follows its starting finger and moves in every direction wi
   assert.deepEqual(calls.at(-1), ['touch_set_move', [0, 0]]);
 });
 
-test('touch block cycling invokes the game without adding a separate chat interface', () => {
+test('touch block cycling continues outside the HUD when pointer capture fails', () => {
   const elements = new Map();
+  const listeners = {};
   const $ = (id) => {
     if (!elements.has(id)) elements.set(id, {
       listeners: {}, style: {}, value: '', classList: { add() {} },
       addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute() {}, focus() { this.focused = true; },
+      setPointerCapture() { throw Object.assign(new Error('inactive pointer'), { name: 'InvalidStateError' }); },
     });
     return elements.get(id);
   };
   const document = { getElementById: $, querySelector: () => $('controls'), addEventListener() {} };
-  const window = { PointerEvent: function() {}, addEventListener() {} };
-  const context = { document, window, Date, Math, console };
+  const window = { PointerEvent: function() {}, addEventListener(type, fn) { (listeners[type] ||= []).push(fn); } };
+  const warnings = [];
+  const context = { document, window, Date, Math, console: { warn: (...args) => warnings.push(args) } };
   runInNewContext(script, context);
   const calls = [];
   context.Module._touch_scroll_items = true;
   context.Module.ccall = (name, _result, _types, args) => calls.push([name, Array.from(args)]);
   const strip = $('block-scroll-strip');
-  strip.listeners.touchstart({ preventDefault() {}, touches: [{ clientY: 100 }] });
-  strip.listeners.touchmove({ preventDefault() {}, touches: [{ clientY: 60 }] });
+  const start = (pointerId) => strip.listeners.pointerdown({ pointerType: 'touch', pointerId, clientY: 100 });
+  const dispatch = (type, pointerId, clientY) => listeners[type].forEach((fn) => fn({ pointerId, clientY }));
+  start(1);
+  dispatch('pointermove', 2, 0);
+  dispatch('pointermove', 1, 60);
   assert.equal(calls.length, 0);
-  strip.listeners.touchmove({ preventDefault() {}, touches: [{ clientY: 44 }] });
+  dispatch('pointermove', 1, 44);
   assert.deepEqual(calls, [['touch_scroll_items', [1]]]);
-  strip.listeners.touchmove({ preventDefault() {}, touches: [{ clientY: 100 }] });
+  dispatch('pointermove', 1, 100);
   assert.deepEqual(calls.at(-1), ['touch_scroll_items', [-1]]);
+  dispatch('pointercancel', 1);
+  dispatch('pointermove', 1, 0);
+  assert.equal(calls.length, 2);
+  start(3);
+  dispatch('pointermove', 3, 0);
+  assert.deepEqual(calls.at(-1), ['touch_scroll_items', [2]]);
+  assert.equal(warnings.length, 2);
   assert.doesNotMatch(shell, /id="mobile-chat"|id="touch-chat"/);
 });

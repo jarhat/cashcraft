@@ -1825,7 +1825,7 @@
             if (scrollPointer !== null || (!event.touchFallback && event.pointerType !== 'touch')) return;
             scrollPointer = event.pointerId;
             scrollAnchorY = event.clientY;
-            if (!event.touchFallback) scrollStrip.setPointerCapture(scrollPointer);
+            if (!event.touchFallback) capturePointer(scrollStrip, scrollPointer);
           }
           function moveBlockScroll(event) {
             if (event.pointerId !== scrollPointer) return;
@@ -1841,9 +1841,10 @@
           }
           if (window.PointerEvent) {
             scrollStrip.addEventListener('pointerdown', startBlockScroll);
-            scrollStrip.addEventListener('pointermove', moveBlockScroll);
-            ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(type) {
-              scrollStrip.addEventListener(type, endBlockScroll);
+            scrollStrip.addEventListener('lostpointercapture', endBlockScroll);
+            window.addEventListener('pointermove', moveBlockScroll);
+            ['pointerup', 'pointercancel'].forEach(function(type) {
+              window.addEventListener(type, endBlockScroll);
             });
           } else {
             touchFallback(scrollStrip, startBlockScroll, moveBlockScroll, endBlockScroll);
