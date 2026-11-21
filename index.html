@@ -50,13 +50,13 @@
       <span class="market-label">BCH / CHAIN</span>
       <span class="network"><i aria-hidden="true"></i><span id="network">CHIPNET</span><span id="network-wallet-status" class="visually-hidden">Not connected</span></span>
     </div>
-    <div id="chain-ticker" class="market-ticker" role="region" tabindex="0" aria-label="Bitcoin Cash blockchain status and MINA rewards sent">Loading blockchain status…</div>
+    <div id="chain-ticker" class="market-ticker" role="region" tabindex="0" aria-label="Bitcoin Cash blockchain status, MINA rewards sent, and ore mined since tracking began">Loading blockchain status…</div>
     <svg class="holiday-flight" viewBox="0 0 64 24" shape-rendering="crispEdges" aria-hidden="true">
       <path fill="#cf3744" d="M5 10h13v6H5zm4-6h6v6H9z"/><path fill="#fff" d="M8 3h7v2H8zm0 7h8v2H8zM15 5h2v3h-2z"/><path fill="#eac09b" d="M10 7h5v3h-5z"/>
       <path fill="#ad774f" d="M33 10h13v6H33zm11-4h5v7h-5zM35 16h2v4h-2zm8 0h2v4h-2z"/><path fill="#e9c38b" d="M46 3h2v4h-2zm3 1h2v4h-2z"/><path fill="#e34a4a" d="M49 8h2v2h-2z"/><path fill="#9ab8c6" d="M18 15h15v1H18zM3 19h20v1H3z"/>
     </svg>
     <button id="donate-open" class="donate-open" type="button" aria-label="Donate Bitcoin Cash" title="Donate Bitcoin Cash" aria-haspopup="dialog" aria-controls="donate-dialog">
-      <svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><path fill="#d63455" d="M2 2h4v1h1v1h2V3h1V2h4v1h1v5h-1v2h-1v1h-1v1h-1v1H9v1H7v-1H5v-1H4v-1H3v-1H2V8H1V3h1z"/><path fill="#ff9eae" d="M3 3h3v1H4v1H3z"/></svg>
+      <svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><path fill="#22a85a" d="M2 2h4v1h1v1h2V3h1V2h4v1h1v5h-1v2h-1v1h-1v1h-1v1H9v1H7v-1H5v-1H4v-1H3v-1H2V8H1V3h1z"/><path fill="#9cf2b6" d="M3 3h3v1H4v1H3z"/></svg>
     </button>
   </div>
   <canvas id="snow-canvas" class="snow" aria-hidden="true"></canvas>
@@ -136,8 +136,8 @@
       </div>
       <div id="game-controls-right" class="game-controls game-controls-right" role="group" aria-label="CashCraft controls">
         <button id="game-close" type="button" aria-label="Minimize CashCraft" title="Minimize CashCraft">−</button>
-        <button id="game-crafting" type="button" aria-label="Open crafting with 10 MINA" title="Open crafting with 10 MINA" hidden>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+        <button id="game-crafting" type="button" aria-label="Craft a MINA pickaxe with 2 MINA" title="Craft a MINA pickaxe with 2 MINA" hidden>
+          <img src="/mining-table.svg" alt="">
         </button>
         <button id="game-ranking" class="game-ranking-button" type="button" aria-label="Ranking" title="Ranking" aria-haspopup="dialog" aria-controls="ranking-dialog" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v3a4 4 0 0 1-8 0zm0 1H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4M12 11v5m-4 4h8m-7-4h6v4"/></svg>
@@ -155,7 +155,7 @@
         <button id="game-fullscreen" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/></svg>
         </button>
-        <button id="game-guide-open" type="button" aria-label="Open wizard guide" title="Open wizard guide" aria-controls="game-guide">
+        <button id="game-guide-open" type="button" aria-label="Next wizard tutorial tip" title="Next wizard tutorial tip" aria-controls="game-wizard-speech">
           <img src="/wizard.svg" alt="">
         </button>
       </div>
@@ -185,7 +185,7 @@
               <li><strong>Mine</strong> (hold): break blocks. <strong>Build</strong>: place the selected block. <strong>Jump</strong>: jump.</li>
               <li><strong>Block selection</strong>: scroll the mouse wheel, or drag up or down on the right edge of the screen on touch devices.</li>
               <li><strong>Rewards</strong>: mining MINA ore pays MINA-linked CashTokens. Redstone, gold and lapis ores pay separate token categories when the operator configures them.</li>
-              <li><strong>Crafting</strong> (top-left button): opens Send with 10 MINA prefilled. Review the transfer and crafting terms before approving.</li>
+              <li><strong>Crafting</strong>: after earning 2 MINA, review a 2 MINA payment to unlock the pickaxe after confirmation.</li>
             </ul>
           </details>
         </div>
@@ -341,6 +341,11 @@
         </div>
 
         <p id="crafting-note" class="swap-note" hidden></p>
+        <div id="pickaxe-recovery" hidden>
+          <label for="pickaxe-transaction">Pickaxe payment transaction ID</label>
+          <input id="pickaxe-transaction" autocomplete="off" maxlength="64">
+          <button id="pickaxe-retry" class="small-button" type="button">Retry pickaxe verification</button>
+        </div>
         <button id="send" class="button primary send">
           Review and approve in wallet <span aria-hidden="true">→</span>
         </button>
@@ -613,6 +618,9 @@
     <p id="game-dialog-status" class="fine" role="status"></p>
     <div id="game-stage" class="game-stage">
       <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="autoplay *; fullscreen; gamepad *" allowfullscreen></iframe>
+      <div id="game-wizard-speech" class="game-wizard-speech" role="status" aria-live="polite" hidden>
+        <img src="/wizard.svg" alt=""><p id="game-wizard-message"></p>
+      </div>
       <nav id="game-wallet-actions" class="game-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
       <dialog id="game-guide" class="game-guide" aria-labelledby="game-guide-title">
         <div class="game-guide-body">
@@ -622,11 +630,11 @@
           </div>
           <div class="browser-wallet-actions"><button id="game-guide-wallet" class="button primary" type="button">Connect wallet</button><button id="game-guide-done" class="small-button" type="button">Play</button></div>
           <div class="game-guide-copy" tabindex="0">
-            <p>Explore and mine 10 naturally generated green MINA ore blocks online to earn 1 MINA. Connect a wallet to receive it and equip the faster green MINA pickaxe.</p>
+            <p>Explore and mine 10 naturally generated green MINA ore blocks online to earn 1 MINA. Connect a wallet to receive it.</p>
             <p>Set up a token-aware wallet to receive your earned MINA. Your mining progress and unclaimed rewards stay with this browser. A new wallet is also queued 1 welcome MINA. Rewards depend on the payout service.</p>
             <p>Clearing this browser's site data will lose access to unclaimed rewards.</p>
             <p id="game-guide-progress" role="status" aria-live="polite"></p>
-            <p>The wizard reopens this guide. The gem opens your wallet and notifications. Invite shares the game; Ranking shows mining rewards; fullscreen expands the game; sound toggles audio. Craft prepares a transfer of 10 MINA.</p>
+            <p>Use the wizard for tutorial tips. After earning 2 MINA, craft the pickaxe with a reviewable payment.</p>
             <p>Use WASD to move, space to jump, left click to mine and right click to build. On mobile, use the joystick and the jump, mine and build buttons. Scroll to choose blocks.</p>
           </div>
         </div>
@@ -637,9 +645,9 @@
         <div class="mining-art" aria-hidden="true"><img src="/mining-table.svg" alt=""><img src="/mina-gem.svg" alt=""></div>
         <div class="crypto-mesh"><img src="/bitcoin-cash-official.svg" alt="Bitcoin Cash"><img src="/mina-gem.svg" alt="MINA"><span>BCH × MINA</span></div>
         <p id="mining-prompt-message"></p>
-        <p>Mine 100 natural MINA ore blocks to earn 10 MINA for crafting. Rewards depend on the payout service.</p>
+        <p>Mine 20 natural MINA ore blocks to earn 2 MINA for crafting. Rewards depend on the payout service.</p>
         <button id="mining-prompt-craft" class="small-button" type="button" hidden>Open crafting table</button>
-        <p>MINA CashTokens are received in a Bitcoin Cash transaction. Connect or set up a wallet to claim them and use your green pickaxe.</p>
+        <p>MINA CashTokens are received in a Bitcoin Cash transaction. Connect or set up a wallet to claim them.</p>
         <p>Need BCH? <a href="https://sideshift.ai" target="_blank" rel="noopener noreferrer">SideShift.ai</a> is an independent swap service on mainnet. Check network, rates and fees.</p>
         <div class="crypto-icons" aria-label="Bitcoin Cash, Bitcoin and Ethereum"><img src="/bitcoin-cash-official.svg" alt="Bitcoin Cash"><img src="/bitcoin-official.png" alt="Bitcoin"><img src="/ethereum-official.png" alt="Ethereum"></div>
       </dialog>
@@ -706,7 +714,7 @@
         <details class="wiki-term"><summary>NFT</summary><div class="wiki-term-popover">An NFT is a non-fungible token. It can carry application-defined data and a capability.</div></details>
         <details class="wiki-term"><summary>Covenant</summary><div class="wiki-term-popover">A covenant is a script that can place rules on how an output may be spent.</div></details>
         <details class="wiki-term"><summary>Ore rewards</summary><div class="wiki-term-popover">In CashCraft, mining ore can pay separate CashToken categories. Each ore type uses its own category, so check the category ID before you treat a token as MINA-linked.</div></details>
-        <details class="wiki-term"><summary>Crafting</summary><div class="wiki-term-popover">The crafting button opens Send with 10 MINA prefilled. Review the transfer and crafting terms before approving.</div></details>
+        <details class="wiki-term"><summary>Crafting</summary><div class="wiki-term-popover">The crafting button prepares a 2 MINA payment. Review and approve it in your wallet; the pickaxe unlocks after one confirmation.</div></details>
         <details class="wiki-term"><summary>BCMR</summary><div class="wiki-term-popover">BCMR describes token metadata such as names and icons. It does not prove a token is authentic.</div></details>
       </div>
       <p>A practical guide to Bitcoin Cash tokens. This overview is not a consensus implementation; consult the <a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer">CashTokens specification ↗</a> and its test vectors for normative rules.</p>

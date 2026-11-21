@@ -1,5 +1,6 @@
 export const wikiTranslations = {
   es: {
+    'The crafting button prepares a 2 MINA payment. Review and approve it in your wallet; the pickaxe unlocks after one confirmation.': 'El botón de fabricación prepara un pago de 2 MINA. Revísalo y apruébalo en tu cartera; el pico se desbloquea tras una confirmación.',
     'The crafting button opens Send with 10 MINA prefilled. Review the transfer and crafting terms before approving.': 'El botón de fabricación abre Enviar con 10 MINA. Revisa la transferencia y las condiciones antes de aprobar.',
     'Language': 'Idioma',
     'Tap a term for a quick explanation.': 'Toca un término para ver una explicación breve.',
@@ -54,6 +55,7 @@ export const wikiTranslations = {
     'Not on its own. Check the exact category and independently verify issuer claims and controlling scripts.': 'No por sí solos. Comprueba la categoría exacta y verifica de forma independiente las afirmaciones del emisor y los scripts de control.',
   },
   fr: {
+    'The crafting button prepares a 2 MINA payment. Review and approve it in your wallet; the pickaxe unlocks after one confirmation.': 'Le bouton de fabrication prépare un paiement de 2 MINA. Vérifiez-le et approuvez-le dans votre portefeuille ; la pioche se débloque après une confirmation.',
     'The crafting button opens Send with 10 MINA prefilled. Review the transfer and crafting terms before approving.': 'Le bouton de fabrication ouvre Envoyer avec 10 MINA préremplis. Vérifiez le transfert et les conditions avant de confirmer.',
     'Language': 'Langue',
     'Tap a term for a quick explanation.': 'Touchez un terme pour une explication rapide.',
@@ -108,6 +110,7 @@ export const wikiTranslations = {
     'Not on its own. Check the exact category and independently verify issuer claims and controlling scripts.': 'Pas à eux seuls. Vérifiez la catégorie exacte et les affirmations de l’émetteur ainsi que les scripts de contrôle de façon indépendante.',
   },
   de: {
+    'The crafting button prepares a 2 MINA payment. Review and approve it in your wallet; the pickaxe unlocks after one confirmation.': 'Die Werkbank bereitet eine Zahlung von 2 MINA vor. Prüfe und bestätige sie in deiner Wallet; die Spitzhacke wird nach einer Bestätigung freigeschaltet.',
     'The crafting button opens Send with 10 MINA prefilled. Review the transfer and crafting terms before approving.': 'Die Herstellungsschaltfläche öffnet Senden mit vorausgefüllten 10 MINA. Prüfe Übertragung und Bedingungen vor der Bestätigung.',
     'Language': 'Sprache',
     'Tap a term for a quick explanation.': 'Tippe auf einen Begriff für eine kurze Erklärung.',

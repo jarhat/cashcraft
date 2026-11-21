@@ -14,7 +14,6 @@ static bool has_swung = false;
 static double next_swing_sound = 0;
 static bool has_pickaxe = false;
 static bool wallet_pickaxe = false;
-static bool guest_pickaxe = false;
 static bool wallet_connected = false;
 static bool holding_mine_button = false;
 static bool attacking_animal = false;
@@ -39,7 +38,7 @@ extern bool on_pickaxe_attack(void);
 extern int get_targeted_block(int *x, int *y, int *z, int *face);
 
 static void update_pickaxe(void) {
-    bool next = wallet_connected && (wallet_pickaxe || guest_pickaxe);
+    bool next = wallet_connected && wallet_pickaxe;
     if (next != has_pickaxe) {
         has_pickaxe = next;
         if (holding_mine_button) mining_started = glfwGetTime();
@@ -52,11 +51,6 @@ EMSCRIPTEN_KEEPALIVE
 #endif
 void mining_set_pickaxe(int enabled) {
     wallet_pickaxe = enabled != 0;
-    update_pickaxe();
-}
-
-void mining_set_guest_pickaxe(int enabled) {
-    guest_pickaxe = enabled != 0;
     update_pickaxe();
 }
 

@@ -1380,6 +1380,28 @@ function renderPortfolioChart(items) {
   content.append(wrapper);
 }
 
+let pendingPickaxeOrder = null;
+function pickaxeClaimKey(address) {
+  return `cashcraft:pickaxe-claim:${network}:${address}`;
+}
+
+async function updatePickaxeStatus(address) {
+  const pending = localStorage.getItem(pickaxeClaimKey(address));
+  if (pending) {
+    const response = await fetch(`${API_BASE_URL}/api/pickaxe/claim`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cash_address: address, txid: pending }),
+    });
+    if (!response.ok) throw new Error(`Pickaxe payment verification failed (${response.status}); it will be retried.`);
+    localStorage.removeItem(pickaxeClaimKey(address));
+  }
+  const response = await fetch(`${API_BASE_URL}/api/pickaxe/status?address=${encodeURIComponent(address)}`, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`Pickaxe status unavailable (${response.status}).`);
+  const data = await response.json();
+  if (typeof data.unlocked !== 'boolean') throw new Error('Invalid pickaxe status.');
+  return data.unlocked;
+}
+
 async function refreshBalances({ quiet = false } = {}) {
   if (!walletReady) {
     throw new Error(
@@ -1419,7 +1441,11 @@ async function refreshBalances({ quiet = false } = {}) {
         if (!walletReady || manager !== scanManager || registeredRewardAddress !== rewardAddress) {
           throw new Error('Wallet or reward address changed during the balance scan.');
         }
-        minaPickaxe = !!rewardAddress && mina >= 2n;
+        const unlocked = rewardAddress ? await updatePickaxeStatus(rewardAddress) : false;
+        if (!walletReady || manager !== scanManager || registeredRewardAddress !== rewardAddress) {
+          throw new Error('Wallet or reward address changed while checking the pickaxe.');
+        }
+        minaPickaxe = unlocked;
         updateGameRewardAddress(registeredRewardAddress);
         notifyTokenReceipts(utxos);
       }
@@ -1544,6 +1570,10 @@ async function sendFungibleTokens() {
     }
 
     const amount = BigInt(amountText);
+    const craftPayment = pendingPickaxeOrder &&
+      pendingPickaxeOrder.wallet === registeredRewardAddress &&
+      pendingPickaxeOrder.deposit === recipient && requestedCategory === rewardCategory && amount === 2n
+      ? pendingPickaxeOrder : null;
 
     if (
       mainnet && !manager?.isBrowserWallet &&
@@ -1819,6 +1849,23 @@ async function sendFungibleTokens() {
     const txid = await provider.sendRawTransaction(
       signed.signedTransaction,
     );
+    if (craftPayment) {
+      pendingPickaxeOrder = null;
+      $('recipient').value = '';
+      $('amount').value = '';
+      $('crafting-note').textContent = 'Pickaxe payment broadcast. Do not send another payment while it is being verified.';
+      $('crafting-note').hidden = false;
+      $('pickaxe-recovery').hidden = false;
+      $('pickaxe-transaction').value = txid;
+      try {
+        localStorage.setItem(pickaxeClaimKey(craftPayment.wallet), txid);
+      } catch (error) {
+        $('crafting-note').textContent = `Payment broadcast. Save transaction ID ${txid}; automatic pickaxe verification could not be saved: ${error.message}`;
+        $('crafting-note').hidden = false;
+        $('pickaxe-recovery').hidden = false;
+        $('pickaxe-transaction').value = txid;
+      }
+    }
     let receiptTrackingError = null;
     try {
       rememberSentTransaction(txid);
@@ -2369,42 +2416,81 @@ $('top-receive').addEventListener('click', () => {
   setTransferTab('receive');
   $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
-let craftingConfigPromise = null;
-function loadCraftingConfig() {
-  craftingConfigPromise ??= fetch(`${API_BASE_URL}/api/crafting`)
-    .then((response) => {
-      if (!response.ok) throw new Error(`Crafting API error (${response.status})`);
-      return response.json();
-    })
-    .catch((error) => {
-      craftingConfigPromise = null;
-      throw error;
-    });
-  return craftingConfigPromise;
-}
-loadCraftingConfig().then(({ address }) => {
-  $('game-crafting').hidden = !address;
-  $('mining-prompt-craft').hidden = !address;
-}).catch(() => {});
 $('mining-prompt-craft').addEventListener('click', () => {
   $('mining-prompt').close();
   $('game-crafting').click();
 });
+$('pickaxe-retry').addEventListener('click', async () => {
+  try {
+    if (!walletReady || !registeredRewardAddress) throw new Error('Connect your wallet first.');
+    const txid = $('pickaxe-transaction').value.trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(txid)) throw new Error('Enter a valid transaction ID.');
+    const response = await fetch(`${API_BASE_URL}/api/pickaxe/claim`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cash_address: registeredRewardAddress, txid }),
+    });
+    if (!response.ok) throw new Error(`Payment verification failed (${response.status}); try again later.`);
+    localStorage.removeItem(pickaxeClaimKey(registeredRewardAddress));
+    $('crafting-note').textContent = 'Payment verified. The pickaxe unlocks after one blockchain confirmation.';
+    $('pickaxe-recovery').hidden = true;
+    await refreshBalances({ quiet: true });
+  } catch (error) {
+    report(error);
+  }
+});
 $('game-crafting').addEventListener('click', async () => {
   try {
-    const [{ address, returnCategory }, category] = await Promise.all([loadCraftingConfig(), loadRewardCategory()]);
+    if (!walletReady || !registeredRewardAddress) {
+      if (!walletReady) $('game-notifications').click();
+      else throw new Error('Your wallet is still registering. Try crafting again shortly.');
+      return;
+    }
+    const wallet = registeredRewardAddress;
+    if (localStorage.getItem(pickaxeClaimKey(wallet))) {
+      $('game-close').click();
+      $('crafting-note').textContent = 'Your pickaxe payment is awaiting verification. Do not send another payment.';
+      $('crafting-note').hidden = false;
+      $('pickaxe-recovery').hidden = false;
+      $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    const [response, category] = await Promise.all([
+      fetch(`${API_BASE_URL}/api/pickaxe/order`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cash_address: wallet }),
+      }),
+      loadRewardCategory(),
+    ]);
+    if (!response.ok) throw new Error(`Pickaxe crafting unavailable (${response.status}).`);
+    const { address, unlocked, pending } = await response.json();
+    if (!walletReady || registeredRewardAddress !== wallet) throw new Error('Wallet changed while preparing crafting.');
+    if (typeof unlocked !== 'boolean' || typeof pending !== 'boolean') throw new Error('Invalid pickaxe order status.');
+    if (unlocked) {
+      $('game-dialog-status').textContent = translate('Your MINA pickaxe is already unlocked.');
+      return;
+    }
+    if (pending) {
+      $('game-close').click();
+      $('crafting-note').textContent = 'Your pickaxe payment is awaiting confirmation. Do not send another payment.';
+      $('crafting-note').hidden = false;
+      $('pickaxe-recovery').hidden = false;
+      $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (typeof address !== 'string' || !address) throw new Error('Invalid pickaxe crafting address.');
+    pendingPickaxeOrder = { wallet, deposit: address };
     $('game-close').click();
     setTransferTab('send');
-    for (const [id, value] of [['recipient', address], ['category', category], ['amount', '10']]) {
+    for (const [id, value] of [['recipient', address], ['category', category], ['amount', '2']]) {
       $(id).value = value;
       $(id).dispatchEvent(new Event('input', { bubbles: true }));
     }
-    $('crafting-note').textContent = translate('Review the 10 MINA transfer and crafting terms before approving. Returns depend on the crafting service.') +
-      (returnCategory ? ` ${returnCategory}` : '');
+    $('crafting-note').textContent = translate('Review and approve the 2 MINA payment. Your pickaxe unlocks after one blockchain confirmation.');
     $('crafting-note').hidden = false;
+    $('pickaxe-recovery').hidden = false;
     $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (!walletReady) showFundingDialog('Connect a compatible wallet before crafting.');
   } catch (error) {
+    $('game-dialog-status').textContent = error.message;
     report(error);
   }
 });

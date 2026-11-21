@@ -108,6 +108,60 @@ class RewardTests(unittest.TestCase):
         with patch.object(backend, "NETCRAFT_DB_PATH", str(path) + "-missing"):
             self.assertEqual(client.get("/api/mina-mined", params={"address": address}).status_code, 503)
 
+    def test_global_ore_total_reads_the_netcraft_counter_and_reports_missing_database(self):
+        path = Path(self.tmp.name) / "netcraft.sqlite3"
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE mining_totals (name TEXT PRIMARY KEY, total INTEGER)")
+            db.execute("INSERT INTO mining_totals VALUES ('mina_ore', 12345)")
+        client = TestClient(backend.app)
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path)):
+            self.assertEqual(client.get("/api/mina-ore-mined").json(), {"mined": "12345"})
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path) + "-missing"):
+            self.assertEqual(client.get("/api/mina-ore-mined").status_code, 503)
+
+    def test_pickaxe_payment_requires_two_rewards_matching_payment_and_confirmation(self):
+        path = Path(self.tmp.name) / "netcraft.sqlite3"
+        address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
+        txid = "a" * 64
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE mining_rewards (cash_address TEXT, category TEXT)")
+            db.execute("INSERT INTO mining_rewards VALUES (?, ?)", (address, "b" * 64))
+        client = TestClient(backend.app)
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path)), \
+             patch.object(backend, "bch_rpc") as rpc:
+            self.assertEqual(client.post("/api/pickaxe/order", json={"cash_address": address}).status_code, 403)
+            with sqlite3.connect(path) as db:
+                db.execute("INSERT INTO mining_rewards VALUES (?, ?)", (address, "b" * 64))
+            rpc.return_value = address
+            order = client.post("/api/pickaxe/order", json={"cash_address": address})
+            self.assertEqual(order.status_code, 200)
+            self.assertEqual(order.json(), {"address": address, "unlocked": False, "pending": False})
+            with sqlite3.connect(backend.DB_PATH) as db:
+                script = db.execute("SELECT locking_script FROM pickaxe_orders").fetchone()[0]
+            transaction = {"hex": "00", "confirmations": 0}
+            decoded = {"txid": txid, "vout": [{
+                "scriptPubKey": {"hex": script},
+                "tokenData": {"category": "b" * 64, "amount": "2"},
+            }]}
+            rpc.side_effect = lambda method, *_args, **_kw: transaction if method == "gettransaction" else decoded
+            claim = {"cash_address": address, "txid": txid}
+            decoded["vout"][0]["tokenData"]["amount"] = "1"
+            self.assertEqual(client.post("/api/pickaxe/claim", json=claim).status_code, 400)
+            decoded["vout"][0]["tokenData"]["amount"] = "2"
+            decoded["vout"][0]["tokenData"]["category"] = "c" * 64
+            self.assertEqual(client.post("/api/pickaxe/claim", json=claim).status_code, 400)
+            decoded["vout"][0]["tokenData"]["category"] = "b" * 64
+            decoded["vout"][0]["scriptPubKey"]["hex"] = "00"
+            self.assertEqual(client.post("/api/pickaxe/claim", json=claim).status_code, 400)
+            decoded["vout"][0]["scriptPubKey"]["hex"] = script
+            self.assertEqual(client.post("/api/pickaxe/claim", json=claim).json(), {"unlocked": False})
+            self.assertTrue(client.post("/api/pickaxe/order", json={"cash_address": address}).json()["pending"])
+            self.assertEqual(client.get("/api/pickaxe/status", params={"address": address}).json(), {"unlocked": False})
+            transaction["confirmations"] = 1
+            self.assertEqual(client.get("/api/pickaxe/status", params={"address": address}).json(), {"unlocked": True})
+            rpc.side_effect = RuntimeError("offline")
+            self.assertEqual(client.get("/api/pickaxe/status", params={"address": address}).json(), {"unlocked": True})
+
     def test_craft_social_preview_uses_artwork_without_a_donation_qr(self):
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
         client = TestClient(backend.app)

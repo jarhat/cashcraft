@@ -65,8 +65,21 @@ static int mina_deposit(int x, int z) {
     return (hash & 31u) == 0;
 }
 
+static int terrain_height(int x, int z) {
+    float f = simplex2(x * 0.003f, z * 0.003f, 4, 0.5f, 2.0f);
+    float ridge = simplex2(-x * 0.00015f, -z * 0.00015f, 2, 16.0f, 2.0f)
+        * simplex2(-x * 0.0015f, -z * 0.0015f, 2, 16.0f, 2.0f) * 100;
+    float classic = simplex2(x * .01f, z * .01f, 4, .5f, 2.0f)
+        * (16.0f + 32.0f * simplex2(-x * .01f, -z * .01f, 2, .9f, 2.0f));
+    int h = f * (100.0f + ridge) + (classic - 16.0f) * .75f;
+    return h < 1 ? 1 : h;
+}
+
 void create_world(int p, int q, world_func func, void *arg) {
     int pad = 1;
+    int lake_level = 31 + terrain_height(80, 0);
+    if (lake_level < 43) lake_level = 43;
+    if (lake_level > 180) lake_level = 180;
 
     for (int dx = -pad; dx < CHUNK_SIZE + pad; dx++) {
         for (int dz = -pad; dz < CHUNK_SIZE + pad; dz++) {
@@ -79,29 +92,21 @@ void create_world(int p, int q, world_func func, void *arg) {
             int x = p * CHUNK_SIZE + dx;
             int z = q * CHUNK_SIZE + dz;
 
-            /* Lower frequencies make terrain features broader. */
-            float f = simplex2(
-                x * 0.003f, z * 0.003f,
-                4, 0.5f, 2.0f
-            );
-            float ridge = simplex2(
-                -x * 0.00015f, -z * 0.00015f,
-                2, 16.0f, 2.0f
-            ) * simplex2(
-                -x * 0.0015f, -z * 0.0015f,
-                2, 16.0f, 2.0f
-            ) * 100;
-
-            // Layer classic NetCraft's rolling hills over the broader biome terrain.
-            float classic = simplex2(x * .01f, z * .01f, 4, .5f, 2.0f)
-                * (16.0f + 32.0f * simplex2(-x * .01f, -z * .01f, 2, .9f, 2.0f));
-            int h = f * (100.0f + ridge) + (classic - 16.0f) * .75f;
-            if (h < 1) h = 1;
+            int h = terrain_height(x, z);
             Biome biome = biome_at_pos(x, z);
             // Leave room for the tallest decoration in each biome.
-            static const int canopy[] = {7, 16, 53, 29};
+            static const int canopy[] = {7, 20, 53, 29};
             int max_h = WORLD_MAX_Y - 32 - canopy[biome];
             if (h > max_h) h = max_h;
+
+            float lake_radius = hypotf((float)x - 80.0f, (float)z);
+            if (lake_radius < 40.0f) {
+                float basin = lake_level - 7.0f + 8.0f * lake_radius * lake_radius / (22.0f * 22.0f);
+                float blend = lake_radius <= 22.0f ? 1.0f : (40.0f - lake_radius) / 18.0f;
+                h = (int)roundf((basin - 31.0f) * blend + h * (1.0f - blend));
+                if (h < 1) h = 1;
+                if (h > max_h) h = max_h;
+            }
 
             generate_underworld(x, z, flag, func, arg);
             // Small openings in the bedrock connect to the natural deep caves.
@@ -111,7 +116,19 @@ void create_world(int p, int q, world_func func, void *arg) {
                 dx, dz, x, z, opening ? 4 : 1, 32, flag, func, arg
             );
 
-            if (biome == Biome_TEMPERATE) {
+            if (lake_radius < 46.0f) {
+                for (int y = 32; y < 31 + h; y++) {
+                    func(x, y, z, Item_DIRT * flag, arg);
+                }
+                int surface = 31 + h;
+                int ground = surface < lake_level ? Item_SAND :
+                    biome == Biome_DESERT ? Item_SAND :
+                    biome == Biome_TAIGA ? Item_SNOW : Item_GRASS;
+                func(x, surface, z, ground * flag, arg);
+                for (int y = surface + 1; y <= lake_level && lake_radius < 40.0f; y++) {
+                    func(x, y, z, Item_WATER * flag, arg);
+                }
+            } else if (biome == Biome_TEMPERATE) {
                 generateTemperate(
                     dx, dz, x, z, 32, 32 + h, flag, func, arg
                 );
@@ -130,13 +147,13 @@ void create_world(int p, int q, world_func func, void *arg) {
             }
 
             int surface = 31 + h;
-            if (surface >= 32 && surface < 256 && mina_deposit(x, z)) {
+            if (lake_radius >= 46.0f && surface >= 32 && surface < 256 && mina_deposit(x, z)) {
                 func(x, surface, z, Item_MINA_ORE * flag, arg);
             }
 
             /* Clouds */
             for (int y = 128; y < 132; y++) {
-                if (simplex3(
+                if (!(lake_radius < 40.0f && y <= lake_level) && simplex3(
                     x * 0.01f, y * 0.1f, z * 0.01f,
                     8, 0.5f, 2.0f
                 ) > 0.75f) {

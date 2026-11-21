@@ -2,10 +2,45 @@
 #include "noise.h"
 #include "../config.h"
 #include "../item.h"
+#include <stdint.h>
+
+static int palm_hash(int x, int z) {
+    uint32_t hash = (uint32_t)x * 0x8da6b343u ^ (uint32_t)z * 0xd8163841u;
+    hash ^= hash >> 16;
+    hash *= 0x7feb352du;
+    hash ^= hash >> 15;
+    return (int)(hash & 0x7fffffffu);
+}
 
 void generateDesert(int dx, int dz, int x, int z, int start_h, int h, int flag, world_func func, void *arg) {
     for (int y = start_h; y < h; y++) {
         func(x, y, z, 2 * flag, arg);
+    }
+
+    int hash = palm_hash(x, z);
+    int palm = dx >= 5 && dz >= 5 && dx + 5 < CHUNK_SIZE && dz + 5 < CHUNK_SIZE
+        && hash % 211 == 0;
+    if (palm) {
+        int height = 13 + hash % 5;
+        int top = h + height;
+        for (int y = h; y < top; y++) {
+            func(x, y, z, Item_WOOD, arg);
+        }
+        func(x, top, z, Item_LEAVES, arg);
+        for (int ox = -1; ox <= 1; ox++) {
+            for (int oz = -1; oz <= 1; oz++) {
+                if (!ox && !oz) continue;
+                for (int length = 1; length <= 5; length++) {
+                    int y = top - (length >= 4 ? length - 3 : 0);
+                    func(x + ox * length, y, z + oz * length, Item_LEAVES, arg);
+                    if (length >= 2 && length <= 3 && (!ox || !oz)) {
+                        func(x + ox * length + oz, y, z + oz * length + ox, Item_LEAVES, arg);
+                        func(x + ox * length - oz, y, z + oz * length - ox, Item_LEAVES, arg);
+                    }
+                }
+            }
+        }
+        return;
     }
 
     if (simplex2(-x * 0.1, z * 0.1, 4, 0.8, 2) > 0.8) {

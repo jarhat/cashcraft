@@ -131,12 +131,10 @@ int main(void) {
     mining_stop();
     mining_set_pickaxe(0);
     mining_set_wallet_connected(0);
-    mining_set_guest_pickaxe(1);
     assert(!mining_has_pickaxe());
     mining_set_wallet_connected(1);
-    assert(mining_has_pickaxe());
+    assert(!mining_has_pickaxe());
     mining_set_pickaxe(1);
-    mining_set_guest_pickaxe(0);
     assert(mining_has_pickaxe());
     mining_set_pickaxe(0);
     assert(!mining_has_pickaxe());

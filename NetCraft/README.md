@@ -32,6 +32,7 @@ and also natively, as with the original Craft:
 * Day / night cycles and a textured sky dome.
 * Classic rolling hills blended into regional biomes. Deep caves lead through
   openings in the bedrock into caverns with animated water and lava streams.
+* A swimmable valley lake east of spawn and palm trees in the desert.
 * World changes persisted in a sqlite3 database.
 * Multiplayer support!
 
@@ -206,15 +207,14 @@ registration, and refreshes periodically while connected.
 The browser wallet's unlocked session survives a refresh in the same tab until
 explicitly disconnected or the tab session ends. WizardConnect attempts to
 restore its saved pairing; the external wallet may still require approval.
-Players have a regular pixel pickaxe in the lower-right corner. Mining ten
-eligible MINA ore blocks unlocks the green pickaxe for that browser identity.
-It is equipped only while a wallet is connected. A registered wallet holding at
-least 2 MINA across its scanned addresses also qualifies. The green pickaxe
-reduces breakable block mining time to one quarter.
-When a crafting address is configured, the crafting control prepares a
-reviewable transfer of 10 MINA. Mining 100 eligible MINA ore blocks requests
-10 MINA in rewards; delivery and crafting returns depend on their respective
-services. Players must connect a wallet and approve the transfer themselves.
+Players have a regular pixel pickaxe in the lower-right corner. After earning
+two MINA from 20 eligible ore blocks, the crafting control prepares a payment of
+2 MINA to a unique address in the BCHN payout wallet. Players must connect a
+wallet and approve the transfer. After one confirmation, the faster green
+pickaxe is permanently unlocked for that registered wallet; it reduces mining
+time to one quarter. Pending payments are retried, and the transaction ID can be
+entered again if automatic verification fails. Reward delivery still depends
+on the payout service.
 
 The fullscreen loading artwork and ring fade after the first frame is rendered.
 Both the shared-link loader and the NetCraft client use `/craft-loader.css` and
@@ -409,7 +409,7 @@ Mouse:
 Keyboard:
 
 - WASD to move forward, left, backward, right.
-- Space to jump.
+- Space to jump or swim upward; shift swims downward.
 - Space double-tap to toggle between walking and flying (when flying, space to ascend, shift to descend).
 - Shift to crouch, walk slower.
 - Tab to sprint, while holding another directional key (increases movement speed).

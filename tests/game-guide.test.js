@@ -2,13 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setupGames } from '../src/games.js';
 
-test('CashCraft guide can be dismissed, reopened and used to access the wallet', async (t) => {
-  const previous = { document: globalThis.document, fetch: globalThis.fetch, raf: globalThis.requestAnimationFrame, window: globalThis.window };
+test('wizard tips fade without blocking play and crafting appears after two rewards', async (t) => {
+  const previous = { document: globalThis.document, fetch: globalThis.fetch, raf: globalThis.requestAnimationFrame, window: globalThis.window, setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
   t.after(() => {
     globalThis.document = previous.document;
     globalThis.fetch = previous.fetch;
     globalThis.requestAnimationFrame = previous.raf;
     globalThis.window = previous.window;
+    globalThis.setTimeout = previous.setTimeout;
+    globalThis.clearTimeout = previous.clearTimeout;
   });
   const elements = new Map();
   const $ = (id) => {
@@ -31,6 +33,9 @@ test('CashCraft guide can be dismissed, reopened and used to access the wallet',
     querySelector() { return toolbar; }, addEventListener() {},
   };
   globalThis.requestAnimationFrame = () => {};
+  let dismiss;
+  globalThis.setTimeout = (callback) => { dismiss = callback; return 1; };
+  globalThis.clearTimeout = () => {};
   const handlers = {};
   globalThis.window = { addEventListener(type, fn) { handlers[type] = fn; } };
   globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
@@ -43,31 +48,37 @@ test('CashCraft guide can be dismissed, reopened and used to access the wallet',
   $('game-frame').contentWindow = { postMessage() {} };
   const update = setupGames($, { translate: (text) => text, isWalletConnected: () => connected, getGuestId: () => guestId });
   await $('game-netcraft').listeners.click();
-  assert.equal($('game-guide').open, true);
+  assert.equal($('game-guide').open, false);
+  assert.equal($('game-wizard-speech').hidden, false);
+  dismiss();
+  assert.equal($('game-wizard-speech').hidden, true);
   assert.equal($('game-notifications')['aria-controls'], 'connection-dialog');
   await $('game-close').listeners.click();
   assert.equal($('game-guide').open, false);
   $('game-restore').listeners.click();
-  assert.equal($('game-guide').open, true);
-  $('game-guide-done').listeners.click();
   assert.equal($('game-guide').open, false);
   handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-block-mined' } });
-  assert.equal($('mining-prompt').open, true);
-  assert.equal($('mining-prompt-title').textContent, 'First block mined!');
-  $('mining-prompt-later').listeners.click();
+  assert.equal($('mining-prompt').open, false);
+  assert.match($('game-wizard-message').textContent, /10 natural blocks/);
   handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-mining-progress', blocks: 9, unlocked: false } });
   assert.equal($('game-guide-progress').textContent, 'MINA ore progress: 9 / 10');
   handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-mining-progress', blocks: 0, unlocked: true } });
-  assert.equal($('mining-prompt').open, true);
-  assert.equal($('mining-prompt-title').textContent, '1 MINA earned!');
+  assert.equal($('mining-prompt').open, false);
+  assert.match($('game-wizard-message').textContent, /1 MINA earned/);
   assert.match($('game-guide-progress').textContent, /Connect a wallet/);
-  $('mining-prompt-later').listeners.click();
+  handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-mina-earned', rewards: 1 } });
+  assert.equal($('game-crafting').hidden, true);
+  handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-mina-earned', rewards: 2 } });
+  assert.equal($('game-crafting').hidden, false);
   $('game-notifications').listeners.click();
   assert.equal(connections, 1);
   $('game-guide-open').listeners.click();
-  assert.equal($('game-guide').open, true);
+  assert.equal($('game-wizard-speech').hidden, false);
+  $('game-fullscreen').listeners.focus();
+  assert.match($('game-wizard-message').textContent, /Fullscreen/);
+  handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-tutorial-control', control: 'mobile-mine' } });
+  assert.match($('game-wizard-message').textContent, /Hold the pickaxe/);
   $('game-guide-wallet').listeners.click();
-  assert.equal($('game-guide').open, true);
   assert.equal(connections, 2);
   connected = true;
   update(null);

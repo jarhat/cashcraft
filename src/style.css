@@ -2998,6 +2998,17 @@ img[src="/bitcoin-cash-official.svg"] { filter: hue-rotate(95deg); }
 .topbar-tools-left .tool-menu { position: relative; }
 .topbar-tools-left .tool-dropdown { left: 0; right: auto; z-index: 20; }
 .game-wizard-art { width: 34px; height: 42px; vertical-align: middle; image-rendering: pixelated; }
+.game-wizard-speech {
+  position: absolute; z-index: 6; top: 14px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px; width: min(390px, calc(100% - 24px));
+  padding: 8px; border: 2px solid #44de90; background: #10251e; color: #f0fff6;
+  font: 14px/1.35 system-ui, sans-serif; pointer-events: none;
+  animation: game-wizard-fade 6s ease both;
+}
+.game-wizard-speech[hidden] { display: none; }
+.game-wizard-speech img { width: 34px; height: 42px; image-rendering: pixelated; }
+.game-wizard-speech p { margin: 0; }
+@keyframes game-wizard-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
 #game-guide-title { display: flex; align-items: center; gap: 8px; }
 #game-guide-open svg { width: 28px; height: 32px; stroke: none; }
 .game-guide[open] { border-radius: 4px; border-width: 2px; box-shadow: 0 6px #07100b, 0 12px 30px #0009; }

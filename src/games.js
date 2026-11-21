@@ -37,7 +37,47 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   };
   let guestId = null;
   let guestUnlocked = null;
+  let lastProgress = null;
+  let earnedRewards = null;
   let firstBlockShown = false;
+  let wizardTimer;
+  let tutorialStep = 0;
+  let tutorialActive = false;
+  const tutorialTips = [
+    'Use WASD to move, space to jump, left click to mine and right click to build. On mobile, use the joystick and the jump, mine and build buttons. Scroll to choose blocks.',
+    'Mine 10 natural MINA ore blocks to earn 1 MINA. Your progress appears above your hearts.',
+    'The gem opens your wallet and notifications. Connect a wallet to receive your mining rewards.',
+    'Invite shares the game; Ranking shows mining rewards; fullscreen expands the game; sound toggles audio.',
+    'After earning 2 MINA, use the crafting table to review a 2 MINA payment for a permanent MINA pickaxe.',
+  ];
+  const controlTips = {
+    'game-close': 'Minimize the game; use the game icon to return.',
+    'game-crafting': 'Craft a permanent MINA pickaxe for 2 MINA.',
+    'game-ranking': 'Ranking shows mining rewards.',
+    'game-invite': 'Invite shares the game.',
+    'game-sound': 'Sound toggles audio.',
+    'game-notifications': 'The gem opens your wallet and notifications.',
+    'game-fullscreen': 'Fullscreen expands the game.',
+    'mobile-stick': 'Drag the joystick to move.',
+    'mobile-mine': 'Hold the pickaxe button to mine the block you are looking at.',
+    'mobile-build': 'Hold the block button to build.',
+    'mobile-jump': 'Use jump to leap or swim upward.',
+    'block-scroll-strip': 'Drag the strip to choose a block.',
+  };
+  function showWizard(message) {
+    const bubble = $('game-wizard-speech');
+    clearTimeout(wizardTimer);
+    bubble.hidden = true;
+    $('game-wizard-message').textContent = translate(message);
+    void bubble.offsetWidth;
+    bubble.hidden = false;
+    wizardTimer = setTimeout(() => { bubble.hidden = true; }, 6000);
+  }
+  for (const [id, message] of Object.entries(controlTips).filter(([id]) => id.startsWith('game-'))) {
+    for (const event of ['focus', 'mouseenter']) {
+      $(id).addEventListener(event, () => { if (tutorialActive) showWizard(message); });
+    }
+  }
   let soundEnabled = true;
   const updateRewardAddress = (address) => {
     const connected = isWalletConnected ? isWalletConnected() : Boolean(address);
@@ -127,7 +167,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         setPlayingUi();
         if (id === 'netcraft' && !guideShown) {
           guideShown = true;
-          guide.show();
+          showWizard(tutorialTips[0]);
         }
       } catch (error) {
         if (request === generation) {
@@ -200,7 +240,11 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     sound.setAttribute('aria-pressed', String(soundEnabled));
     frame.contentWindow?.postMessage({ type: 'netcraft-set-sound', enabled: soundEnabled }, '*');
   });
-  $('game-guide-open').addEventListener('click', () => { if (!guide.open) guide.show(); });
+  $('game-guide-open').addEventListener('click', () => {
+    tutorialActive = true;
+    showWizard(tutorialTips[tutorialStep]);
+    tutorialStep = (tutorialStep + 1) % tutorialTips.length;
+  });
   $('game-guide-wallet').addEventListener('click', () => {
     openWallet();
   });
@@ -222,14 +266,24 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       sound.hidden = false;
       return;
     }
+    if (event.data?.type === 'netcraft-tutorial-control' && tutorialActive &&
+        Object.hasOwn(controlTips, event.data.control) && !event.data.control.startsWith('game-')) {
+      showWizard(controlTips[event.data.control]);
+      return;
+    }
     const connected = isWalletConnected ? isWalletConnected() : Boolean(getRewardAddress());
     if (event.data?.type === 'netcraft-block-mined' && !firstBlockShown) {
       firstBlockShown = true;
-      if (!connected) {
-        $('mining-prompt-title').textContent = translate('First block mined!');
-        $('mining-prompt-message').textContent = translate('Next, find green MINA ore and mine 10 natural blocks to earn 1 MINA.');
-        if (!prompt.open) prompt.show();
+      showWizard('Next, find green MINA ore and mine 10 natural blocks to earn 1 MINA.');
+      return;
+    }
+    if (event.data?.type === 'netcraft-mina-earned' &&
+        Number.isSafeInteger(event.data.rewards) && event.data.rewards >= 0) {
+      $('game-crafting').hidden = event.data.rewards < 2;
+      if (event.data.rewards >= 2 && earnedRewards !== null && earnedRewards < 2) {
+        showWizard('You earned 2 MINA! Use the crafting table to review a payment for your pickaxe.');
       }
+      earnedRewards = event.data.rewards;
       return;
     }
     if (
@@ -237,12 +291,13 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         !Number.isInteger(event.data.blocks) || event.data.blocks < 0 || event.data.blocks > 9 ||
         typeof event.data.unlocked !== 'boolean') return;
     $('game-guide-progress').textContent = `${translate('MINA ore progress')}: ${event.data.blocks} / 10` +
-      (event.data.unlocked ? ` · ${translate(connected ? 'MINA pickaxe unlocked' : 'Connect a wallet to equip your pickaxe')}` : '');
+      (event.data.unlocked ? ` · ${translate(connected ? 'MINA earned' : 'Connect a wallet to receive your reward')}` : '');
     if (guestUnlocked === false && event.data.unlocked && !connected) {
-      $('mining-prompt-title').textContent = translate('1 MINA earned!');
-      $('mining-prompt-message').textContent = translate('Next, connect a wallet to receive your reward and equip your green pickaxe.');
-      if (!prompt.open) prompt.show();
+      showWizard('1 MINA earned! Connect a wallet to receive your reward.');
+    } else if (lastProgress !== null && event.data.blocks !== lastProgress) {
+      showWizard(`${translate('MINA ore progress')}: ${event.data.blocks} / 10`);
     }
+    lastProgress = event.data.blocks;
     guestUnlocked = event.data.unlocked;
   });
   $('game-invite').addEventListener('click', () => {

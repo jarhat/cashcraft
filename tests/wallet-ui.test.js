@@ -10,8 +10,8 @@ import { normalizeUtxo, utxoKey } from '../src/utils.js';
 
 const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 
-test('crafting prefills a reviewable 10 MINA transfer', async () => {
-  const start = source.indexOf('let craftingConfigPromise = null;');
+test('crafting prefills a reviewable 2 MINA pickaxe payment', async () => {
+  const start = source.indexOf("$('mining-prompt-craft').addEventListener");
   const end = source.indexOf("\n$('generate-payment')", start);
   const elements = new Map();
   const $ = (id) => {
@@ -24,8 +24,10 @@ test('crafting prefills a reviewable 10 MINA transfer', async () => {
     return elements.get(id);
   };
   const context = {
-    $, API_BASE_URL: '', walletReady: true, Event,
-    fetch: async () => ({ ok: true, json: async () => ({ address: 'craft-address', returnCategory: 'other' }) }),
+    $, API_BASE_URL: '', walletReady: true, registeredRewardAddress: 'wallet-address', pendingPickaxeOrder: null, Event,
+    localStorage: { getItem() { return null; } },
+    pickaxeClaimKey: (address) => address,
+    fetch: async () => ({ ok: true, json: async () => ({ address: 'craft-address', unlocked: false, pending: false }) }),
     loadRewardCategory: async () => 'mina-category',
     setTransferTab() {}, translate: (text) => text, report(error) { throw error; },
   };
@@ -33,11 +35,12 @@ test('crafting prefills a reviewable 10 MINA transfer', async () => {
   await $('game-crafting').listeners.click();
   assert.equal($('recipient').value, 'craft-address');
   assert.equal($('category').value, 'mina-category');
-  assert.equal($('amount').value, '10');
-  assert.match($('crafting-note').textContent, /Review the 10 MINA transfer/);
+  assert.equal($('amount').value, '2');
+  assert.match($('crafting-note').textContent, /2 MINA payment/);
+  assert.equal(context.pendingPickaxeOrder.wallet, 'wallet-address');
 });
 
-test('MINA pickaxe requires a connected registered wallet holding at least two MINA', async () => {
+test('MINA pickaxe follows verified wallet entitlement, not wallet balance', async () => {
   const start = source.indexOf('async function refreshBalances(');
   const end = source.indexOf('\nfunction validateRecipient', start);
   const elements = new Map();
@@ -53,21 +56,18 @@ test('MINA pickaxe requires a connected registered wallet holding at least two M
     scanWallet: async () => ({ addresses: [], utxos: context.nextUtxos }),
     renderBalances() {}, loadRewardCategory: async () => {}, notifyTokenReceipts() {},
     updateGameRewardAddress: () => updates.push(context.minaPickaxe),
-    fetch: async () => { throw new Error('Mining history should not be requested.'); },
+    updatePickaxeStatus: async () => context.unlocked,
   };
   runInNewContext(source.slice(start, end), context);
   const token = (category, amount, pathIndex = 0, addressIndex = 0) =>
     ({ satoshis: 1, pathIndex, addressIndex, token: { category, amount } });
-  for (const [utxos, expected] of [
-    [[token('mina', 1), token('other', 100)], false],
-    [[token('MINA', 1)], false],
-    [[token('MINA', 1), token('mina', 1)], true],
-    [[token('MINA', 0)], false],
-    [[token('mina', 1), token('mina', 1, 1)], true],
-    [[token('mina', 1), token('mina', 1, 0, 1)], true],
-    [[token('mina', 0), token('mina', 1, 1)], false],
+  for (const [utxos, unlocked, expected] of [
+    [[token('mina', 50)], false, false],
+    [[], true, true],
+    [[token('mina', 1)], true, true],
   ]) {
     context.nextUtxos = utxos;
+    context.unlocked = unlocked;
     await context.refreshBalances({ quiet: true });
     assert.equal(context.minaPickaxe, expected);
     assert.equal(updates.at(-1), expected);
@@ -82,6 +82,33 @@ test('MINA pickaxe requires a connected registered wallet holding at least two M
   await assert.rejects(context.refreshBalances({ quiet: true }), /scan failed/);
   assert.equal(context.minaPickaxe, false);
   assert.equal(updates.at(-1), false);
+});
+
+test('pickaxe payment verification retries until accepted and then checks confirmation', async () => {
+  const start = source.indexOf('let pendingPickaxeOrder = null;');
+  const end = source.indexOf('async function refreshBalances(', start);
+  const storage = new Map([['cashcraft:pickaxe-claim:mainnet:wallet', 'a'.repeat(64)]]);
+  const calls = [];
+  let accepting = false;
+  const context = {
+    network: 'mainnet', API_BASE_URL: '',
+    localStorage: {
+      getItem: (key) => storage.get(key),
+      removeItem: (key) => storage.delete(key),
+    },
+    fetch: async (url) => {
+      calls.push(url);
+      if (url.endsWith('/claim')) return { ok: accepting, status: 503 };
+      return { ok: true, json: async () => ({ unlocked: true }) };
+    },
+  };
+  runInNewContext(source.slice(start, end), context);
+  await assert.rejects(context.updatePickaxeStatus('wallet'), /will be retried/);
+  assert.equal(storage.size, 1);
+  accepting = true;
+  assert.equal(await context.updatePickaxeStatus('wallet'), true);
+  assert.equal(storage.size, 0);
+  assert.match(calls.at(-1), /pickaxe\/status/);
 });
 
 test('payment defaults to PUSD only on mainnet and preserves an existing category', async () => {
@@ -786,6 +813,7 @@ test('token send signs and broadcasts without submitting a payment proof', async
     ['category', { value: category }], ['recipient', { value: 'recipient' }],
     ['amount', { value: '3' }], ['status', { textContent: '' }],
     ['log', { textContent: '', classList: { remove() {} } }],
+    ['crafting-note', {}], ['pickaxe-recovery', {}], ['pickaxe-transaction', {}],
   ]);
   const input = {
     txid: 'b'.repeat(64), vout: 0, token: { category, amount: 5n },
@@ -804,6 +832,7 @@ test('token send signs and broadcasts without submitting a payment proof', async
   const end = source.indexOf("\n$('connect').addEventListener", start);
   const context = {
     $: (id) => elements.get(id), sending: false, walletReady: true, mainnet: false,
+    pendingPickaxeOrder: null,
     setConnection() {}, validateRecipient: (value) => value, translate: (text) => text,
     refreshBalances: async () => ({ utxos: [input], addresses: [{}] }),
     TOKEN_OUTPUT_SATOSHIS: 1000n, FEE_RESERVE_SATOSHIS: 10000n,
@@ -822,6 +851,19 @@ test('token send signs and broadcasts without submitting a payment proof', async
   assert.deepEqual(events, [['output', 3n], 'sign', ['broadcast', 'signed'], ['remember', 'txid'], 'refresh']);
   assert.equal(elements.get('log').textContent, 'Transaction ID: txid');
 
+  elements.get('amount').value = '2';
+  context.registeredRewardAddress = 'wallet';
+  context.rewardCategory = category;
+  context.pendingPickaxeOrder = { wallet: 'wallet', deposit: 'recipient' };
+  context.pickaxeClaimKey = (address) => address;
+  context.localStorage = { setItem: (key, value) => events.push(['claim', key, value]) };
+  await context.sendFungibleTokens();
+  assert.ok(events.some((event) => Array.isArray(event) && event[0] === 'claim'));
+  assert.equal(elements.get('recipient').value, '');
+  assert.equal(elements.get('amount').value, '');
+
+  elements.get('recipient').value = 'recipient';
+  elements.get('amount').value = '3';
   context.rememberSentTransaction = () => { throw new Error('Storage unavailable'); };
   await context.sendFungibleTokens();
   assert.match(elements.get('log').textContent, /Transaction ID: txid/);
@@ -861,6 +903,7 @@ test('browser wallet reviews token sends and does not broadcast when cancelled',
   const end = source.indexOf("\n$('connect').addEventListener", start);
   const context = {
     $: (id) => nodes[id], sending: false, walletReady: true, mainnet: true,
+    pendingPickaxeOrder: null,
     setConnection() {}, validateRecipient: (value) => value, translate: (text) => text,
     refreshBalances: async () => ({ utxos: [input], addresses: [{}] }),
     TOKEN_OUTPUT_SATOSHIS: 1000n, FEE_RESERVE_SATOSHIS: 10000n,

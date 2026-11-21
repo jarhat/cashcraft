@@ -29,6 +29,19 @@ export async function fetchMinaRewardsSent() {
   return BigInt(data.sent).toLocaleString();
 }
 
+export async function fetchMinaOreMined() {
+  const response = await fetch('/api/mina-ore-mined', {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error(`MINA ore total request failed (${response.status}).`);
+  const data = await response.json();
+  if (typeof data.mined !== 'string' || !/^(0|[1-9][0-9]*)$/.test(data.mined)) {
+    throw new Error('Invalid MINA ore total.');
+  }
+  return BigInt(data.mined).toLocaleString();
+}
+
 export async function fetchPayoutBalance() {
   const response = await fetch('/api/payout-balance', {
     cache: 'no-store', signal: AbortSignal.timeout(10000),
@@ -48,7 +61,9 @@ export function setupChainTicker(container, logger = console) {
     if (loading || document.hidden) return;
     loading = true;
     try {
-      const [chain, rewards, balance] = await Promise.allSettled([fetchChainStatus(), fetchMinaRewardsSent(), fetchPayoutBalance()]);
+      const [chain, rewards, balance, mined] = await Promise.allSettled([
+        fetchChainStatus(), fetchMinaRewardsSent(), fetchPayoutBalance(), fetchMinaOreMined(),
+      ]);
       const items = [];
       if (chain.status === 'fulfilled') {
         const status = chain.value;
@@ -75,6 +90,11 @@ export function setupChainTicker(container, logger = console) {
         logger.warn('Payout wallet balance unavailable:', balance.reason);
         items.push(['Payout wallet', 'Unavailable']);
       }
+      if (mined.status === 'fulfilled') items.push(['MINA ore mined', mined.value, 'Ore mined since tracking began']);
+      else {
+        logger.warn('MINA ore total unavailable:', mined.reason);
+        items.push(['MINA ore mined', 'Unavailable', 'Ore mined since tracking began']);
+      }
       const track = document.createElement('div');
       track.className = 'market-ticker-track';
       for (let copy = 0; copy < 2; copy++) {
@@ -86,7 +106,7 @@ export function setupChainTicker(container, logger = console) {
           item.className = 'market-ticker-item';
           const name = document.createElement('strong');
           name.textContent = label;
-          if (label === 'MINA rewards sent') name.className = 'mina-label';
+          if (label === 'MINA rewards sent' || label === 'MINA ore mined') name.className = 'mina-label';
           const detail = document.createElement('span');
           detail.textContent = value;
           if (title) detail.title = title;

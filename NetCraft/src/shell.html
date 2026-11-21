@@ -1413,6 +1413,11 @@
         }
         document.addEventListener('pointerdown', notifyUserGesture);
         document.addEventListener('keydown', notifyUserGesture);
+        ['mobile-stick', 'mobile-mine', 'mobile-build', 'mobile-jump', 'block-scroll-strip'].forEach(function(id) {
+          document.getElementById(id).addEventListener(window.PointerEvent ? 'pointerdown' : 'touchstart', function() {
+            if (window.parent !== window) window.parent.postMessage({ type: 'netcraft-tutorial-control', control: id }, '*');
+          });
+        });
         Module.applyPendingRewardAddress = function() {
           ready = true;
           if (pendingGuest !== undefined) {

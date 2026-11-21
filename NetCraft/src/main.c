@@ -31,6 +31,7 @@
 #include "rendering.h"
 #include "sign.h"
 #include "state.h"
+#include "swimming.h"
 #include "tinycthread.h"
 #include "util.h"
 #include "worldgen/world.h"
@@ -228,6 +229,7 @@ typedef struct {
     double message_times[MAX_MESSAGES];
     uint32_t mina_mined;
     int lives;
+    int mina_progress;
     bool zombies_active;
     int width;
     int height;
@@ -1213,6 +1215,7 @@ void light_fill(
 
 void compute_chunk(WorkerItem *item) {
     char *opaque = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
+    char *water = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
     short *highest = (short *)calloc(XZ_SIZE * XZ_SIZE, sizeof(short));
 
     int ox = item->p * CHUNK_SIZE - CHUNK_SIZE - 1;
@@ -1263,6 +1266,7 @@ void compute_chunk(WorkerItem *item) {
                 }
                 // END TODO
                 opaque[XYZ(x, y, z)] = !is_transparent(w);
+                water[XYZ(x, y, z)] = abs(w) == Item_WATER;
                 if (opaque[XYZ(x, y, z)]) {
                     highest[XZ(x, z)] = MAX(highest[XZ(x, z)], y);
                 }
@@ -1301,12 +1305,12 @@ void compute_chunk(WorkerItem *item) {
         int x = ex - ox;
         int y = ey - oy;
         int z = ez - oz;
-        int f1 = !opaque[XYZ(x - 1, y, z)];
-        int f2 = !opaque[XYZ(x + 1, y, z)];
-        int f3 = !opaque[XYZ(x, y + 1, z)];
-        int f4 = !opaque[XYZ(x, y - 1, z)];
-        int f5 = !opaque[XYZ(x, y, z - 1)];
-        int f6 = !opaque[XYZ(x, y, z + 1)];
+        int f1 = !opaque[XYZ(x - 1, y, z)] && (ew != Item_WATER || !water[XYZ(x - 1, y, z)]);
+        int f2 = !opaque[XYZ(x + 1, y, z)] && (ew != Item_WATER || !water[XYZ(x + 1, y, z)]);
+        int f3 = !opaque[XYZ(x, y + 1, z)] && (ew != Item_WATER || !water[XYZ(x, y + 1, z)]);
+        int f4 = !opaque[XYZ(x, y - 1, z)] && (ew != Item_WATER || !water[XYZ(x, y - 1, z)]);
+        int f5 = !opaque[XYZ(x, y, z - 1)] && (ew != Item_WATER || !water[XYZ(x, y, z - 1)]);
+        int f6 = !opaque[XYZ(x, y, z + 1)] && (ew != Item_WATER || !water[XYZ(x, y, z + 1)]);
         int total = f1 + f2 + f3 + f4 + f5 + f6;
         if (total == 0) {
             continue;
@@ -1329,12 +1333,12 @@ void compute_chunk(WorkerItem *item) {
         int x = ex - ox;
         int y = ey - oy;
         int z = ez - oz;
-        int f1 = !opaque[XYZ(x - 1, y, z)];
-        int f2 = !opaque[XYZ(x + 1, y, z)];
-        int f3 = !opaque[XYZ(x, y + 1, z)];
-        int f4 = !opaque[XYZ(x, y - 1, z)];
-        int f5 = !opaque[XYZ(x, y, z - 1)];
-        int f6 = !opaque[XYZ(x, y, z + 1)];
+        int f1 = !opaque[XYZ(x - 1, y, z)] && (ew != Item_WATER || !water[XYZ(x - 1, y, z)]);
+        int f2 = !opaque[XYZ(x + 1, y, z)] && (ew != Item_WATER || !water[XYZ(x + 1, y, z)]);
+        int f3 = !opaque[XYZ(x, y + 1, z)] && (ew != Item_WATER || !water[XYZ(x, y + 1, z)]);
+        int f4 = !opaque[XYZ(x, y - 1, z)] && (ew != Item_WATER || !water[XYZ(x, y - 1, z)]);
+        int f5 = !opaque[XYZ(x, y, z - 1)] && (ew != Item_WATER || !water[XYZ(x, y, z - 1)]);
+        int f6 = !opaque[XYZ(x, y, z + 1)] && (ew != Item_WATER || !water[XYZ(x, y, z + 1)]);
         int total = f1 + f2 + f3 + f4 + f5 + f6;
         if (total == 0) {
             continue;
@@ -1389,6 +1393,7 @@ void compute_chunk(WorkerItem *item) {
     } END_MAP_FOR_EACH;
 
     free(opaque);
+    free(water);
     free(light);
     free(highest);
 
@@ -2200,6 +2205,13 @@ int get_block(int x, int y, int z) {
         return map_get(map, x, y, z);
     }
     return 0;
+}
+
+static bool player_in_water(const State *s) {
+    int x = roundf(s->x), z = roundf(s->z);
+    int head = get_block(x, roundf(s->y), z);
+    int body = get_block(x, roundf(s->y - 1.0f), z);
+    return abs(head) == Item_WATER || abs(body) == Item_WATER;
 }
 
 void builder_block(int x, int y, int z, int w) {
@@ -3295,7 +3307,8 @@ void on_key(GLFWwindow *window, int key, int scancode, int action, int mods) {
     }
     if (key == CRAFT_KEY_JUMP || touch_jump) {
         static double last_jumped = 0;
-        if (!g->typing && last_jumped != 0 && glfwGetTime() - last_jumped < JUMP_FLY_THRESHOLD) {
+        if (!g->typing && (g->flying || !player_in_water(&g->players->state)) &&
+            last_jumped != 0 && glfwGetTime() - last_jumped < JUMP_FLY_THRESHOLD) {
             g->flying = !g->flying;
             printf("fly mode toggled: %d\n", g->flying);
         }
@@ -3684,6 +3697,7 @@ void handle_movement(double dt) {
     float vx, vy = 0, vz;
     get_motion_vector(g->flying, sz, sx, s->rx, s->ry, &vx, &vy, &vz);
 
+    bool swimming = !g->flying && player_in_water(s);
     bool jumping = false;
     bool crouching = false;
     bool sprinting = false;
@@ -3698,7 +3712,7 @@ void handle_movement(double dt) {
             if (g->flying) {
                 vy++;
             }
-            else if (dy == 0) {
+            else if (!swimming && dy == 0) {
                 dy = 8;
             }
         }
@@ -3712,9 +3726,9 @@ void handle_movement(double dt) {
             }
         }
     }
-    float speed = g->flying ? 20 : 5;
-    if (sprinting) speed *= 2;
-    if (crouching && !g->flying) speed /= 2;
+    float speed = g->flying ? 20 : swimming ? 3 : 5;
+    if (sprinting && !swimming) speed *= 2;
+    if (crouching && !g->flying && !swimming) speed /= 2;
     int estimate = roundf(sqrtf(
         powf(vx * speed, 2) +
         powf(vy * speed + ABS(dy) * 2, 2) +
@@ -3728,6 +3742,9 @@ void handle_movement(double dt) {
         float old_step_x = s->x, old_step_y = s->y, old_step_z = s->z;
         if (g->flying) {
             dy = 0;
+        }
+        else if (player_in_water(s)) {
+            dy = swim_velocity(dy, ut, jumping, crouching);
         }
         else {
             dy -= ut * 25;
@@ -3910,11 +3927,19 @@ void parse_buffer(char *buffer, int len) {
         int guest_blocks, guest_unlocked;
         if (line[0] == 'G' && sscanf(line, "G,%d,%d", &guest_blocks, &guest_unlocked) == 2 &&
             guest_blocks >= 0 && guest_blocks < 10 && (guest_unlocked == 0 || guest_unlocked == 1)) {
-            mining_set_guest_pickaxe(guest_unlocked);
+            g->mina_progress = guest_blocks;
 #ifdef __EMSCRIPTEN__
             EM_ASM_ARGS({
                 parent.postMessage({ type: 'netcraft-mining-progress', blocks: $0, unlocked: !!$1 }, '*');
             }, guest_blocks, guest_unlocked);
+#endif
+        }
+        int mina_rewards;
+        if (sscanf(line, "ME,%d", &mina_rewards) == 1 && mina_rewards >= 0) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({ type: 'netcraft-mina-earned', rewards: $0 }, '*');
+            }, mina_rewards);
 #endif
         }
         if (line[0] == 'Q' && sscanf(line, "Q,%120[^\n]", mined_reward_address) == 1) {
@@ -4779,6 +4804,8 @@ void render_scene() {
     if (g->show_ui && g->initialized) {
         snprintf(text_buffer, sizeof(text_buffer), "x%u", (unsigned)g->mina_mined);
         render_text(&text_attrib, ALIGN_LEFT, g->width / 2 + 5 * g->scale, g->height - 29 * g->scale, ts, text_buffer);
+        snprintf(text_buffer, sizeof(text_buffer), "MINA %d/10", g->mina_progress);
+        render_text(&text_attrib, ALIGN_CENTER, g->width / 2, 40.0f * g->scale, ts, text_buffer);
     }
     if (g->show_info_text && g->show_ui && g->initialized) {
         static char *build_info_string =

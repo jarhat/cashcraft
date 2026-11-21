@@ -126,6 +126,9 @@ class ShortLinkRequest(BaseModel):
 class CashAddressRequest(BaseModel):
     cash_address: str = Field(min_length=1, max_length=120)
 
+class PickaxeClaimRequest(CashAddressRequest):
+    txid: str = Field(min_length=64, max_length=64)
+
 
 def init_db() -> None:
     global db_identity
@@ -169,6 +172,15 @@ def init_db() -> None:
                 CREATE TABLE IF NOT EXISTS donation_addresses (
                     network TEXT PRIMARY KEY,
                     address TEXT NOT NULL
+                )
+            """)
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS pickaxe_orders (
+                    cash_address TEXT PRIMARY KEY,
+                    deposit_address TEXT NOT NULL UNIQUE,
+                    locking_script TEXT NOT NULL UNIQUE,
+                    txid TEXT UNIQUE,
+                    unlocked INTEGER NOT NULL DEFAULT 0
                 )
             """)
             db.execute("CREATE INDEX IF NOT EXISTS short_links_expires ON short_links (expires_at)")
@@ -732,6 +744,140 @@ def bch_rpc(method: str, params: list, *, wallet: bool = False):
     return payload.get("result")
 
 
+def pickaxe_deposit_address() -> tuple[str, str]:
+    address, prefix, address_type = validate_cashaddr(
+        bch_rpc("getnewaddress", ["cashcraft pickaxe"], wallet=True), token_aware=False
+    )
+    if address_type not in (0, 2):
+        raise RuntimeError("BCHN did not return a P2PKH address.")
+    payload = bytearray(_convert_5bit_to_8bit([_CHARSET_MAP[c] for c in address.split(":")[1][:-8]]))
+    if len(payload) != 21:
+        raise RuntimeError("BCHN returned an unsupported P2PKH address.")
+    payload[0] = (2 << 3) | (payload[0] & 7)
+    bits, accumulator, values = 0, 0, []
+    for byte in payload:
+        accumulator = (accumulator << 8) | byte
+        bits += 8
+        while bits >= 5:
+            bits -= 5
+            values.append((accumulator >> bits) & 31)
+    if bits:
+        values.append((accumulator << (5 - bits)) & 31)
+    checksum = _polymod(_prefix_expand(prefix) + values + [0] * 8)
+    values.extend((checksum >> (5 * (7 - i))) & 31 for i in range(8))
+    token_address = prefix + ":" + "".join(_CHARSET[v] for v in values)
+    validate_token_aware_cashaddr(token_address)
+    return token_address, "76a914" + bytes(payload[1:]).hex() + "88ac"
+
+
+def verify_pickaxe_payment(txid: str, locking_script: str) -> bool:
+    transaction = bch_rpc("gettransaction", [txid], wallet=True)
+    if not isinstance(transaction, dict) or not isinstance(transaction.get("hex"), str):
+        raise RuntimeError("BCHN returned an invalid wallet transaction.")
+    decoded = bch_rpc("decoderawtransaction", [transaction["hex"]])
+    if (not isinstance(decoded, dict) or not isinstance(decoded.get("txid"), str)
+            or decoded["txid"].lower() != txid or not isinstance(decoded.get("vout"), list)
+            or type(transaction.get("confirmations")) is not int):
+        raise RuntimeError("BCHN returned an invalid decoded transaction.")
+    for output in decoded["vout"]:
+        if not isinstance(output, dict):
+            raise RuntimeError("BCHN returned an invalid transaction output.")
+        token = output.get("tokenData", {})
+        script = output.get("scriptPubKey", {})
+        if (isinstance(script, dict) and isinstance(script.get("hex"), str)
+                and isinstance(token, dict) and isinstance(token.get("category"), str)
+                and script["hex"].lower() == locking_script
+                and token["category"].lower() == BCH_REWARD_CATEGORY
+                and token.get("amount") == "2" and "nft" not in token):
+            return transaction["confirmations"] >= 1
+    raise ValueError("Transaction does not pay 2 MINA to this crafting address.")
+
+
+@app.post("/api/pickaxe/order")
+def pickaxe_order(request: CashAddressRequest) -> dict:
+    try:
+        address, _, _ = validate_token_aware_cashaddr(request.cash_address)
+        if not NETCRAFT_DB_PATH:
+            raise RuntimeError("Mining progress unavailable.")
+        uri = Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+            earned = db.execute(
+                "SELECT COUNT(*) FROM mining_rewards WHERE cash_address=? AND category=?",
+                (address, BCH_REWARD_CATEGORY),
+            ).fetchone()[0]
+        if earned < 2:
+            raise HTTPException(status_code=403, detail="Mine 20 natural MINA ore blocks first.")
+        with open_db(timeout=30) as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT deposit_address, unlocked, txid FROM pickaxe_orders WHERE cash_address=?", (address,)
+            ).fetchone()
+            if row is None:
+                deposit, script = pickaxe_deposit_address()
+                db.execute(
+                    "INSERT INTO pickaxe_orders (cash_address,deposit_address,locking_script) VALUES (?,?,?)",
+                    (address, deposit, script),
+                )
+                row = (deposit, 0, None)
+        return {"address": row[0], "unlocked": bool(row[1]), "pending": bool(row[2]) and not bool(row[1])}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RewardDatabaseError, RuntimeError, sqlite3.Error) as exc:
+        logger.error("Pickaxe order unavailable: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Pickaxe order unavailable.") from exc
+
+
+@app.post("/api/pickaxe/claim")
+def pickaxe_claim(request: PickaxeClaimRequest) -> dict:
+    try:
+        address, _, _ = validate_token_aware_cashaddr(request.cash_address)
+        if not TXID_RE.fullmatch(request.txid):
+            raise ValueError("Invalid transaction ID.")
+        txid = request.txid.lower()
+        with open_db(timeout=30) as db:
+            row = db.execute(
+                "SELECT locking_script,txid,unlocked FROM pickaxe_orders WHERE cash_address=?", (address,)
+            ).fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="Pickaxe order not found.")
+            if row[2]:
+                return {"unlocked": True}
+            confirmed = verify_pickaxe_payment(txid, row[0])
+            db.execute(
+                "UPDATE pickaxe_orders SET txid=?,unlocked=? WHERE cash_address=? AND unlocked=0",
+                (txid, int(confirmed), address),
+            )
+        return {"unlocked": confirmed}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RewardDatabaseError, RuntimeError, sqlite3.Error) as exc:
+        logger.error("Pickaxe payment verification failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Pickaxe payment verification unavailable.") from exc
+
+
+@app.get("/api/pickaxe/status")
+def pickaxe_status(address: str) -> dict:
+    try:
+        address, _, _ = validate_token_aware_cashaddr(address)
+        with open_db(timeout=30) as db:
+            row = db.execute(
+                "SELECT locking_script,txid,unlocked FROM pickaxe_orders WHERE cash_address=?", (address,)
+            ).fetchone()
+            if row is None:
+                return {"unlocked": False}
+            if row[2]:
+                return {"unlocked": True}
+            if row[1] and verify_pickaxe_payment(row[1], row[0]):
+                db.execute("UPDATE pickaxe_orders SET unlocked=1 WHERE cash_address=?", (address,))
+                return {"unlocked": True}
+        return {"unlocked": False}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RewardDatabaseError, RuntimeError, sqlite3.Error) as exc:
+        logger.error("Pickaxe status unavailable: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Pickaxe status unavailable.") from exc
+
+
 def _satoshis(amount) -> int:
     value = Decimal(str(amount)) * 100_000_000
     if value != value.to_integral_value() or value < 0:
@@ -1076,6 +1222,24 @@ def mina_ranking() -> dict:
         logger.error("Could not read MINA ranking: %s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Ranking unavailable.") from exc
     return {"players": [{"name": name, "rewards": count} for name, count in rows]}
+
+
+@app.get("/api/mina-ore-mined")
+def mina_ore_mined() -> dict:
+    if not NETCRAFT_DB_PATH:
+        raise HTTPException(status_code=503, detail="Mining total unavailable.")
+    try:
+        uri = Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+            row = db.execute(
+                "SELECT total FROM mining_totals WHERE name = 'mina_ore'"
+            ).fetchone()
+            if row is None:
+                raise sqlite3.DatabaseError("Mining total unavailable")
+    except sqlite3.Error as exc:
+        logger.error("Could not read MINA ore total: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Mining total unavailable.") from exc
+    return {"mined": str(row[0])}
 
 
 @app.get("/api/mina-mined")

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchChainStatus, fetchMinaRewardsSent, fetchPayoutBalance, setupChainTicker } from '../src/chain-ticker.js';
+import { fetchChainStatus, fetchMinaRewardsSent, fetchMinaOreMined, fetchPayoutBalance, setupChainTicker } from '../src/chain-ticker.js';
 
 const status = {
   network: 'mainnet', blocks: 800000, headers: 800002,
@@ -23,6 +23,10 @@ test('MINA totals require a nonnegative integer string', async (t) => {
   assert.equal(await fetchMinaRewardsSent(), 9007199254740993n.toLocaleString());
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ sent: '-1' }) });
   await assert.rejects(fetchMinaRewardsSent(), /Invalid MINA/);
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ mined: '9007199254740993' }) });
+  assert.equal(await fetchMinaOreMined(), 9007199254740993n.toLocaleString());
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ mined: '-1' }) });
+  await assert.rejects(fetchMinaOreMined(), /Invalid MINA/);
 });
 
 test('payout balance preserves exact satoshis and rejects invalid values', async (t) => {
@@ -49,7 +53,7 @@ test('chain ticker renders node and payout data independently', async (t) => {
     createElement: () => new Element(),
     addEventListener(_type, callback) { visibility = callback; },
   };
-  globalThis.fetch = async (url) => ({ ok: true, json: async () => url.includes('mina-rewards') ? { sent: '1234' } : url.includes('payout-balance') ? { satoshis: '120000000' } : status });
+  globalThis.fetch = async (url) => ({ ok: true, json: async () => url.includes('mina-rewards') ? { sent: '1234' } : url.includes('mina-ore') ? { mined: '5678' } : url.includes('payout-balance') ? { satoshis: '120000000' } : status });
   globalThis.setInterval = (callback, delay) => { refresh = callback; interval = delay; };
   const container = new Element();
   setupChainTicker(container, { warn() {} });
@@ -63,6 +67,8 @@ test('chain ticker renders node and payout data independently', async (t) => {
   assert.equal(first.children[6].children[0].textContent, 'MINA rewards sent');
   assert.equal(first.children[6].children[1].textContent, (1234).toLocaleString());
   assert.equal(first.children[7].children[1].textContent, '1.20000000 BCH');
+  assert.equal(first.children[8].children[0].textContent, 'MINA ore mined');
+  assert.equal(first.children[8].children[1].textContent, (5678).toLocaleString());
   assert.equal(duplicate.attributes['aria-hidden'], 'true');
   globalThis.fetch = async () => ({ ok: false, status: 503 });
   await refresh();
