@@ -287,9 +287,11 @@ python3 NetCraft/builder.py
 ```
 
 This requires Python 3 and a C compiler and creates `data/netcraft.db` for
-Compose. It adds a central sky park, dragon, green coin, four floating gardens,
-bridges, seven gold spheres and static water cascades above the normal generated terrain.
-The pillar is one block wide; double-tap jump to fly to the platform. To add
+Compose. It adds a central park, a dragon with larger ribbed wings and a
+curved tail, a green coin, and eight bridge-linked islands. The four outer
+islands, 108 blocks from the park center, feature a glass observatory, a
+lagoon and waterfall, ruined arches, and a grove. The park is at `y=180`;
+only verified admins can fly up using double-tap Space. To add
 the donation QR, set `DONATION_ADDRESS` in `builder.py` to the desired address
 and install Python's `segno` package before building. The QR is omitted when
 the address is blank. Check it with a phone in the actual game before use;
@@ -302,7 +304,31 @@ To add the park to a world that already exists, stop the server, back up its
 database, and run `python3 NetCraft/builder.py --add-park data/netcraft.db`.
 Existing block, light and sign edits are preserved; park blocks at those
 positions are skipped, so existing edits may leave gaps or obstruct paths.
-Restart the server to load the changes; do not run the builder while it runs.
+On an older park this adds the new islands and unoccupied dragon details
+without repainting or removing the original sculpture. Restart the server
+to load changes; do not run the builder while it runs.
+
+#### Terrain modules
+
+Use `--terrain` repeatedly to layer reusable JSON modules on top of
+`--init-park` or `--add-park`. To apply only the modules to an existing world
+without generating the park or compiling C, run:
+
+```sh
+python3 NetCraft/builder.py --apply-terrain data/netcraft.db \
+  --terrain NetCraft/terrain/lookout.json
+```
+
+A module contains `"version": 1`, an optional `"origin": [x, y, z]` offset
+(default `[0, 0, 0]`), and an `"edits"` array. Use `{"at": [x,y,z], "block": 8}`
+for one block or `{"from": [x1,y1,z1], "to": [x2,y2,z2], "block": 8}` for an
+inclusive box. Use numeric IDs from `src/item.h`; `0` places air over generated
+terrain. Within a single command, later edits and files win at the same
+coordinate. Existing saved blocks (including saved air), lights, and signs
+always win, even when a module requests air. For an existing world, back it
+up and stop the server before running the builder. Modules support coordinates
+from `-262000` to `262000` on X/Z and `-26` to `255` on Y. A command accepts up
+to 250,000 expanded module edits, and each file may be at most 8 MiB.
 
 Compose enables mining rewards by default. Each ten naturally generated,
 previously unedited blocks of green MINA, blue lapis, or red redstone ore mined

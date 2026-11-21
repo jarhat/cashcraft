@@ -1,10 +1,11 @@
-"""Build a customizable CashToken sky park in a NEW Rust-server world.
+"""Build the CashToken sky park or apply modular terrain files offline.
 
 Run before starting the server:
 
     python3 NetCraft/builder.py
     python3 NetCraft/builder.py --init-park data/netcraft.db
     python3 NetCraft/builder.py --add-park data/existing-world.db
+    python3 NetCraft/builder.py --apply-terrain data/netcraft.db --terrain NetCraft/terrain/lookout.json
 
 With no arguments, a new Compose world is created at data/netcraft.db. An
 existing database is never replaced; use --add-park only after stopping the
@@ -13,13 +14,10 @@ Stop the server before running either command. --init-park creates a new
 database; --add-park requires an existing Rust-server world and preserves
 existing block, light and sign edits, skipping park blocks at those positions.
 Back up existing worlds before building.
-It requires a C compiler and the checked-in terrain sources so it can clear
-only blocks that actually exist in the server's generated terrain.
-
+The built-in park requires a C compiler to check its placement against
+the server's generated terrain. JSON terrain files do not require a compiler.
 Customize PARK_*, SKY_Y, TOWER_Z and the drawing functions in make_park().
-Coordinates are block coordinates, with (0, 0) at the player spawn. The
-central park connects to four floating garden islands by bridges. A single
-pillar supports the upper platform; double-tap the keyboard jump key to fly.
+Coordinates are absolute [x, y, z] world block coordinates.
 Set DONATION_ADDRESS below to add a block-built donation QR (requires segno).
 The seven gold spheres are decorative, not interactive. Block IDs match NetCraft/src/item.h;
 the original shape helpers are also available. The natural world remains
@@ -30,6 +28,7 @@ Always test changes in a new world and back up any world you want to keep.
 import argparse
 from contextlib import closing
 import ctypes
+import json
 import math
 import os
 from pathlib import Path
@@ -75,16 +74,22 @@ COLOR_BLACK = 47
 PARK_HALF_WIDTH = 28
 PARK_Z_MIN = -25
 PARK_Z_MAX = 28
-WORLD_HALF_WIDTH = 70
-WORLD_Z_MIN = -70
-WORLD_Z_MAX = 70
+WORLD_HALF_WIDTH = 124
+WORLD_Z_MIN = -124
+WORLD_Z_MAX = 124
 SKY_Y = 180
+OUTER_ISLAND_DISTANCE = 108
 TOWER_Z = -12
 DONATION_ADDRESS = ""  # Set a Bitcoin Cash donation address before building the QR.
 DONATION_QR_Z = 24
 TREE_POSITIONS = [(-21, -11), (21, -11), (-21, 14), (21, 14)]
 SPHERE_POSITIONS = [(-58, -4), (-58, 4), (58, -4), (58, 4),
                     (-5, -58), (5, -58), (-5, 58)]
+ISLAND_DIRECTIONS = (("x", -1), ("x", 1), ("z", -1), ("z", 1))
+MAX_COORD = 262_000
+MAX_TERRAIN_BLOCKS = 250_000
+MAX_TERRAIN_BYTES = 8 * 1024 * 1024
+TERRAIN_BLOCK_IDS = set(range(24)) | set(range(32, 68)) | {70, 73, 83}
 
 OFFSETS = [
     (-0.5, -0.5, -0.5),
@@ -267,7 +272,8 @@ def terrain_in_park():
         for p in range(-WORLD_HALF_WIDTH // 32, WORLD_HALF_WIDTH // 32 + 1):
             for q in range(WORLD_Z_MIN // 32, WORLD_Z_MAX // 32 + 1):
                 def collect(x, y, z, w, _):
-                    if (x // 32 == p and z // 32 == q and
+                    if (y >= SKY_Y - 32 or (x == 0 and z == TOWER_Z)) and (
+                            x // 32 == p and z // 32 == q and
                             -WORLD_HALF_WIDTH <= x <= WORLD_HALF_WIDTH and
                             WORLD_Z_MIN <= z <= WORLD_Z_MAX and w > 0):
                         terrain[x, y, z] = w
@@ -278,15 +284,13 @@ def terrain_in_park():
 def make_park(terrain):
     """Return absolute block edits; the last drawing at a position wins."""
     ground = [y for (x, y, z), w in terrain.items()
-              if x == z == 0 and w in (GRASS, SAND, STONE, CEMENT, DIRT, SNOW, COBBLE)]
+              if x == 0 and z == TOWER_Z and w in (GRASS, SAND, STONE, CEMENT, DIRT, SNOW, COBBLE, 83)]
     if not ground:
-        raise ValueError("Could not find natural ground at the park spawn")
+        raise ValueError("Could not find natural ground below the sky park tower")
     base = max(ground)
     floor = SKY_Y
-    if not 31 <= base < floor - 4 or floor + 36 > 255:
+    if not 31 <= base < floor - 14 or floor + 46 > 255:
         raise ValueError("Tower and park do not fit between spawn and world height limit")
-    if any(y >= floor and w != CLOUD for (x, y, z), w in terrain.items()):
-        raise ValueError("Sky platform intersects natural terrain; raise SKY_Y")
     edits = {}
 
     def put(x, y, z, block):
@@ -356,33 +360,10 @@ def make_park(terrain):
                 put(cx - 2 + dx, floor + 12 - dy, cz - 1, COLOR_WHITE)
     box(cx - 1, cx + 1, floor + 1, floor + 2, cz, cz, COBBLE)
 
-    # An original winged sky dragon, made of rounded segments and broad wings.
-    # Change the body curve, colors and wing sweep here to customize it.
-    for x in range(-22, 24):
-        y = floor + 25 + round(2 * math.sin(x / 7))
-        radius = 4 if x < 12 else 3
-        for point in sphere(x, y, 0, radius, fill=True):
-            put(*point, COLOR_GREEN)
-        put(x, y - radius + 1, 0, COLOR_WHITE)
-        if x % 4 == 0:
-            put(x, y + radius, 0, COLOR_GOLD)
-    box(-27, -21, floor + 23, floor + 29, -4, 4, COLOR_GREEN)
-    box(-31, -27, floor + 22, floor + 25, -3, 3, COLOR_GREEN)
-    for z in (-4, 4):
-        put(-26, floor + 27, z, COLOR_WHITE)
-        put(-27, floor + 27, z, COLOR_BLACK)
-        box(-23, -22, floor + 30, floor + 33, z, z, COLOR_GOLD)
-    for side in (-1, 1):
-        for x in range(-12, 14):
-            for distance in range(3, 19 - abs(x) // 2):
-                put(x, floor + 28 + distance // 4, side * distance,
-                    COLOR_GOLD if distance == 3 else COLOR_GREEN)
-    for x in range(24, 35):
-        put(x, floor + 24 - (x - 24) // 2, 0, COLOR_GREEN)
+    draw_dragon(put, box, floor)
 
-    # Four floating gardens linked to the central park, inspired by the
-    # preview's green islands, waterfalls and small explorer structures.
-    for axis, side in (("x", -1), ("x", 1), ("z", -1), ("z", 1)):
+    # Four floating gardens linked to the central park.
+    for axis, side in ISLAND_DIRECTIONS:
         cx, cz = (side * 53, 0) if axis == "x" else (0, side * 53)
         for dx in range(-11, 12):
             for dz in range(-11, 12):
@@ -398,35 +379,156 @@ def make_park(terrain):
                     put(cx + dx, floor + 1, cz + dz,
                         (YELLOW_FLOWER, RED_FLOWER)[(dx + dz) % 2])
         start = PARK_HALF_WIDTH if axis == "x" else (PARK_Z_MAX if side > 0 else -PARK_Z_MIN)
-        for distance in range(start, 44):
-            for offset in range(-2, 3):
-                x, z = (side * distance, offset) if axis == "x" else (offset, side * distance)
-                put(x, floor, z, PLANK)
-                put(x, floor + 1, z, EMPTY)
-                if abs(offset) == 2 and distance % 3 == 0:
-                    put(x, floor + 1, z, COLOR_WHITE)
-        # A small open pavilion and a tree keep the islands recognizable
-        # without turning the entire sky into dense geometry.
+        draw_bridge(put, floor, axis, side, start, 43)
         for dx in (-3, 3):
             for dz in (-3, 3):
                 box(cx + dx, cx + dx, floor + 1, floor + 5, cz + dz, cz + dz, WOOD)
         box(cx - 4, cx + 4, floor + 6, floor + 6, cz - 4, cz + 4, PLANK)
         box(cx - 3, cx + 3, floor + 7, floor + 7, cz - 3, cz + 3, COLOR_RED)
         put(cx, floor + 8, cz, COLOR_GOLD)
-        tx, tz = cx + 6, cz + 5
-        box(tx, tx, floor + 1, floor + 6, tz, tz, WOOD)
-        for dx in range(-2, 3):
-            for dz in range(-2, 3):
-                for dy in range(4, 8):
-                    if abs(dx) + abs(dz) + abs(dy - 5) <= 4 and (dx or dz):
-                        put(tx + dx, floor + dy, tz + dz, LEAVES)
-        # Water blocks form a static cascade; the game does not simulate flow.
+        draw_tree(put, box, floor, cx + 6, cz + 5)
         wx, wz = (cx + side * 9, cz) if axis == "x" else (cx, cz + side * 9)
         box(wx, wx, floor - 18, floor - 1, wz, wz, WATER)
+
+    draw_outer_islands(put, box, floor)
     for gx, gz in SPHERE_POSITIONS:
         for point in sphere(gx, floor + 5, gz, 3, fill=True):
             put(*point, COLOR_GOLD)
+    for point in edits:
+        if point[1] >= floor - 32 and terrain.get(point, EMPTY) not in (EMPTY, CLOUD):
+            raise ValueError(f"Sky park intersects natural terrain at {point}; raise SKY_Y")
     return edits
+
+
+def draw_dragon(put, box, floor):
+    # Layer the new silhouette over the original footprint so old park saves get the added details too.
+    for x in range(-22, 24):
+        y = floor + 25 + round(2 * math.sin(x / 7))
+        radius = 4 if x < 12 else 3
+        for point in sphere(x, y, 0, radius, fill=True):
+            _, py, pz = point
+            color = COLOR_GREEN
+            if py <= y - radius + 1:
+                color = COLOR_GOLD
+            elif abs(pz) >= radius - 1 and (x + py) % 5 < 2:
+                color = COLOR_CYAN
+            put(*point, color)
+    for x in range(-20, 24, 4):
+        y = floor + 25 + round(2 * math.sin(x / 7)) + (4 if x < 12 else 3)
+        for rise in range(4):
+            put(x - rise // 2, y + rise, 0, COLOR_GOLD)
+    box(-27, -21, floor + 23, floor + 29, -4, 4, COLOR_GREEN)
+    box(-31, -27, floor + 22, floor + 25, -3, 3, COLOR_GREEN)
+    box(-35, -29, floor + 24, floor + 26, -3, 3, COLOR_GREEN)
+    box(-34, -29, floor + 20, floor + 21, -2, 2, COLOR_CYAN)
+    for side in (-1, 1):
+        z = side * 5
+        box(-29, -25, floor + 27, floor + 28, z, z, COLOR_GREEN)
+        put(-28, floor + 27, z, COLOR_GOLD)
+        put(-27, floor + 27, z, COLOR_BLACK)
+        put(-26, floor + 27, z, COLOR_GOLD)
+        put(-34, floor + 26, side * 3, COLOR_BLACK)
+        for x in (-33, -31, -29):
+            put(x, floor + 23, side * 3, COLOR_WHITE)
+        for rise in range(8):
+            put(-24 + rise // 2, floor + 30 + rise, side * (3 + rise // 3), COLOR_GOLD)
+            if rise < 5:
+                put(-23 + rise // 2, floor + 30 + rise, side * (3 + rise // 3), COLOR_GOLD)
+    for side in (-1, 1):
+        span = 30 if side < 0 else 22  # Keep clear of the donation QR to the south.
+        for distance in range(3, span + 1):
+            tip = (distance - 3) / (span - 3)
+            leading = round(-12 + 18 * tip**2)
+            trailing = round(13 + 9 * tip - 12 * tip**4 - (distance % 6) * tip / 2)
+            for x in range(leading, trailing + 1):
+                y = floor + 28 + distance // 3 + (x - leading) // 8
+                rib = x in (leading, trailing) or abs(x - round(1 + 10 * tip)) <= 1
+                put(x, y, side * distance, COLOR_GOLD if rib else COLOR_CYAN)
+                put(x, y - 1, side * distance, COLOR_GREEN if rib else COLOR_CYAN)
+        for x in (-12, 10):
+            for step in range(6):
+                put(x + step // 2, floor + 23 - step, side * (2 + step // 2), COLOR_GREEN)
+            for toe in (-1, 0, 1):
+                put(x + 1, floor + 17, side * 4 + toe, COLOR_WHITE)
+    for x in range(23, 43):
+        y = floor + 24 - round(5 * math.sin((x - 23) / 8))
+        z = round(7 * math.sin((x - 23) / 9))
+        for point in sphere(x, y, z, 3 if x < 29 else 2 if x < 37 else 1, fill=True):
+            put(*point, COLOR_GREEN)
+        if x < 35:  # Retain the old tail inside the wider silhouette on an upgrade.
+            put(x, floor + 24 - (x - 24) // 2, 0, COLOR_GREEN)
+    for x in range(39, 45):
+        for z in range(4 - (x - 39) // 2, 9 + (x - 39) // 2):
+            put(x, floor + 21 + (x - 39) // 2, z, COLOR_GOLD if x == 44 else COLOR_CYAN)
+
+
+def draw_bridge(put, floor, axis, side, first, last, detailed=False):
+    for distance in range(first, last + 1):
+        for offset in range(-2, 3):
+            x, z = (side * distance, offset) if axis == "x" else (offset, side * distance)
+            put(x, floor, z, CEMENT if detailed and abs(offset) == 2 else PLANK)
+            edge = abs(offset) == 2
+            put(x, floor + 1, z,
+                COLOR_WHITE if edge and distance % 3 == 0 else PLANK if edge and detailed else EMPTY)
+            if detailed and edge and distance % 8 == 0:
+                put(x, floor + 2, z, COLOR_GOLD)
+                put(x, floor - 1, z, COBBLE)
+
+
+def draw_tree(put, box, floor, x, z):
+    box(x, x, floor + 1, floor + 6, z, z, WOOD)
+    for dx in range(-2, 3):
+        for dz in range(-2, 3):
+            for dy in range(4, 8):
+                if abs(dx) + abs(dz) + abs(dy - 5) <= 4 and (dx or dz):
+                    put(x + dx, floor + dy, z + dz, LEAVES)
+
+
+def draw_outer_islands(put, box, floor):
+    for axis, side in ISLAND_DIRECTIONS:
+        cx, cz = (side * OUTER_ISLAND_DISTANCE, 0) if axis == "x" else (0, side * OUTER_ISLAND_DISTANCE)
+        for dx in range(-16, 17):
+            for dz in range(-16, 17):
+                radius = math.hypot(dx, dz)
+                edge = 15 + math.sin(dx * .7 + dz * .4) + .5 * math.cos(dz * .8)
+                if radius > edge:
+                    continue
+                path = abs(dz if axis == "x" else dx) <= 1
+                put(cx + dx, floor, cz + dz, CEMENT if path else GRASS)
+                depth = min(13, round((edge - radius) * .8))
+                for down in range(1, depth + 1):
+                    block = DIRT if down <= 2 else (
+                        COLOR_CYAN if down > 7 and (dx * 13 + dz * 7 + down) % 23 == 0 else COBBLE)
+                    put(cx + dx, floor - down, cz + dz, block)
+                if not path and radius < 14 and (dx * 13 + dz * 7) % 23 == 1:
+                    put(cx + dx, floor + 1, cz + dz, YELLOW_FLOWER if dx % 2 else RED_FLOWER)
+        draw_bridge(put, floor, axis, side, 64, OUTER_ISLAND_DISTANCE - 10, detailed=True)
+        if axis == "z" and side < 0:  # Observatory
+            for dx in (-5, 5):
+                for dz in (-5, 5):
+                    box(cx + dx, cx + dx, floor + 1, floor + 7, cz + dz, cz + dz, COLOR_WHITE)
+            for x, y, z in sphere(cx, floor + 7, cz, 8):
+                if y >= floor + 7:
+                    put(x, y, z, COLOR_BLUE if (x - cx) % 4 == 0 else GLASS)
+            put(cx, floor + 16, cz, COLOR_GOLD)
+        elif axis == "z":  # Lagoon, with a spillway below the edge.
+            for dx in range(-6, 7):
+                for dz in range(-4, 5):
+                    if dx * dx + dz * dz <= 36:
+                        put(cx + dx, floor, cz + dz + 5, WATER)
+                        put(cx + dx, floor - 1, cz + dz + 5, COLOR_BLUE)
+            box(cx - 1, cx + 1, floor, floor, cz + 9, cz + 15, WATER)
+            box(cx - 1, cx + 1, floor - 24, floor - 1, cz + 15, cz + 15, WATER)
+        elif side > 0:  # Ruined arches over the approach.
+            for dx in (-4, 3, 9):
+                for dz in (-4, 4):
+                    box(cx + dx, cx + dx, floor + 1, floor + 5, cz + dz, cz + dz, COBBLE)
+                box(cx + dx, cx + dx, floor + 6, floor + 6, cz - 3, cz + 3, COBBLE)
+                put(cx + dx, floor + 7, cz, COLOR_GOLD)
+        else:  # Grove
+            for dx, dz in ((-6, -5), (-6, 5), (2, -7), (7, 6)):
+                draw_tree(put, box, floor, cx + dx, cz + dz)
+            box(cx - 3, cx + 3, floor + 1, floor + 1, cz - 3, cz + 3, PLANK)
 
 def park_rows(edits):
     """Include the mirrored chunk-edge entries expected by the server."""
@@ -441,12 +543,71 @@ def park_rows(edits):
                 yield (p + dx, q + dz, x, y, z,
                        block if dx == dz == 0 else -block)
 
-def initialize_park(path):
+
+def load_terrain_files(paths):
+    """Expand versioned JSON modules in command-line order, without touching a world."""
+    edits = {}
+    expanded = 0
+
+    def vector(value, label):
+        if not isinstance(value, list) or len(value) != 3 or any(type(n) is not int for n in value):
+            raise ValueError(f"{label} must be an [x, y, z] integer vector")
+        return value
+
+    for path in paths:
+        try:
+            with Path(path).open("rb") as source:
+                payload = source.read(MAX_TERRAIN_BYTES + 1)
+            if len(payload) > MAX_TERRAIN_BYTES:
+                raise ValueError("terrain file exceeds 8 MiB")
+            module = json.loads(payload)
+            if (not isinstance(module, dict) or set(module) - {"version", "origin", "edits"} or
+                    type(module.get("version")) is not int or module["version"] != 1 or
+                    not isinstance(module.get("edits"), list) or not module["edits"]):
+                raise ValueError("expected a version 1 terrain module with a nonempty edits list")
+            origin = vector(module.get("origin", [0, 0, 0]), "origin")
+
+            def position(value):
+                x, y, z = (real + offset for real, offset in zip(vector(value, "coordinate"), origin))
+                if abs(x) > MAX_COORD or abs(z) > MAX_COORD or not -26 <= y <= 255:
+                    raise ValueError(f"coordinate ({x}, {y}, {z}) is outside the world")
+                return x, y, z
+
+            for index, edit in enumerate(module["edits"], 1):
+                try:
+                    if not isinstance(edit, dict):
+                        raise ValueError("expected an edit object")
+                    block = edit.get("block")
+                    if type(block) is not int or block not in TERRAIN_BLOCK_IDS:
+                        raise ValueError("block must be a recognized NetCraft block ID (0 clears a block)")
+                    if set(edit) == {"at", "block"}:
+                        low = high = position(edit["at"])
+                    elif set(edit) == {"from", "to", "block"}:
+                        start, end = position(edit["from"]), position(edit["to"])
+                        low = tuple(map(min, zip(start, end)))
+                        high = tuple(map(max, zip(start, end)))
+                    else:
+                        raise ValueError("expected either at/block or from/to/block")
+                    expanded += math.prod(b - a + 1 for a, b in zip(low, high))
+                    if expanded > MAX_TERRAIN_BLOCKS:
+                        raise ValueError(f"terrain files exceed {MAX_TERRAIN_BLOCKS:,} block edits")
+                    edits.update((point, block) for point in cuboid(
+                        low[0], high[0], low[1], high[1], low[2], high[2]))
+                except ValueError as exc:
+                    raise ValueError(f"edit {index}: {exc}") from exc
+        except (OSError, ValueError, RecursionError) as exc:
+            raise ValueError(f"{path}: {exc}") from exc
+    return edits
+
+
+def initialize_park(path, extra=None):
     """Create, but never replace, a database for the Rust server."""
     if Path(path).exists():
         raise FileExistsError("World already exists; back it up and use --add-park with the server stopped")
     terrain = terrain_in_park()
     edits = make_park(terrain)
+    if extra:
+        edits.update(extra)
     # Reserve the path atomically: a running or existing world is never modified.
     fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     os.close(fd)
@@ -460,30 +621,41 @@ def initialize_park(path):
     finally:
         if not completed:
             os.unlink(path)
-    print("Created %s with %d park edits. Start the server with this database." % (path, len(edits)))
+    print("Created %s with %d world edits. Start the server with this database." % (path, len(edits)))
 
-def add_park(path):
-    """Atomically add park blocks without changing any existing edits."""
-    terrain = terrain_in_park()
-    edits = make_park(terrain)
+
+def apply_world_edits(path, edits):
+    """Atomically insert unoccupied coordinates, including their chunk-border copies."""
     with closing(sqlite3.connect(Path(path).resolve().as_uri() + "?mode=rw", uri=True, timeout=10)) as db:
-        db.execute("BEGIN IMMEDIATE")
-        try:
+        with db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("CREATE TEMP TABLE requested (p INTEGER, q INTEGER, x INTEGER, y INTEGER, z INTEGER, w INTEGER)")
+            db.executemany("INSERT INTO requested VALUES (?,?,?,?,?,?)", park_rows(edits))
+            optional = {row[0] for row in db.execute(
+                "SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('light', 'sign')")}
             occupied = set()
             for table in ("block", "light", "sign"):
-                occupied.update(db.execute(
-                    "SELECT DISTINCT x,y,z FROM " + table +
-                    " WHERE x BETWEEN ? AND ? AND z BETWEEN ? AND ? AND y BETWEEN 1 AND 255",
-                    (-WORLD_HALF_WIDTH, WORLD_HALF_WIDTH, WORLD_Z_MIN, WORLD_Z_MAX),
-                ))
-            accepted = {position: block for position, block in edits.items() if position not in occupied}
-            db.executemany("INSERT INTO block VALUES (?,?,?,?,?,?)", park_rows(accepted))
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
-    print("Added %d park edits to %s; preserved %d overlapping positions. Restart the server." %
-          (len(accepted), path, len(edits) - len(accepted)))
+                if table != "block" and table not in optional:
+                    continue
+                columns = ("x", "y", "z") if table == "sign" else ("p", "q", "x", "y", "z")
+                clause = " AND ".join(f"entry.{key}=r.{key}" for key in columns)
+                occupied.update(db.execute(f"""
+                    SELECT DISTINCT r.x,r.y,r.z FROM requested AS r
+                    WHERE EXISTS (SELECT 1 FROM {table} AS entry WHERE {clause})
+                """))
+            accepted = len(edits) - len(occupied)
+            db.executemany("INSERT INTO block (p,q,x,y,z,w) VALUES (?,?,?,?,?,?)",
+                           park_rows({pos: block for pos, block in edits.items() if pos not in occupied}))
+    print("Added %d world edits to %s; preserved %d overlapping positions. Restart the server." %
+          (accepted, path, len(occupied)))
+
+
+def add_park(path, extra=None):
+    """Add the built-in park, optionally layered with terrain modules."""
+    edits = make_park(terrain_in_park())
+    if extra:
+        edits.update(extra)
+    apply_world_edits(path, edits)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
@@ -491,17 +663,30 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--init-park', metavar='NEW_DATABASE')
     group.add_argument('--add-park', metavar='EXISTING_DATABASE')
+    group.add_argument('--apply-terrain', metavar='EXISTING_DATABASE', help='apply modules without adding the park')
     group.add_argument('--legacy-client', action='store_true',
                        help='run the original network builder instead')
+    parser.add_argument('--terrain', action='append', default=[], metavar='FILE',
+                        help='load a JSON terrain module; repeat to layer multiple files')
     args = parser.parse_args()
+    if args.apply_terrain and not args.terrain:
+        parser.error("--apply-terrain requires at least one --terrain file")
+    if args.legacy_client and args.terrain:
+        parser.error("--terrain cannot be used with --legacy-client")
     if not args.legacy_client:
-        if args.add_park:
-            add_park(args.add_park)
-        else:
-            path = Path(args.init_park) if args.init_park else Path(__file__).resolve().parent.parent / "data" / "netcraft.db"
-            if not args.init_park:
-                path.parent.mkdir(parents=True, exist_ok=True)
-            initialize_park(path)
+        try:
+            extra = load_terrain_files(args.terrain)
+            if args.apply_terrain:
+                apply_world_edits(args.apply_terrain, extra)
+            elif args.add_park:
+                add_park(args.add_park, extra)
+            else:
+                path = Path(args.init_park) if args.init_park else Path(__file__).resolve().parent.parent / "data" / "netcraft.db"
+                if not args.init_park:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                initialize_park(path, extra)
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            parser.exit(1, f"{parser.prog}: {exc}\n")
         return
     client = get_client()
     set_block = client.set_block
