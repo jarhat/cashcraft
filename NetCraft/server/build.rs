@@ -13,6 +13,13 @@ fn main() {
         build.file(format!("../src/worldgen/{file}"));
     }
     build.flag_if_supported("-std=c99").compile("terrain");
+    cc::Build::new()
+        .define("GLFW_INCLUDE_NONE", None)
+        .files(["../src/item.c", "../src/gamemode.c"])
+        .compile("blocks");
+    for file in ["item.c", "item.h", "gamemode.c"] {
+        println!("cargo:rerun-if-changed=../src/{file}");
+    }
     println!("cargo:rerun-if-changed=../src/worldgen");
     println!("cargo:rerun-if-changed=../deps/noise");
 }

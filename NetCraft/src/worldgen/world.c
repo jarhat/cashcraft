@@ -90,11 +90,30 @@ static int terrain_height(int x, int z) {
     return h < 1 ? 1 : h;
 }
 
+static const int lake_level = 43;
+
+int world_surface(int x, int z, Biome *biome, int *water) {
+    int h = terrain_height(x, z);
+    *biome = biome_at_pos(x, z);
+    static const int canopy[] = {7, 20, 53, 29};
+    int max_h = WORLD_MAX_Y - 32 - canopy[*biome];
+    float radius = fminf(hypotf((float)x - 80.0f, (float)z),
+        hypotf(((float)x + 42.0f) * 1.15f, (float)z - 119.0f));
+    if (radius < 60.0f) {
+        // An enclosed basin, with a dry lip before blending back into the biome.
+        float basin = lake_level - 11.0f + 15.0f * radius * radius / (44.0f * 44.0f);
+        float blend = radius <= 44.0f ? 1.0f : (60.0f - radius) / 16.0f;
+        h = (int)roundf((basin - 31.0f) * blend + h * (1.0f - blend));
+    }
+    if (h < 1) h = 1;
+    if (h > max_h) h = max_h;
+    int surface = 31 + h;
+    *water = radius <= 44.0f && surface < lake_level;
+    return surface;
+}
+
 void create_world(int p, int q, world_func func, void *arg) {
     int pad = 1;
-    int east_level = fminf(180, fmaxf(44, 31 + terrain_height(80, 0)));
-    int north_level = fminf(180, fmaxf(44, 31 + terrain_height(-42, 119)));
-
     for (int dx = -pad; dx < CHUNK_SIZE + pad; dx++) {
         for (int dz = -pad; dz < CHUNK_SIZE + pad; dz++) {
             int flag = 1;
@@ -106,25 +125,9 @@ void create_world(int p, int q, world_func func, void *arg) {
             int x = p * CHUNK_SIZE + dx;
             int z = q * CHUNK_SIZE + dz;
 
-            int h = terrain_height(x, z);
-            Biome biome = biome_at_pos(x, z);
-            // Leave room for the tallest decoration in each biome.
-            static const int canopy[] = {7, 20, 53, 29};
-            int max_h = WORLD_MAX_Y - 32 - canopy[biome];
-            if (h > max_h) h = max_h;
-
-            float lake_radius = hypotf((float)x - 80.0f, (float)z);
-            float north_radius = hypotf((float)(x + 42) * 1.15f, (float)z - 119.0f);
-            int east_lake = lake_radius <= north_radius;
-            if (!east_lake) lake_radius = north_radius;
-            int lake_level = east_lake ? east_level : north_level;
-            if (lake_radius < 60.0f) {
-                float basin = lake_level - 10.0f + 9.0f * lake_radius * lake_radius / (38.0f * 38.0f);
-                float blend = lake_radius <= 42.0f ? 1.0f : (60.0f - lake_radius) / 18.0f;
-                h = (int)roundf((basin - 31.0f) * blend + h * (1.0f - blend));
-                if (h < 1) h = 1;
-                if (h > max_h) h = max_h;
-            }
+            Biome biome;
+            int submerged;
+            int surface = world_surface(x, z, &biome, &submerged);
 
             generate_underworld(x, z, flag, func, arg);
             // Small openings in the bedrock connect to the natural deep caves.
@@ -134,44 +137,39 @@ void create_world(int p, int q, world_func func, void *arg) {
                 dx, dz, x, z, opening ? 4 : 1, 32, flag, func, arg
             );
 
-            if (lake_radius < 64.0f) {
-                for (int y = 32; y < 31 + h; y++) {
+            if (submerged) {
+                for (int y = 32; y < surface; y++) {
                     func(x, y, z, Item_DIRT * flag, arg);
                 }
-                int surface = 31 + h;
-                int ground = surface < lake_level ? Item_SAND :
-                    biome == Biome_DESERT ? Item_SAND :
-                    biome == Biome_TAIGA ? Item_SNOW : Item_GRASS;
-                func(x, surface, z, ground * flag, arg);
-                for (int y = surface + 1; y <= lake_level && lake_radius < 60.0f; y++) {
+                func(x, surface, z, Item_SAND * flag, arg);
+                for (int y = surface + 1; y <= lake_level; y++) {
                     func(x, y, z, Item_WATER * flag, arg);
                 }
             } else if (biome == Biome_TEMPERATE) {
                 generateTemperate(
-                    dx, dz, x, z, 32, 32 + h, flag, func, arg
+                    dx, dz, x, z, 32, surface + 1, flag, func, arg
                 );
             } else if (biome == Biome_DESERT) {
                 generateDesert(
-                    dx, dz, x, z, 32, 32 + h, flag, func, arg
+                    dx, dz, x, z, 32, surface + 1, flag, func, arg
                 );
             } else if (biome == Biome_RAINFOREST) {
                 generateRainforest(
-                    dx, dz, x, z, 32, 32 + h, flag, func, arg
+                    dx, dz, x, z, 32, surface + 1, flag, func, arg
                 );
             } else if (biome == Biome_TAIGA) {
                 generateTaiga(
-                    dx, dz, x, z, 32, 32 + h, flag, func, arg
+                    dx, dz, x, z, 32, surface + 1, flag, func, arg
                 );
             }
 
-            int surface = 31 + h;
-            if ((lake_radius >= 64.0f || surface >= lake_level) && surface >= 32 && surface < 256 && mina_deposit(x, z)) {
+            if (!submerged && (x != WORLD_SPAWN_X || z != 0) && mina_deposit(x, z)) {
                 func(x, surface, z, Item_MINA_ORE * flag, arg);
             }
 
             /* Clouds */
             for (int y = 128; y < 132; y++) {
-                if (!(lake_radius < 60.0f && y <= lake_level) && simplex3(
+                if (simplex3(
                     x * 0.01f, y * 0.1f, z * 0.01f,
                     8, 0.5f, 2.0f
                 ) > 0.75f) {

@@ -178,7 +178,11 @@ In the web-based version, you can pass command-line arguments after `#` in the U
 
 Run `cargo run --release --manifest-path server/Cargo.toml` to listen on TCP
 port 4080. `NETCRAFT_LISTEN` and `NETCRAFT_DB` override the listen address and
-SQLite database. The server compiles the same terrain generator as the client.
+world SQLite database. `CASHADDR_DB_PATH` points to the separate CashAddr SQLite
+database (defaults to `cash-addresses.sqlite3` alongside the world file).
+See [backend persistence](../backend/README.md) before upgrading an existing
+world with mining rewards or stats. The server compiles the same terrain
+generator as the client.
 Clients generate baseline terrain locally and request persisted edits, so both
 must use matching builds. Python-server worlds created with a custom seed
 cannot be migrated by copying the database alone.
@@ -195,6 +199,27 @@ connections with backoff and refreshes loaded chunks after reconnecting.
 Block edits are paused while disconnected; they are not queued.
 Disconnecting a wallet does not close the game; its reward address is cleared
 and can be connected again while playing.
+
+Open the trophy to start a **practice challenge**. Verify your wallet, select
+other verified players, and wait for at least one to accept before starting.
+Shareable links open NetCraft, but only the selected wallets can accept.
+For Capture the Flag, the in-game **World view: Top perspective** shows both
+flags and follows the carriers; the bases are 28 blocks either side of spawn.
+Survival rounds end when one challenger remains. The mining race counts
+natural block removals until NetCraft observes a new BCHN tip. Rankings show
+currently connected, verified wallets only. Practice rounds restart with the
+server and do not accept stakes or pay prizes.
+
+To enable admin tools, set `NETCRAFT_ADMIN_BCH_ADDRESS` to the wallet's
+prefixed, non-token-aware P2PKH CashAddr in `.env`. Connect that wallet in
+CashCraft, register its reward address, and choose **Verify wallet**. The
+built-in wallet signs the challenge directly; external wallets can paste a
+standard BCH signed-message proof. Only a verified admin can double-tap
+Space to toggle flight or use the green MINA axe to break mineable blocks
+with one press. Reconnecting or changing wallets requires verification again.
+Deploy matching Rust server and game client builds: normal mining now starts
+with a timing message before the block edit.
+
 Players can mine MINA ore without a wallet. Their browser stores a random bearer
 identity used to retain server-side progress and unclaimed rewards; clearing
 browser storage loses access to them, so keep that identity private. Connecting

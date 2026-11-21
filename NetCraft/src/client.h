@@ -25,7 +25,7 @@ void client_message(int fd, void *userData);
 char *client_recv(void);
 void client_version(int version);
 void client_login(const char *username, const char *identity_token);
-void client_position(float x, float y, float z, float rx, float ry);
+void client_position(float x, float y, float z, float rx, float ry, bool flying);
 void client_chunk(int p, int q, int key);
 void client_block(int x, int y, int z, int w);
 void client_light(int x, int y, int z, int w);

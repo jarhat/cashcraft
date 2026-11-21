@@ -239,6 +239,8 @@ typedef struct {
     int observe1;
     int observe2;
     bool flying;
+    bool admin_tools;
+    double admin_jump_at;
     int item_index;
     int scale;
     int ortho;
@@ -2420,8 +2422,8 @@ void render_cover(Attrib *attrib, Player *player) {
 
 static GLuint crosshair_buffer;
 static int crosshair_width, crosshair_height, crosshair_scale;
-static GLuint pickaxe_buffers[2];
-static int pickaxe_counts[2];
+static GLuint pickaxe_buffers[3];
+static int pickaxe_counts[3];
 static GLuint heart_buffers[2];
 static int heart_counts[2];
 
@@ -2465,10 +2467,10 @@ static void end_hud_sprites(Attrib *attrib) {
 }
 
 static void render_pickaxe(Attrib *attrib) {
-    int mina = mining_has_pickaxe() ? 1 : 0;
+    int mina = g->admin_tools ? 2 : mining_has_pickaxe() ? 1 : 0;
     if (!pickaxe_buffers[mina]) {
         float vertices[PICKAXE_MAX_VERTICES * PICKAXE_VERTEX_COMPONENTS];
-        pickaxe_counts[mina] = pickaxe_vertices(vertices, mina);
+        pickaxe_counts[mina] = mina == 2 ? admin_axe_vertices(vertices) : pickaxe_vertices(vertices, mina);
         pickaxe_buffers[mina] = gen_buffer(
             pickaxe_counts[mina] * PICKAXE_VERTEX_COMPONENTS * sizeof(float), vertices);
     }
@@ -2784,9 +2786,46 @@ void add_message(const char *text) {
 
 static char username[128] = {0};
 static char access_token[128] = {0};
+
+static void set_admin_tools(bool enabled) {
+    if (!enabled) g->flying = false;
+    g->admin_tools = enabled;
+    g->admin_jump_at = -1;
+    mining_set_admin(enabled);
+}
+
 #ifdef __EMSCRIPTEN__
 static char reward_address[128] = {0};
 static char guest_id[65] = {0};
+
+EMSCRIPTEN_KEEPALIVE int netcraft_world_map_tile(int x, int z) {
+    Biome biome;
+    int water;
+    int y = world_surface(x, z, &biome, &water);
+    return y * 8 + (water ? 4 : biome);
+}
+
+EMSCRIPTEN_KEEPALIVE void netcraft_challenge_command(const char *command) {
+    size_t length = strlen(command);
+    if (!online_ready || g->mode != MODE_ONLINE || !length || length > 128 ||
+        strspn(command, "abcdefghijklmnopqrstuvwxyz0123456789,-") != length) return;
+    char message[133];
+    snprintf(message, sizeof(message), "CG,%s\n", command);
+    client_send(message);
+}
+
+EMSCRIPTEN_KEEPALIVE void netcraft_wallet_proof(const char *signature) {
+    if (!online_ready || g->mode != MODE_ONLINE) return;
+    if (!signature[0]) {
+        client_send("WC\n");
+        return;
+    }
+    if (strlen(signature) != 88 || signature[87] != '=' ||
+        strspn(signature, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/") != 87) return;
+    char message[93];
+    snprintf(message, sizeof(message), "WV,%s\n", signature);
+    client_send(message);
+}
 
 EMSCRIPTEN_KEEPALIVE void netcraft_send_to_player(const char *name) {
     size_t length = strlen(name);
@@ -2835,6 +2874,7 @@ EMSCRIPTEN_KEEPALIVE void netcraft_set_reward_address(const char *address) {
         return;
     }
     if (strcmp(reward_address, address) == 0) return;
+    set_admin_tools(false);
     snprintf(reward_address, sizeof(reward_address), "%s", address);
     if (online_ready) {
         char message[160];
@@ -3256,11 +3296,23 @@ int get_targeted_block(int *x, int *y, int *z, int *face) {
 }
 
 bool on_pickaxe_attack(void) {
-    if (g->mode != MODE_ONLINE || !g->zombies_active) return false;
+    if (g->mode != MODE_ONLINE) return false;
 #ifdef __EMSCRIPTEN__
     if (!online_ready) return false;
 #endif
     State *s = &g->players->state;
+    Player *target = player_crosshair(g->players);
+    static double last_challenge_attack = -1;
+    double challenge_now = glfwGetTime();
+    if (target && player_player_distance(g->players, target) <= 4 &&
+        (last_challenge_attack < 0 || challenge_now < last_challenge_attack ||
+            challenge_now - last_challenge_attack >= .5)) {
+        last_challenge_attack = challenge_now;
+        char message[32];
+        snprintf(message, sizeof(message), "CA,%d\n", target->id);
+        client_send(message);
+    }
+    if (!g->zombies_active) return false;
     float vx, vy, vz, distance;
     get_sight_vector(s->rx, s->ry, &vx, &vy, &vz);
     unsigned int id = animals_target(s->x, s->y, s->z, vx, vy, vz, &distance);
@@ -3273,12 +3325,24 @@ bool on_pickaxe_attack(void) {
     double now = glfwGetTime();
     if (last_attack < 0 || now < last_attack || now - last_attack >= .3) {
         last_attack = now;
-        client_position(s->x, s->y, s->z, s->rx, s->ry);
+        client_position(s->x, s->y, s->z, s->rx, s->ry, g->flying);
         char message[32];
         snprintf(message, sizeof(message), "ZA,%u\n", id);
         client_send(message);
     }
     return true;
+}
+
+void on_mining_target(int x, int y, int z) {
+    if (g->mode != MODE_ONLINE) return;
+#ifdef __EMSCRIPTEN__
+    if (!online_ready) return;
+#endif
+    State *s = &g->players->state;
+    client_position(s->x, s->y, s->z, s->rx, s->ry, g->flying);
+    char message[64];
+    snprintf(message, sizeof(message), "MB,%d,%d,%d\n", x, y, z);
+    client_send(message);
 }
 
 void on_mine() {
@@ -3288,6 +3352,14 @@ void on_mine() {
     int hx, hy, hz, face;
     int hw = get_targeted_block(&hx, &hy, &hz, &face);
     if (hw && hy > DEEP_BEDROCK_Y && hy <= WORLD_MAX_Y && is_destructable(hw)) {
+        if (g->admin_tools && g->mode == MODE_ONLINE) {
+            State *s = &g->players->state;
+            client_position(s->x, s->y, s->z, s->rx, s->ry, g->flying);
+            char message[64];
+            snprintf(message, sizeof(message), "AB,%d,%d,%d\n", hx, hy, hz);
+            client_send(message);
+            return;
+        }
         set_block(hx, hy, hz, 0);
         if (g->mode != MODE_ONLINE) {
             Inventory_collect(&g->inventory, hw);
@@ -3305,6 +3377,7 @@ void on_mine() {
 
         record_block(hx, hy, hz, 0);
         if (is_plant(get_block(hx, hy + 1, hz))) {
+            on_mining_target(hx, hy + 1, hz);
             set_block(hx, hy + 1, hz, 0);
         }
     }
@@ -3434,14 +3507,14 @@ void on_key(GLFWwindow *window, int key, int scancode, int action, int mods) {
             g->crouching = true;
         }
     }
-    if (key == CRAFT_KEY_JUMP || touch_jump) {
-        static double last_jumped = 0;
-        if (!g->typing && (g->flying || !player_in_water(&g->players->state)) &&
-            last_jumped != 0 && glfwGetTime() - last_jumped < JUMP_FLY_THRESHOLD) {
-            g->flying = !g->flying;
-            printf("fly mode toggled: %d\n", g->flying);
+    if (key == CRAFT_KEY_JUMP && !g->typing && g->admin_tools) {
+        double now = glfwGetTime();
+        if (g->admin_jump_at >= 0 && now - g->admin_jump_at < JUMP_FLY_THRESHOLD) {
+            client_send("AF\n");
+            g->admin_jump_at = -1;
+        } else {
+            g->admin_jump_at = now;
         }
-        last_jumped = glfwGetTime();
     }
     if (key == GLFW_KEY_ESCAPE) {
         if (g->typing) {
@@ -4041,6 +4114,17 @@ void parse_buffer(char *buffer, int len) {
     while (line) {
         int pid;
         int value;
+#ifdef __EMSCRIPTEN__
+        if (strncmp(line, "CG,", 3) == 0) {
+            EM_ASM({
+                const packet = UTF8ToString($0);
+                if (Module.updateChallengeWorldView) Module.updateChallengeWorldView(packet);
+                if (!/^map(?:,|-off$)/.test(packet)) {
+                    parent.postMessage({ type: 'netcraft-challenge', packet }, location.origin);
+                }
+            }, line + 3);
+        }
+#endif
         if (sscanf(line, "ZN,%d", &value) == 1 && (value == 0 || value == 1)) {
             g->zombies_active = value;
         }
@@ -4081,6 +4165,22 @@ void parse_buffer(char *buffer, int len) {
         if (line[0] == 'M' && sscanf(line, "MD,%u", &animal_id) == 1) {
             animals_remove(animal_id);
         }
+        if (!strcmp(line, "WA,0") || !strcmp(line, "WA,1")) {
+            set_admin_tools(line[3] == '1');
+        }
+        if (!strcmp(line, "AF,0") || !strcmp(line, "AF,1")) {
+            g->flying = g->admin_tools && line[3] == '1';
+        }
+#ifdef __EMSCRIPTEN__
+        if (!strncmp(line, "WC,", 3) && strlen(line + 3) == 64 &&
+            strspn(line + 3, "0123456789abcdef") == 64) {
+            EM_ASM_ARGS({
+                if (parent !== window) parent.postMessage({
+                    type: 'netcraft-wallet-challenge', nonce: UTF8ToString($0)
+                }, '*');
+            }, line + 3);
+        }
+#endif
         float ux, uy, uz, urx, ury;
         if (line[0] == 'U' && sscanf(line, "U,%d,%f,%f,%f,%f,%f",
             &pid, &ux, &uy, &uz, &urx, &ury) == 6)
@@ -4381,7 +4481,7 @@ void reset_model() {
     g->player_count = 0;
     g->observe1 = 0;
     g->observe2 = 0;
-    g->flying = false;
+    set_admin_tools(false);
     g->item_index = 0;
     Inventory_reset(&g->inventory);
     sync_inventory_items();
@@ -4664,7 +4764,7 @@ void client_opened(int fd, void *userData) {
 #endif
 #ifdef __EMSCRIPTEN__
     State *s = &g->players->state;
-    client_position(s->x, s->y, s->z, s->rx, s->ry);
+    client_position(s->x, s->y, s->z, s->rx, s->ry, false);
 #else
     main_inited();
 #endif
@@ -4675,6 +4775,7 @@ void client_connection_failed(void) {
     if (!connecting && !online_ready) return;
     connecting = false;
     online_ready = false;
+    set_admin_tools(false);
     for (int i = 0; i < g->chunk_count; ++i) {
         g->chunks[i].sync_pending = 0;
         g->chunks[i].needs_resync = 1;
@@ -4702,6 +4803,7 @@ void client_closed(int fd, void *userData) {
     client_connection_failed();
 #else
     add_message("Client closed the connection");
+    set_admin_tools(false);
     client_disable();
 #endif
 }
@@ -4808,11 +4910,13 @@ void main_shutdown() {
         del_buffer(crosshair_buffer);
         crosshair_buffer = 0;
     }
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         if (pickaxe_buffers[i]) {
             del_buffer(pickaxe_buffers[i]);
             pickaxe_buffers[i] = 0;
         }
+    }
+    for (int i = 0; i < 2; i++) {
         if (heart_buffers[i]) {
             del_buffer(heart_buffers[i]);
             heart_buffers[i] = 0;
@@ -4909,7 +5013,7 @@ void one_iter() {
         if (!has_sent_position || s->x != last_sent_position.x ||
             s->y != last_sent_position.y || s->z != last_sent_position.z ||
             s->rx != last_sent_position.rx || s->ry != last_sent_position.ry) {
-            client_position(s->x, s->y, s->z, s->rx, s->ry);
+            client_position(s->x, s->y, s->z, s->rx, s->ry, g->flying);
             last_sent_position = *s;
             has_sent_position = true;
         }

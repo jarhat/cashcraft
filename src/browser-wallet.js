@@ -4,6 +4,7 @@ import {
   deriveHdPathRelative,
   deriveHdPrivateNodeFromBip39Mnemonic,
   generateBip39Mnemonic,
+  hash256,
   secp256k1,
 } from '@bitauth/libauth';
 import { SignatureTemplate } from 'cashscript';
@@ -149,6 +150,24 @@ export class BrowserWallet {
       const publicKey = secp256k1.derivePublicKeyCompressed(key);
       if (typeof publicKey === 'string') throw new Error(publicKey);
       return publicKey;
+    } finally {
+      key.fill(0);
+    }
+  }
+
+  signNetcraftWalletChallenge(nonce) {
+    if (typeof nonce !== 'string' || !/^[0-9a-f]{64}$/.test(nonce)) {
+      throw new Error('Invalid CashCraft wallet challenge.');
+    }
+    const magic = encoder.encode('Bitcoin Signed Message:\n');
+    const message = encoder.encode(`CashCraft wallet login v1: ${nonce}`);
+    // Both fields fit in a one-byte Bitcoin CompactSize length.
+    const digest = hash256(Uint8Array.of(magic.length, ...magic, message.length, ...message));
+    const key = this.privateKey(0, 0);
+    try {
+      const proof = secp256k1.signMessageHashRecoverableCompact(key, digest);
+      if (typeof proof === 'string') throw new Error(proof);
+      return btoa(String.fromCharCode(31 + proof.recoveryId, ...proof.signature));
     } finally {
       key.fill(0);
     }

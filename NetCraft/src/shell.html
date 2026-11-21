@@ -1267,6 +1267,21 @@
     
     <div class="emscripten_border">
       <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+      <details id="challenge-world-view" hidden open style="position:absolute;top:12px;right:12px;z-index:5;background:#152822;color:white;padding:6px;border-radius:8px">
+        <summary>World view: Top perspective</summary>
+        <svg viewBox="0 0 200 128" width="200" height="128" role="img" aria-label="Top-down Capture the Flag map. North is up.">
+          <rect width="200" height="128" fill="#253d31"/>
+          <image id="challenge-terrain" width="200" height="128" style="image-rendering:pixelated"/>
+          <path d="M0 64H200M100 0V128" stroke="#6a8974" stroke-dasharray="4 4"/>
+          <text x="94" y="14" fill="white" font-size="12">N</text>
+          <circle cx="100" cy="64" r="3" fill="white"><title>Spawn</title></circle>
+          <circle id="challenge-home-marker" r="9" fill="none" stroke="white"><title>Your base</title></circle>
+          <text id="challenge-west-marker" fill="#ffb08a" font-weight="bold" text-anchor="middle" dominant-baseline="central">⚑<title>West flag</title></text>
+          <text id="challenge-east-marker" fill="#94dafa" font-weight="bold" text-anchor="middle" dominant-baseline="central">⚑<title>East flag</title></text>
+          <circle id="challenge-player-marker" r="4" fill="#f9ee87" stroke="#182219"><title>You</title></circle>
+        </svg>
+        <div id="challenge-map-legend" style="font-size:12px"></div>
+      </details>
     </div>
     <textarea id="output" rows="8"></textarea>
 
@@ -1437,8 +1452,62 @@
             pendingConnected = undefined;
           }
         };
+        const challengeView = document.getElementById('challenge-world-view');
+        let mappedSpawn;
+        function drawChallengeTerrain(spawn) {
+          if (mappedSpawn === spawn) return;
+          const tileMap = document.createElement('canvas');
+          tileMap.width = 25;
+          tileMap.height = 16;
+          const context = tileMap.getContext('2d');
+          if (!context) return;
+          const colors = [105, 44, 133, 175, 201];
+          for (let row = 0; row < 16; row++) {
+            for (let col = 0; col < 25; col++) {
+              const value = Module.ccall('netcraft_world_map_tile', 'number', ['number', 'number'],
+                [spawn - 48 + 4 * col, -30 + 4 * row]);
+              const kind = value % 8;
+              const light = Math.min(56, 23 + (value >> 3) / 4);
+              context.fillStyle = `hsl(${colors[kind]} ${kind === 1 ? 34 : 24}% ${light}%)`;
+              context.fillRect(col, row, 1, 1);
+            }
+          }
+          document.getElementById('challenge-terrain').setAttribute('href', tileMap.toDataURL());
+          mappedSpawn = spawn;
+        }
+        Module.updateChallengeWorldView = function(packet) {
+          if (packet === 'map-off') {
+            challengeView.hidden = true;
+            return;
+          }
+          const [type, ...values] = packet.split(',');
+          if (type !== 'map' || values.length !== 9 || !values.every(value => /^-?\d+$/.test(value))) return;
+          const [spawn, x, z, wx, wz, ex, ez, team, home] = values.map(Number);
+          drawChallengeTerrain(spawn);
+          const place = (id, mx, mz, text = false) => {
+            const marker = document.getElementById(`challenge-${id}-marker`);
+            marker.setAttribute(text ? 'x' : 'cx', Math.max(8, Math.min(192, 100 + (mx - spawn) * 2)));
+            marker.setAttribute(text ? 'y' : 'cy', Math.max(8, Math.min(120, 64 + mz * 2)));
+          };
+          place('player', x, z);
+          place('home', home, 0);
+          place('west', wx, wz, true);
+          place('east', ex, ez, true);
+          document.getElementById('challenge-map-legend').textContent = `You: (${x}, ${z}) · Your base: ${team ? 'East' : 'West'}`;
+          challengeView.hidden = false;
+        };
         window.addEventListener('message', function(event) {
           if (event.source !== window.parent || !event.data) return;
+          if (event.data.type === 'netcraft-challenge-command' && event.origin === location.origin &&
+              typeof event.data.command === 'string' && /^[a-z0-9,-]{1,128}$/.test(event.data.command)) {
+            if (ready) Module.ccall('netcraft_challenge_command', null, ['string'], [event.data.command]);
+            return;
+          }
+          if (event.data.type === 'netcraft-wallet-proof' && typeof event.data.signature === 'string' &&
+              (event.data.signature === '' || /^[A-Za-z0-9+/]{87}=$/.test(event.data.signature))) {
+            if (ready) Module.ccall('netcraft_wallet_proof', null, ['string'], [event.data.signature]);
+            return;
+          }
           if (event.data.type === 'netcraft-set-sound' && typeof event.data.enabled === 'boolean') {
             Module.setEmbeddedSound(event.data.enabled);
             return;

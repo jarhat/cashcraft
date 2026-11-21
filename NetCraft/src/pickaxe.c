@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "pickaxe.h"
 
-int pickaxe_vertices(float *vertices, bool mina) {
+static int tool_vertices(float *vertices, bool mina, bool axe) {
     static const float colors[2][6][3] = {
         {{.20f, .16f, .12f}, {.55f, .40f, .24f}, {.20f, .22f, .24f},
          {.61f, .66f, .68f}, {.88f, .91f, .92f}, {.69f, .50f, .28f}},
@@ -24,7 +24,11 @@ int pickaxe_vertices(float *vertices, bool mina) {
             }
             float blade = along - (-15.0f + .047f * across * across);
             float thickness = 4.0f - .16f * across;
-            if (across <= 16 && fabsf(blade) <= thickness) {
+            int side = col + row - (PICKAXE_GRID - 1);
+            if (axe && side >= -2 && side <= 13 && along >= -19 + abs(side - 6) / 3 &&
+                along <= -7 - abs(side - 6) / 2) {
+                pixel = side >= 12 || along <= -17 ? 2 : along <= -14 ? 4 : 3;
+            } else if (!axe && across <= 16 && fabsf(blade) <= thickness) {
                 pixel = across >= 15 || fabsf(blade) > thickness - 1.3f ? 2
                     : blade < -.6f ? 4 : 3;
             }
@@ -38,6 +42,14 @@ int pickaxe_vertices(float *vertices, bool mina) {
         }
     }
     return count;
+}
+
+int pickaxe_vertices(float *vertices, bool mina) {
+    return tool_vertices(vertices, mina, false);
+}
+
+int admin_axe_vertices(float *vertices) {
+    return tool_vertices(vertices, true, true);
 }
 
 PickaxePose pickaxe_pose(int width, int height, bool mining, double elapsed) {

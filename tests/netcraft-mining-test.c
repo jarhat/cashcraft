@@ -19,6 +19,7 @@ int get_targeted_block(int *x, int *y, int *z, int *face) {
     return target;
 }
 void on_mine(void) { mined++; }
+void on_mining_target(int x, int y, int z) { (void)x; (void)y; (void)z; }
 void on_build(void) { builds++; }
 void on_mining_swing(void) { swings++; }
 bool on_pickaxe_attack(void) { return attacking; }
@@ -151,6 +152,21 @@ int main(void) {
     mining_tick();
     now = 505.1;
     mining_tick();
+    assert(mined == before + 1);
+    mining_stop();
+    mining_set_admin(true);
+    before = mined;
+    mining_start();
+    assert(mined == before + 1);
+    mining_tick();
+    assert(mined == before + 1);
+    mining_stop();
+    target = 2;
+    mining_start();
+    assert(mined == before + 1);
+    mining_set_admin(false);
+    target = 1;
+    mining_start();
     assert(mined == before + 1);
     mining_stop();
     return 0;
