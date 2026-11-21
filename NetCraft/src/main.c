@@ -105,6 +105,7 @@
 #define ALIGN_LEFT 0
 #define ALIGN_CENTER 1
 #define ALIGN_RIGHT 2
+#define PLAYER_LIVES 10
 
 #define MODE_OFFLINE 0
 #define MODE_ONLINE 1
@@ -2401,6 +2402,8 @@ static GLuint crosshair_buffer;
 static int crosshair_width, crosshair_height, crosshair_scale;
 static GLuint pickaxe_buffers[2];
 static int pickaxe_counts[2];
+static GLuint heart_buffers[2];
+static int heart_counts[2];
 
 void on_mining_swing(void) {
 #ifdef __EMSCRIPTEN__
@@ -2408,6 +2411,37 @@ void on_mining_swing(void) {
         EM_ASM(if (Module.playGameSound) Module.playGameSound('mine'););
     }
 #endif
+}
+
+static void begin_hud_sprites(Attrib *attrib) {
+    float matrix[16];
+    set_matrix_2d(matrix, g->width, g->height);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glDisable(GL_DEPTH_TEST);
+    glEnableVertexAttribArray(attrib->position);
+    glEnableVertexAttribArray(attrib->extra1);
+}
+
+static void draw_hud_sprite(Attrib *attrib, GLuint buffer, int count,
+    float x, float y, float size, float angle)
+{
+    glUniform2f(attrib->extra2, x, y);
+    glUniform1f(attrib->extra3, size);
+    glUniform1f(attrib->extra4, angle);
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    glVertexAttribPointer(attrib->position, 2, GL_FLOAT, GL_FALSE,
+        PICKAXE_VERTEX_COMPONENTS * sizeof(float), 0);
+    glVertexAttribPointer(attrib->extra1, 3, GL_FLOAT, GL_FALSE,
+        PICKAXE_VERTEX_COMPONENTS * sizeof(float), (GLvoid *)(2 * sizeof(float)));
+    glDrawArrays(GL_TRIANGLES, 0, count);
+}
+
+static void end_hud_sprites(Attrib *attrib) {
+    glDisableVertexAttribArray(attrib->position);
+    glDisableVertexAttribArray(attrib->extra1);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glEnable(GL_DEPTH_TEST);
 }
 
 static void render_pickaxe(Attrib *attrib) {
@@ -2424,26 +2458,57 @@ static void render_pickaxe(Attrib *attrib) {
     mining = mining && (g->mode != MODE_ONLINE || online_ready);
 #endif
     PickaxePose pose = pickaxe_pose(g->width, g->height, mining, mining_swing_elapsed());
-    float matrix[16];
-    set_matrix_2d(matrix, g->width, g->height);
-    glUseProgram(attrib->program);
-    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
-    glUniform2f(attrib->extra2, pose.x, pose.y);
-    glUniform1f(attrib->extra3, pose.size);
-    glUniform1f(attrib->extra4, pose.angle);
-    glDisable(GL_DEPTH_TEST);
-    glBindBuffer(GL_ARRAY_BUFFER, pickaxe_buffers[mina]);
-    glEnableVertexAttribArray(attrib->position);
-    glEnableVertexAttribArray(attrib->extra1);
-    glVertexAttribPointer(attrib->position, 2, GL_FLOAT, GL_FALSE,
-        PICKAXE_VERTEX_COMPONENTS * sizeof(float), 0);
-    glVertexAttribPointer(attrib->extra1, 3, GL_FLOAT, GL_FALSE,
-        PICKAXE_VERTEX_COMPONENTS * sizeof(float), (GLvoid *)(2 * sizeof(float)));
-    glDrawArrays(GL_TRIANGLES, 0, pickaxe_counts[mina]);
-    glDisableVertexAttribArray(attrib->position);
-    glDisableVertexAttribArray(attrib->extra1);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glEnable(GL_DEPTH_TEST);
+    draw_hud_sprite(attrib, pickaxe_buffers[mina], pickaxe_counts[mina],
+        pose.x, pose.y, pose.size, pose.angle);
+}
+
+static GLuint make_heart_buffer(int filled, int *count) {
+    static const char pixels[9][10] = {
+        ".##...##.",
+        "#++#.#++#",
+        "#+oooooo#",
+        "#ooooooo#",
+        ".#ooooo#.",
+        "..#ooo#..",
+        "...#o#...",
+        "....#....",
+        ".........",
+    };
+    static const float colors[2][3][3] = {
+        {{.12f, .07f, .09f}, {.28f, .20f, .24f}, {.28f, .20f, .24f}},
+        {{.22f, .04f, .08f}, {.91f, .12f, .24f}, {1.0f, .60f, .65f}},
+    };
+    static const int corners[6][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
+    float vertices[9 * 9 * 6 * PICKAXE_VERTEX_COMPONENTS];
+    *count = 0;
+    for (int row = 0; row < 9; row++) {
+        for (int col = 0; col < 9; col++) {
+            char pixel = pixels[row][col];
+            if (pixel == '.') continue;
+            const float *color = colors[filled][pixel == '#' ? 0 : pixel == 'o' ? 1 : 2];
+            for (int i = 0; i < 6; i++) {
+                float *vertex = vertices + (*count)++ * PICKAXE_VERTEX_COMPONENTS;
+                vertex[0] = (col + corners[i][0]) / 9.0f;
+                vertex[1] = (8 - row + corners[i][1]) / 9.0f;
+                memcpy(vertex + 2, color, 3 * sizeof(float));
+            }
+        }
+    }
+    return gen_buffer(*count * PICKAXE_VERTEX_COMPONENTS * sizeof(float), vertices);
+}
+
+static void render_lives(Attrib *attrib) {
+    float size = fminf(20.0f * g->scale, g->width / 16.0f);
+    float spacing = size * 1.15f;
+    float x = (g->width - size - (PLAYER_LIVES - 1) * spacing) / 2.0f;
+    for (int i = 0; i < PLAYER_LIVES; i++) {
+        int filled = i < g->lives;
+        if (!heart_buffers[filled]) {
+            heart_buffers[filled] = make_heart_buffer(filled, &heart_counts[filled]);
+        }
+        draw_hud_sprite(attrib, heart_buffers[filled], heart_counts[filled],
+            x + i * spacing, 12.0f * g->scale, size, 0);
+    }
 }
 
 static void render_crosshairs(Attrib *attrib) {
@@ -3382,24 +3447,28 @@ void on_char(GLFWwindow *window, unsigned int u) {
     }
 }
 
-void _on_scroll_blockselect(double ydelta) {
-    static double ypos = 0;
+void _on_scroll_blockselect(double ydelta, bool wheel) {
+    static double wheel_offset = 0;
+    static double last_wheel_step = -SCROLL_ITEM_INTERVAL;
     if (!inventory_item_count) {
-        ypos = 0;
+        wheel_offset = 0;
         return;
     }
-    ypos += ydelta;
-    if (ypos < -SCROLL_THRESHOLD) {
-        g->item_index = (g->item_index + 1) % inventory_item_count;
-        ypos = 0;
-    }
-    if (ypos > SCROLL_THRESHOLD) {
-        g->item_index--;
-        if (g->item_index < 0) {
-            g->item_index = inventory_item_count - 1;
+    if (!ydelta) return;
+    if (wheel) {
+        double now = glfwGetTime();
+        if (now < last_wheel_step) last_wheel_step = now - SCROLL_ITEM_INTERVAL;
+        if (now - last_wheel_step < SCROLL_ITEM_INTERVAL) return;
+        if ((wheel_offset < 0) != (ydelta < 0)) wheel_offset = 0;
+        wheel_offset += ydelta;
+        if (fabs(wheel_offset) < SCROLL_THRESHOLD) {
+            return;
         }
-        ypos = 0;
+        last_wheel_step = now;
     }
+    wheel_offset = 0;
+    int step = ydelta < 0 ? 1 : -1;
+    g->item_index = (g->item_index + step + inventory_item_count) % inventory_item_count;
 }
 
 void on_scroll(GLFWwindow *window, double xdelta, double ydelta) {
@@ -3407,7 +3476,7 @@ void on_scroll(GLFWwindow *window, double xdelta, double ydelta) {
         change_ortho_zoom(ydelta);
     } else {
 #if SCROLL_BLOCK_SELECT
-        _on_scroll_blockselect(ydelta);
+        _on_scroll_blockselect(ydelta, window != NULL);
 #endif
     }
 }
@@ -3782,10 +3851,15 @@ void parse_buffer(char *buffer, int len) {
         if (sscanf(line, "ZN,%d", &value) == 1 && (value == 0 || value == 1)) {
             g->zombies_active = value;
         }
-        if (sscanf(line, "HP,%d", &value) == 1 && value >= 0 && value <= 10) {
+        if (sscanf(line, "HP,%d", &value) == 1 && value >= 0 && value <= PLAYER_LIVES) {
             g->lives = value;
         }
         if (strcmp(line, "ZD") == 0) {
+            mining_stop();
+            building_stop();
+            pending_placement.active = false;
+            Inventory_reset(&g->inventory);
+            sync_inventory_items();
             s->x = 0; s->y = 0; s->z = 0; s->rx = 0; s->ry = 0;
             force_chunks(me);
             s->y = highest_block(s->x, s->z) + 2;
@@ -4044,7 +4118,7 @@ void reset_model() {
     memset(g->messages, 0, sizeof(char) * MAX_MESSAGES * MAX_TEXT_LENGTH);
     memset(g->message_times, 0, sizeof(g->message_times));
     g->mina_mined = 0;
-    g->lives = 10;
+    g->lives = PLAYER_LIVES;
     g->zombies_active = false;
     g->message_index = 0;
     g->message_view_index = 0;
@@ -4456,6 +4530,10 @@ void main_shutdown() {
             del_buffer(pickaxe_buffers[i]);
             pickaxe_buffers[i] = 0;
         }
+        if (heart_buffers[i]) {
+            del_buffer(heart_buffers[i]);
+            heart_buffers[i] = 0;
+        }
     }
     for (int i = 0; i < NUM_INVENTORY_VISIBLE; i++) {
         if (item_count_buffers[i].buffer) {
@@ -4648,7 +4726,10 @@ void render_scene() {
         // RENDER HUD //
         glClear(GL_DEPTH_BUFFER_BIT);
         if (g->show_ui) {
+            begin_hud_sprites(&pickaxe_attrib);
             render_pickaxe(&pickaxe_attrib);
+            render_lives(&pickaxe_attrib);
+            end_hud_sprites(&pickaxe_attrib);
         }
         if (SHOW_CROSSHAIRS && g->show_ui) {
             render_crosshairs(&line_attrib);
@@ -4687,8 +4768,6 @@ void render_scene() {
     if (g->show_ui && g->initialized) {
         snprintf(text_buffer, sizeof(text_buffer), "x%u", (unsigned)g->mina_mined);
         render_text(&text_attrib, ALIGN_LEFT, g->width / 2 + 5 * g->scale, g->height - 29 * g->scale, ts, text_buffer);
-        snprintf(text_buffer, sizeof(text_buffer), "Lives: %d/10", g->lives);
-        render_text(&text_attrib, ALIGN_RIGHT, g->width - 8 * g->scale, g->height - ts, ts, text_buffer);
     }
     if (g->show_info_text && g->show_ui && g->initialized) {
         static char *build_info_string =

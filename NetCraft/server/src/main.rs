@@ -26,6 +26,7 @@ const ANIMAL_TICK: Duration = Duration::from_secs(1);
 const DAY_LENGTH: u64 = 600;
 const PLAYER_LIVES: u8 = 10;
 const ATTACK_INTERVAL: u64 = 2;
+const ZOMBIE_SPEED: f64 = 1.3;
 // Central sky park footprint from builder.py; lower terrain remains spawnable.
 const PARK_FLOOR: i32 = 180;
 type Blocks = HashMap<(i32, i32, i32), i32>;
@@ -355,6 +356,24 @@ fn is_night(seconds: u64) -> bool {
     time < DAY_LENGTH / 4 || time >= DAY_LENGTH * 85 / 100
 }
 
+fn move_animal(
+    animal: &mut Animal,
+    terrain: &mut Terrain,
+    db: &Connection,
+    dx: f64,
+    dz: f64,
+) -> rusqlite::Result<bool> {
+    let (x, z) = (animal.x + dx, animal.z + dz);
+    if let Some(y) = animal_ground(terrain, db, x.round() as i32, z.round() as i32)? {
+        let feet = f64::from(y) + 0.5;
+        if (feet - animal.y).abs() <= 1.0 {
+            (animal.x, animal.y, animal.z) = (x, feet, z);
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn is_sky_park(x: i32, y: i32, z: i32) -> bool {
     (-28..=28).contains(&x) && (-25..=28).contains(&z) && y >= PARK_FLOOR
 }
@@ -425,16 +444,18 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
         let target = if night && !animal.pacified {
             positions
                 .iter()
-                .filter(|p| (p[1] - animal.y).abs() <= 2.5)
                 .min_by(|a, b| {
-                    let distance =
-                        |p: &&[f64; 5]| (p[0] - animal.x).powi(2) + (p[2] - animal.z).powi(2);
+                    let distance = |p: &&[f64; 5]| {
+                        (p[0] - animal.x).powi(2)
+                            + (p[1] - 1.5 - animal.y).powi(2)
+                            + (p[2] - animal.z).powi(2)
+                    };
                     distance(a).total_cmp(&distance(b))
                 })
         } else {
             None
         };
-        let (dx, dz) = if let Some(target) = target {
+        if let Some(target) = target {
             let dx = target[0] - animal.x;
             let dz = target[2] - animal.z;
             let distance = dx.hypot(dz);
@@ -450,34 +471,39 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
                 } else {
                     0
                 };
-                let step = (distance - 1.0).clamp(0.0, 0.9) / distance;
-                (dx * step, dz * step)
-            } else {
-                (0.0, 0.0)
+                let stop = if (target[1] - 1.5 - animal.y).abs() < 1.0 {
+                    1.0
+                } else {
+                    0.0
+                };
+                let travel = (distance - stop).clamp(0.0, ZOMBIE_SPEED);
+                let steps = (travel / 0.5).ceil() as u32;
+                for _ in 0..steps {
+                    // Check each step so a fast move cannot skip a stair or a wall.
+                    let fraction = travel / (distance * f64::from(steps));
+                    let (sx, sz) = (dx * fraction, dz * fraction);
+                    if !move_animal(animal, &mut terrain, db, sx, sz)?
+                        && !(sx != 0.0 && sz != 0.0
+                            && (move_animal(animal, &mut terrain, db, sx, 0.0)?
+                                || move_animal(animal, &mut terrain, db, 0.0, sz)?))
+                    {
+                        break;
+                    }
+                }
             }
         } else {
             if (tick + u64::from(animal.id)) % 5 == 0 {
                 animal.heading = ((tick / 5 + u64::from(animal.id) * 3) % 4) as u8;
             }
-            match animal.heading {
+            let (dx, dz) = match animal.heading {
                 0 => (0.0, -0.6),
                 1 => (0.6, 0.0),
                 2 => (0.0, 0.6),
                 _ => (-0.6, 0.0),
-            }
-        };
-        let (x, z) = (animal.x + dx, animal.z + dz);
-        if let Some(y) = animal_ground(&mut terrain, db, x.round() as i32, z.round() as i32)? {
-            let feet = f64::from(y) + 0.5;
-            if (feet - animal.y).abs() <= 1.0 {
-                animal.x = x;
-                animal.y = feet;
-                animal.z = z;
-            } else {
+            };
+            if !move_animal(animal, &mut terrain, db, dx, dz)? {
                 animal.heading = (animal.heading + 1) % 4;
             }
-        } else {
-            animal.heading = (animal.heading + 1) % 4;
         }
         updates.push_str(&animal.message());
     }
@@ -522,9 +548,10 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
                 if player.lives == 0 {
                     player.position = [0.0; 5];
                     player.lives = PLAYER_LIVES;
+                    player.inventory.fill(0);
                     send(
                         player,
-                        b"ZD\nT,You lost all your lives and respawned.\n".to_vec(),
+                        b"ZD\nT,You lost all your lives and respawned without your mined blocks.\n".to_vec(),
                     );
                     respawned.push(id);
                 }
@@ -2454,6 +2481,9 @@ mod tests {
             let mut state = server.state.lock().unwrap();
             state.players.get_mut(&1).unwrap().position = [3.0, 202.0, 0.0, 0.0, 0.0];
             state.players.get_mut(&2).unwrap().position = [20.0, 202.0, 0.0, 0.0, 0.0];
+            state.players.get_mut(&1).unwrap().inventory[6] = 4;
+            state.players.get_mut(&1).unwrap().inventory[MINA_ORE as usize] = 2;
+            state.players.get_mut(&2).unwrap().inventory[6] = 3;
             for x in 0..=3 {
                 state
                     .db
@@ -2480,6 +2510,7 @@ mod tests {
         assert_eq!(server.state.lock().unwrap().players[&1].lives, 10);
         update_animals_at(&server, 1).unwrap();
         assert_eq!(server.state.lock().unwrap().players[&1].lives, 9);
+        assert_eq!(server.state.lock().unwrap().players[&1].inventory[6], 4);
         update_animals_at(&server, 2).unwrap();
         assert_eq!(server.state.lock().unwrap().players[&1].lives, 9);
         assert_eq!(server.state.lock().unwrap().players[&2].lives, 10);
@@ -2491,7 +2522,9 @@ mod tests {
         let state = server.state.lock().unwrap();
         assert_eq!(state.players[&1].lives, 10);
         assert_eq!(state.players[&1].position, [0.0; 5]);
+        assert_eq!(state.players[&1].inventory, [0; 256]);
         assert_eq!(state.players[&2].lives, 10);
+        assert_eq!(state.players[&2].inventory[6], 3);
         drop(state);
         let first_messages = first
             .try_iter()
@@ -2508,6 +2541,47 @@ mod tests {
         assert!(!second_messages.contains("HP,"));
         update_animals_at(&server, 150).unwrap();
         assert!(first.try_iter().any(|m| m == b"ZN,0\n"));
+    }
+
+    #[test]
+    fn zombies_pursue_across_a_stepped_slope_in_both_directions() {
+        for rise in [-1, 1] {
+            let (server, _, _) = setup();
+            {
+                let mut state = server.state.lock().unwrap();
+                let player_y = f64::from(200 + 6 * rise) + 2.0;
+                state.players.get_mut(&1).unwrap().position = [6.0, player_y, 0.0, 0.0, 0.0];
+                for x in 0..=6 {
+                    state.db.execute(
+                        "INSERT INTO block (p,q,x,y,z,w) VALUES (0,0,?1,?2,0,6)",
+                        params![x, 200 + x * rise],
+                    ).unwrap();
+                }
+                let txid = "a".repeat(64);
+                state.mempool.insert(txid.clone());
+                state.animals.push(Animal {
+                    id: 1,
+                    txid,
+                    x: 0.0,
+                    y: 200.5,
+                    z: 0.0,
+                    heading: 3,
+                    pacified: false,
+                });
+            }
+            update_animals_at(&server, 0).unwrap();
+            {
+                let state = server.state.lock().unwrap();
+                assert!(state.animals[0].x > 1.0);
+                assert_eq!(state.animals[0].y, 200.5 + f64::from(rise));
+            }
+            for step in 1..=5 {
+                update_animals_at(&server, step).unwrap();
+            }
+            let state = server.state.lock().unwrap();
+            assert!(state.animals[0].x >= 5.0);
+            assert!(state.players[&1].lives < PLAYER_LIVES);
+        }
     }
 
     #[test]

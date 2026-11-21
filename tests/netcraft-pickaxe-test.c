@@ -11,7 +11,8 @@ static bool near(float a, float b) {
 static const float *pixel_at(float *vertices, int count, int x, int y) {
     for (int i = 0; i < count; i += 6) {
         float *vertex = vertices + i * PICKAXE_VERTEX_COMPONENTS;
-        if (near(vertex[0], x / 16.0f) && near(vertex[1], (15 - y) / 16.0f)) {
+        if (near(vertex[0], (float)x / PICKAXE_GRID) &&
+            near(vertex[1], (float)y / PICKAXE_GRID)) {
             return vertex;
         }
     }
@@ -37,16 +38,24 @@ int main(void) {
         }
     }
     assert(different_color);
-    const float *head = pixel_at(mina, count, 6, 2);
-    const float *blade = pixel_at(mina, count, 3, 10);
-    const float *handle = pixel_at(standard, count, 13, 12);
+    const float *head = pixel_at(mina, count, 8, 23);
+    const float *blade = pixel_at(mina, count, 5, 15);
+    const float *handle = pixel_at(standard, count, 23, 8);
     assert(head && blade && handle);
     assert(head[3] > head[2] && head[3] > head[4]);
     assert(blade[3] > blade[2] && blade[3] > blade[4]);
-    const float *regular = pixel_at(standard, count, 6, 2);
+    const float *regular = pixel_at(standard, count, 8, 23);
     assert(regular && fabsf(regular[2] - regular[3]) < .1f);
     assert(handle[2] > handle[3] && handle[3] > handle[4]);
-    assert(!pixel_at(standard, count, 9, 10));
+    assert(!pixel_at(standard, count, 2, 2));
+    for (int i = 0; i < count; i += 6) {
+        const float *pixel = standard + i * PICKAXE_VERTEX_COMPONENTS;
+        int x = (int)lroundf(pixel[0] * PICKAXE_GRID);
+        int y = (int)lroundf(pixel[1] * PICKAXE_GRID);
+        const float *mirror = pixel_at(standard, count, PICKAXE_GRID - 1 - y, PICKAXE_GRID - 1 - x);
+        assert(mirror);
+        for (int c = 2; c < PICKAXE_VERTEX_COMPONENTS; c++) assert(pixel[c] == mirror[c]);
+    }
     for (int i = 0; i < count; i += 3) {
         int a = i * PICKAXE_VERTEX_COMPONENTS;
         int b = a + PICKAXE_VERTEX_COMPONENTS;
@@ -64,7 +73,7 @@ int main(void) {
         PickaxePose back = pickaxe_pose(width, height, true, .135);
         PickaxePose returned = pickaxe_pose(width, height, true, .18);
         assert(near(rest.size, fminf(width * .4f, height * .65f)));
-        assert(near(rest.x, width - rest.size));
+        assert(near(rest.x - (width - rest.size), 2 * rest.size / 16));
         assert(near(rest.y, height * .06f));
         assert(near(rest.x, start.x) && near(rest.y, start.y));
         assert(near(returned.x, rest.x) && near(returned.y, rest.y));

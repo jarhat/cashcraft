@@ -227,9 +227,11 @@ only the server does not update the browser client.
 
 The server simulates sheep-like animals for mempool transactions near active
 players. At night they become upright zombies that pursue and attack nearby
-players; at daybreak they become passive animals again. Aim and use the mining
+players, climbing and descending one-block steps; at daybreak they become
+passive animals again. Aim and use the mining
 button or left click to hit a nearby zombie with the pickaxe and restore it to
-animal form for the rest of the night. Each player starts with 10 lives and can
+animal form for the rest of the night. Each player starts with 10 lives, shown
+as hearts at the bottom center of the screen, and can
 lose one every two seconds to zombie attacks. After the last life is lost, the
 player respawns at spawn with 10 lives. Animals do not spawn on the central sky
 park platform, though they can still spawn elsewhere. Movement and attacks are
@@ -405,6 +407,8 @@ Keyboard:
 - Tab to sprint, while holding another directional key (increases movement speed).
 - 1-9 to select the block type to create.
 - E or R to cycle through the block types.
+- Scroll the mouse wheel to cycle through blocks one slot at a time. On touch
+  screens, drag up or down directly on the block HUD to change the selection.
 - ZXCVBN to move in exact directions along the XYZ axes.
 - Z to zoom.
 - F to show the scene in orthographic mode.

@@ -1699,33 +1699,41 @@
           layoutBlockHud();
           window.addEventListener('resize', layoutBlockHud);
           var scrollStrip = document.getElementById('block-scroll-strip');
-          var scrollY = null;
-          var scrollRemainder = 0;
-          var SCROLL_STEP_PX = 56;
-          scrollStrip.addEventListener('touchstart', function(event) {
-            event.preventDefault();
-            scrollY = event.touches[0].clientY;
-            scrollRemainder = 0;
-          }, { passive: false });
-          scrollStrip.addEventListener('touchmove', function(event) {
-            event.preventDefault();
-            if (scrollY === null) return;
-            var y = event.touches[0].clientY;
-            scrollRemainder += scrollY - y;
-            scrollY = y;
-            var steps = Math.trunc(scrollRemainder / SCROLL_STEP_PX);
-            if (steps) {
-              scrollRemainder -= steps * SCROLL_STEP_PX;
+          var scrollPointer = null;
+          var scrollAnchorY = 0;
+          var SCROLL_STEP_PX = 42;
+          function startBlockScroll(event) {
+            if (scrollPointer !== null || (!event.touchFallback && event.pointerType !== 'touch')) return;
+            scrollPointer = event.pointerId;
+            scrollAnchorY = event.clientY;
+            if (!event.touchFallback) scrollStrip.setPointerCapture(scrollPointer);
+          }
+          function moveBlockScroll(event) {
+            if (event.pointerId !== scrollPointer) return;
+            var delta = scrollAnchorY - event.clientY;
+            var steps = Math.trunc(delta / SCROLL_STEP_PX);
+            if (steps !== 0) {
+              scrollAnchorY -= steps * SCROLL_STEP_PX;
               call('touch_scroll_items', [steps]);
             }
-          }, { passive: false });
-          ['touchend', 'touchcancel'].forEach(function(type) {
-            scrollStrip.addEventListener(type, function() { scrollY = null; });
-          });
+          }
+          function endBlockScroll(event) {
+            if (event.pointerId === scrollPointer) scrollPointer = null;
+          }
+          if (window.PointerEvent) {
+            scrollStrip.addEventListener('pointerdown', startBlockScroll);
+            scrollStrip.addEventListener('pointermove', moveBlockScroll);
+            ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function(type) {
+              scrollStrip.addEventListener(type, endBlockScroll);
+            });
+          } else {
+            touchFallback(scrollStrip, startBlockScroll, moveBlockScroll, endBlockScroll);
+          }
           ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(function(type) {
             controls.addEventListener(type, function(event) { event.stopPropagation(); }, { passive: true });
           });
           window.addEventListener('blur', function() {
+            scrollPointer = null;
             releaseStick();
             call('touch_set_mine', [0]);
             call('touch_set_jump', [0]);
