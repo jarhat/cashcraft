@@ -7,9 +7,7 @@
   <style>
     #game-link-loader { display: none; }
     .game-link-loading #game-link-loader { display: grid; position: fixed; inset: 0; z-index: 9999; place-content: center; justify-items: center; gap: 20px; color: #b7ffca; background: #0a1910; font: 700 15px system-ui, sans-serif; letter-spacing: .12em; }
-    .game-link-loading #game-link-loader::before { content: ""; width: min(300px, 75vw); height: 110px; background: radial-gradient(circle, #4be78a 3px, transparent 4px) 0 0 / 18px 18px; mask-image: linear-gradient(110deg, transparent, #000, transparent); animation: game-dots 1.2s ease-in-out infinite alternate; }
-    @keyframes game-dots { from { opacity: .35; transform: translateX(-8px); } to { opacity: 1; transform: translateX(8px); } }
-    @media (prefers-reduced-motion: reduce) { .game-link-loading #game-link-loader::before { animation: none; } }
+    .game-link-loading #game-link-loader::before { content: ""; width: min(640px, 85vw, 105vh); aspect-ratio: 16 / 9; background: url("/craft-loading.webp") center / contain no-repeat; }
   </style>
   <meta name="theme-color" content="#05070b">
   <meta name="apple-mobile-web-app-capable" content="yes">

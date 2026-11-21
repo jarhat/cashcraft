@@ -16,11 +16,10 @@
       #loading-screen { display: grid !important; position: fixed; inset: 0; z-index: 40; place-content: center; justify-items: center; gap: 18px; background: #0a1910; color: #b7ffca; font: 700 16px system-ui, sans-serif; text-align: center; letter-spacing: .08em; transition: opacity .3s ease, visibility 0s linear .3s; }
       #loading-screen.is-ready { opacity: 0; visibility: hidden; pointer-events: none; }
       #loading-screen[hidden] { display: none !important; }
-      .loading-circle { width: min(300px, 75vw); height: 108px; background: radial-gradient(circle, #4be78a 3px, transparent 4px) 0 0 / 18px 18px; mask-image: linear-gradient(110deg, transparent, #000, transparent); animation: loading-dots 1.2s ease-in-out infinite alternate; }
-      @keyframes loading-dots { from { opacity: .35; transform: translateX(-8px); } to { opacity: 1; transform: translateX(8px); } }
+      #loading-screen::before { content: ""; width: min(640px, 85vw, 105vh); aspect-ratio: 16 / 9; background: url("/craft-loading.webp") center / contain no-repeat; }
       #loading-progress { width: min(240px, 70vw); height: 6px; accent-color: #8ce2a8; }
       #loading-progress[hidden] { display: none; }
-      @media (prefers-reduced-motion: reduce) { .loading-circle { animation: none; } #loading-screen { transition: none; } }
+      @media (prefers-reduced-motion: reduce) { #loading-screen { transition: none; } }
 
       .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
       div.emscripten { text-align: center; }      
@@ -1272,7 +1271,6 @@
     <textarea id="output" rows="8"></textarea>
 
     <div id="loading-screen" role="status" aria-live="polite">
-      <div class="loading-circle" aria-hidden="true"></div>
       <span id="loading-message">Preparing your world...</span>
       <progress id="loading-progress" aria-label="Game download progress" hidden></progress>
     </div>
