@@ -981,24 +981,43 @@ def reward_worker() -> None:
             reward_wake.wait(30)
 
 
-@app.post("/api/internal/netcraft-reward-wake", status_code=204)
-def wake_mining_rewards(request: Request) -> Response:
+def require_netcraft_auth(request: Request) -> None:
     provided = request.headers.get("authorization", "")
     if not NETCRAFT_REWARD_WAKE_SECRET or not secrets.compare_digest(
         provided.encode("utf-8"), f"Bearer {NETCRAFT_REWARD_WAKE_SECRET}".encode("utf-8")
     ):
         raise HTTPException(status_code=403, detail="Forbidden")
+
+
+@app.get("/api/internal/netcraft-mempool")
+def netcraft_mempool(request: Request) -> Response:
+    require_netcraft_auth(request)
+    try:
+        txids = bch_rpc("getrawmempool", [False])
+        if not isinstance(txids, list) or not all(
+            isinstance(txid, str) and TXID_RE.fullmatch(txid) for txid in txids
+        ):
+            raise RuntimeError("Invalid BCHN mempool response")
+    except RuntimeError as exc:
+        logger.warning("NetCraft mempool snapshot unavailable")
+        raise HTTPException(status_code=503, detail="Mempool unavailable") from exc
+    return Response(
+        "".join(f"{txid.lower()}\n" for txid in txids),
+        media_type="text/plain",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/internal/netcraft-reward-wake", status_code=204)
+def wake_mining_rewards(request: Request) -> Response:
+    require_netcraft_auth(request)
     reward_wake.set()
     return Response(status_code=204)
 
 
 @app.post("/api/internal/netcraft-mining-reward/{reward_id}", status_code=204)
 def pay_mining_reward(reward_id: int, request: Request) -> Response:
-    provided = request.headers.get("authorization", "")
-    if not NETCRAFT_REWARD_WAKE_SECRET or not secrets.compare_digest(
-        provided.encode("utf-8"), f"Bearer {NETCRAFT_REWARD_WAKE_SECRET}".encode("utf-8")
-    ):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    require_netcraft_auth(request)
     if reward_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid reward ID.")
     if NETCRAFT_MINING_REWARDS_ENABLED != "true" or not NETCRAFT_DB_PATH:

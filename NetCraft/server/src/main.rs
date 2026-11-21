@@ -1,5 +1,5 @@
 use rusqlite::{params, Connection, OptionalExtension};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::env;
 use std::ffi::c_void;
 use std::io::{self, BufRead, BufReader, Read, Write};
@@ -15,7 +15,9 @@ const MAX_LINE: u64 = 4096;
 const MAX_COORD: i32 = 262_000;
 const CACHE_CHUNKS: usize = 24;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(20);
-const MAX_ANIMALS: usize = 8;
+const ANIMAL_SPAWNS_PER_TICK: usize = 64;
+const ANIMAL_MOVES_PER_TICK: usize = 128;
+const MEMPOOL_POLL: Duration = Duration::from_secs(10);
 const MINA_ORE: i32 = 83;
 const REDSTONE_ORE: i32 = 49;
 const GOLD_ORE: i32 = 70;
@@ -87,13 +89,16 @@ struct State {
     players: HashMap<u32, Player>,
     next_id: u32,
     animals: Vec<Animal>,
+    mempool: BTreeSet<String>,
     next_animal_id: u32,
     animal_tick: u64,
+    animal_cursor: usize,
 }
 
 #[derive(Clone, Debug)]
 struct Animal {
     id: u32,
+    txid: String,
     x: f64,
     y: f64,
     z: f64,
@@ -103,8 +108,14 @@ struct Animal {
 impl Animal {
     fn message(&self) -> String {
         format!(
-            "M,{},{:.2},{:.2},{:.2},{}\n",
-            self.id, self.x, self.y, self.z, self.heading
+            "M,{},{:.2},{:.2},{:.2},{},{}...{}\n",
+            self.id,
+            self.x,
+            self.y,
+            self.z,
+            self.heading,
+            &self.txid[..6],
+            &self.txid[58..]
         )
     }
 }
@@ -157,6 +168,59 @@ fn start_reward_wake() -> Result<Option<SyncSender<(i64, Player)>>, String> {
         }
     });
     Ok(Some(sender))
+}
+
+fn read_mempool_response(response: impl Read) -> io::Result<BTreeSet<String>> {
+    let invalid = || io::Error::other("invalid NetCraft mempool response");
+    let mut response = BufReader::new(response.take(64 * 1024 * 1024 + 1));
+    let mut line = String::new();
+    response.read_line(&mut line)?;
+    if !line.starts_with("HTTP/1.1 200 ") && !line.starts_with("HTTP/1.0 200 ") {
+        return Err(io::Error::other(
+            "NetCraft mempool endpoint did not return HTTP 200",
+        ));
+    }
+    let mut length = None;
+    loop {
+        line.clear();
+        if response.read_line(&mut line)? == 0 {
+            return Err(invalid());
+        }
+        if line == "\r\n" {
+            break;
+        }
+        if let Some((name, value)) = line.split_once(':') {
+            if name.eq_ignore_ascii_case("content-length") {
+                length = value.trim().parse::<usize>().ok();
+            }
+        }
+    }
+    let remaining = length
+        .filter(|n| *n <= 64 * 1024 * 1024 && n % 65 == 0)
+        .ok_or_else(invalid)?
+        / 65;
+    let mut txids = BTreeSet::new();
+    let mut record = [0; 65];
+    for _ in 0..remaining {
+        response.read_exact(&mut record)?;
+        if record[64] != b'\n' || !record[..64].iter().all(u8::is_ascii_hexdigit) {
+            return Err(invalid());
+        }
+        txids.insert(String::from_utf8_lossy(&record[..64]).to_ascii_lowercase());
+    }
+    Ok(txids)
+}
+
+fn poll_mempool(target: &str, secret: &str) -> io::Result<BTreeSet<String>> {
+    let address = target
+        .to_socket_addrs()?
+        .next()
+        .ok_or_else(|| io::Error::other("NetCraft backend address did not resolve"))?;
+    let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2))?;
+    stream.set_read_timeout(Some(Duration::from_secs(35)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+    write!(stream, "GET /api/internal/netcraft-mempool HTTP/1.1\r\nHost: {target}\r\nAuthorization: Bearer {secret}\r\nConnection: close\r\n\r\n")?;
+    read_mempool_response(stream)
 }
 
 fn chunked(x: i32) -> i32 {
@@ -229,21 +293,29 @@ fn update_animals(server: &Server) -> rusqlite::Result<()> {
         .filter(|p| p[1] > 1.0)
         .collect();
     let mut removed = String::new();
-    state.animals.retain(|a| {
+    let State {
+        animals, mempool, ..
+    } = &mut *state;
+    animals.retain(|a| {
         let nearby = positions
             .iter()
             .any(|p| (p[0] - a.x).powi(2) + (p[2] - a.z).powi(2) < 64.0 * 64.0);
-        if !nearby {
+        let keep = nearby && mempool.contains(&a.txid);
+        if !keep {
             removed.push_str(&format!("MD,{}\n", a.id));
         }
-        nearby
+        keep
     });
     if !removed.is_empty() {
         broadcast(&state, None, &removed);
     }
 
-    let mut animals = state.animals.clone();
-    for animal in &mut animals {
+    let mut updates = String::new();
+    let count = state.animals.len();
+    let start = state.animal_cursor;
+    let State { animals, db, .. } = &mut *state;
+    for offset in 0..count.min(ANIMAL_MOVES_PER_TICK) {
+        let animal = &mut animals[(start + offset) % count];
         if (tick + u64::from(animal.id)) % 5 == 0 {
             animal.heading = ((tick / 5 + u64::from(animal.id) * 3) % 4) as u8;
         }
@@ -254,8 +326,7 @@ fn update_animals(server: &Server) -> rusqlite::Result<()> {
             _ => (-0.6, 0.0),
         };
         let (x, z) = (animal.x + dx, animal.z + dz);
-        if let Some(y) = animal_ground(&mut terrain, &state.db, x.round() as i32, z.round() as i32)?
-        {
+        if let Some(y) = animal_ground(&mut terrain, db, x.round() as i32, z.round() as i32)? {
             let feet = f64::from(y) + 0.5;
             if (feet - animal.y).abs() <= 1.0 {
                 animal.x = x;
@@ -267,44 +338,43 @@ fn update_animals(server: &Server) -> rusqlite::Result<()> {
         } else {
             animal.heading = (animal.heading + 1) % 4;
         }
+        updates.push_str(&animal.message());
     }
-    state.animals = animals;
+    state.animal_cursor = (start + ANIMAL_MOVES_PER_TICK) % count.max(1);
 
-    if state.animals.len() < MAX_ANIMALS {
-        let eligible: Vec<_> = positions
+    if !positions.is_empty() && state.animals.len() < state.mempool.len() {
+        let active: HashSet<_> = state.animals.iter().map(|a| a.txid.as_str()).collect();
+        let missing: Vec<_> = state
+            .mempool
             .iter()
-            .filter(|p| {
-                state
-                    .animals
-                    .iter()
-                    .filter(|a| (p[0] - a.x).powi(2) + (p[2] - a.z).powi(2) < 32.0 * 32.0)
-                    .count()
-                    < 2
-            })
+            .filter(|txid| !active.contains(txid.as_str()))
+            .take(ANIMAL_SPAWNS_PER_TICK)
+            .cloned()
             .collect();
-        if !eligible.is_empty() {
-            let p = eligible[tick as usize % eligible.len()];
-            let angle = ((tick * 7 + u64::from(state.next_animal_id) * 13) % 32) as f64
+        for (index, txid) in missing.into_iter().enumerate() {
+            let p = positions[(tick as usize + index) % positions.len()];
+            let id = state.next_animal_id;
+            let angle = ((tick * 7 + u64::from(id) * 13 + index as u64) % 32) as f64
                 * std::f64::consts::TAU
                 / 32.0;
-            let x = (p[0] + angle.cos() * 12.0).round() as i32;
-            let z = (p[2] + angle.sin() * 12.0).round() as i32;
+            let radius = 12.0 + 4.0 * (((id - 1) / 32) % 9) as f64;
+            let x = (p[0] + angle.cos() * radius).round() as i32;
+            let z = (p[2] + angle.sin() * radius).round() as i32;
             if let Some(y) = animal_ground(&mut terrain, &state.db, x, z)? {
-                if (f64::from(y) - p[1]).abs() <= 10.0 {
-                    let id = state.next_animal_id;
-                    state.next_animal_id = state.next_animal_id.wrapping_add(1).max(1);
-                    state.animals.push(Animal {
-                        id,
-                        x: f64::from(x),
-                        y: f64::from(y) + 0.5,
-                        z: f64::from(z),
-                        heading: (id % 4) as u8,
-                    });
-                }
+                state.next_animal_id = state.next_animal_id.wrapping_add(1).max(1);
+                let animal = Animal {
+                    id,
+                    txid,
+                    x: f64::from(x),
+                    y: f64::from(y) + 0.5,
+                    z: f64::from(z),
+                    heading: (id % 4) as u8,
+                };
+                updates.push_str(&animal.message());
+                state.animals.push(animal);
             }
         }
     }
-    let updates: String = state.animals.iter().map(Animal::message).collect();
     if !updates.is_empty() {
         broadcast(&state, None, &updates);
     }
@@ -1257,14 +1327,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             players: HashMap::new(),
             next_id: 1,
             animals: Vec::new(),
+            mempool: BTreeSet::new(),
             next_animal_id: 1,
             animal_tick: 0,
+            animal_cursor: 0,
         }),
         terrain: Mutex::new(Terrain::default()),
         reward_categories,
         address_prefix,
         reward_wake: start_reward_wake()?,
     });
+    if let (Ok(target), Ok(secret)) = (
+        env::var("NETCRAFT_REWARD_API"),
+        env::var("NETCRAFT_REWARD_WAKE_SECRET"),
+    ) {
+        if !target.is_empty() {
+            let server = server.clone();
+            thread::spawn(move || loop {
+                match poll_mempool(&target, &secret) {
+                    Ok(txids) => server.state.lock().unwrap().mempool = txids,
+                    Err(error) => eprintln!("NetCraft mempool poll failed: {error}"),
+                }
+                thread::sleep(MEMPOOL_POLL);
+            });
+        }
+    }
     {
         let server = server.clone();
         thread::spawn(move || loop {
@@ -1303,8 +1390,10 @@ mod tests {
                 players: HashMap::new(),
                 next_id: 3,
                 animals: Vec::new(),
+                mempool: BTreeSet::new(),
                 next_animal_id: 1,
                 animal_tick: 0,
+                animal_cursor: 0,
             }),
             terrain: Mutex::new(Terrain::default()),
             reward_categories: HashMap::from([(MINA_ORE, "b".repeat(64))]),
@@ -1949,8 +2038,11 @@ mod tests {
                     )
                     .unwrap();
             }
+            let txid = "012345".to_owned() + &"0".repeat(52) + "abcdef";
+            state.mempool.insert(txid.clone());
             state.animals.push(Animal {
                 id: 7,
+                txid,
                 x: 0.0,
                 y: 200.5,
                 z: 0.0,
@@ -1961,12 +2053,13 @@ mod tests {
         let one = String::from_utf8(first.try_recv().unwrap()).unwrap();
         let two = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert_eq!(one, two);
-        assert!(one.contains("M,7,0.00,200.50,-0.60,0\n"));
+        assert!(one.contains("M,7,0.00,200.50,-0.60,0,012345...abcdef\n"));
         {
             let mut state = server.state.lock().unwrap();
             for player in state.players.values_mut() {
                 player.position[0] = 1000.0;
             }
+            state.mempool.clear();
         }
         update_animals(&server).unwrap();
         assert_eq!(first.try_recv().unwrap(), b"MD,7\n");
@@ -1998,6 +2091,7 @@ mod tests {
         let (server, first, second) = setup();
         {
             let mut state = server.state.lock().unwrap();
+            state.mempool.insert("a".repeat(64));
             for player in state.players.values_mut() {
                 player.position = [0.0, 200.5, 0.0, 0.0, 0.0];
             }
@@ -2013,6 +2107,68 @@ mod tests {
         let one = String::from_utf8(first.try_recv().unwrap()).unwrap();
         let two = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert_eq!(one, two);
-        assert_eq!(one, "M,1,-8.00,200.50,-8.00,1\n");
+        assert_eq!(one, "M,1,-8.00,200.50,-8.00,1,aaaaaa...aaaaaa\n");
+    }
+
+    #[test]
+    fn mempool_snapshot_updates_the_herd_without_an_eight_animal_cap() {
+        let (server, _, _) = setup();
+        let txids: BTreeSet<_> = (0..12).map(|id| format!("{id:064x}")).collect();
+        {
+            let mut state = server.state.lock().unwrap();
+            for player in state.players.values_mut() {
+                player.position = [0.0, 200.5, 0.0, 0.0, 0.0];
+            }
+            for step in 0..32 {
+                let angle = f64::from(step) * std::f64::consts::TAU / 32.0;
+                let x = (angle.cos() * 12.0).round() as i32;
+                let z = (angle.sin() * 12.0).round() as i32;
+                state
+                    .db
+                    .execute(
+                        "INSERT OR REPLACE INTO block (p,q,x,y,z,w) VALUES (?1,?2,?3,200,?4,6)",
+                        params![chunked(x), chunked(z), x, z],
+                    )
+                    .unwrap();
+            }
+            state.mempool = txids.clone();
+        }
+        update_animals(&server).unwrap();
+        let mut state = server.state.lock().unwrap();
+        assert_eq!(state.animals.len(), 12);
+        assert_eq!(
+            state
+                .animals
+                .iter()
+                .map(|a| a.txid.clone())
+                .collect::<BTreeSet<_>>(),
+            txids
+        );
+        let survivor = state.animals[0].clone();
+        state.mempool.retain(|txid| *txid == survivor.txid);
+        drop(state);
+        update_animals(&server).unwrap();
+        let state = server.state.lock().unwrap();
+        assert_eq!(state.animals.len(), 1);
+        assert_eq!(state.animals[0].id, survivor.id);
+    }
+
+    #[test]
+    fn mempool_http_response_distinguishes_empty_from_unavailable() {
+        let txid = "A".repeat(64);
+        let response = format!("HTTP/1.1 200 OK\r\nContent-Length: 65\r\n\r\n{txid}\n");
+        assert_eq!(
+            read_mempool_response(response.as_bytes()).unwrap(),
+            BTreeSet::from(["a".repeat(64)])
+        );
+        assert!(
+            read_mempool_response(&b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"[..])
+                .unwrap()
+                .is_empty()
+        );
+        assert!(read_mempool_response(&b"HTTP/1.1 503 Service Unavailable\r\n\r\n"[..]).is_err());
+        assert!(
+            read_mempool_response(&b"HTTP/1.1 200 OK\r\nContent-Length: 65\r\n\r\n"[..]).is_err()
+        );
     }
 }

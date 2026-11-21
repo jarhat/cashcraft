@@ -2310,7 +2310,7 @@ void render_sign(Attrib *attrib, Player *player) {
     del_buffer(buffer);
 }
 
-void render_players(Attrib *attrib, Player *player) {
+void render_players(Attrib *attrib, Attrib *names, Player *player) {
     State *s = &player->state;
     float matrix[16];
     set_matrix_3d(
@@ -2331,6 +2331,9 @@ void render_players(Attrib *attrib, Player *player) {
         }
     }
     animals_render(attrib, matrix, s->x, s->y, s->z, g->render_radius);
+    if (g->show_ui) {
+        animals_render_names(names, matrix, s->x, s->y, s->z);
+    }
 }
 
 void render_sky(Attrib *attrib, Player *player, GLuint buffer) {
@@ -3750,8 +3753,10 @@ void parse_buffer(char *buffer, int len) {
         unsigned int animal_id;
         float ax, ay, az;
         int heading;
-        if (line[0] == 'M' && sscanf(line, "M,%u,%f,%f,%f,%d", &animal_id, &ax, &ay, &az, &heading) == 5) {
-            animals_update(animal_id, ax, ay, az, heading);
+        char animal_name[ANIMAL_NAME_LENGTH + 1] = {0};
+        if (line[0] == 'M' && sscanf(line, "M,%u,%f,%f,%f,%d,%15s",
+            &animal_id, &ax, &ay, &az, &heading, animal_name) >= 5) {
+            animals_update(animal_id, ax, ay, az, heading, animal_name);
         }
         if (line[0] == 'M' && sscanf(line, "MD,%u", &animal_id) == 1) {
             animals_remove(animal_id);
@@ -4589,7 +4594,7 @@ void render_scene() {
         face_count = render_chunks(&block_attrib, player);
         render_signs(&text_attrib, player);
         render_sign(&text_attrib, player);
-        render_players(&block_attrib, player);
+        render_players(&block_attrib, &text_attrib, player);
         if (SHOW_WIREFRAME && g->show_ui) {
             render_wireframe(&line_attrib, player);
         }
@@ -4743,7 +4748,7 @@ void render_scene() {
         glClear(GL_DEPTH_BUFFER_BIT);
         render_chunks(&block_attrib, player);
         render_signs(&text_attrib, player);
-        render_players(&block_attrib, player);
+        render_players(&block_attrib, &text_attrib, player);
         glClear(GL_DEPTH_BUFFER_BIT);
 	if (SHOW_PLAYER_NAMES) {
 	    if (player != me) {
