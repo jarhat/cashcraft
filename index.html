@@ -645,6 +645,13 @@
     <p id="game-dialog-status" class="fine" role="status"></p>
     <div id="game-stage" class="game-stage">
       <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="autoplay *; fullscreen; gamepad *" allowfullscreen></iframe>
+      <div id="game-payment-bubble" class="game-payment-bubble" hidden>
+        <p id="game-payment-speaker" aria-live="polite"></p>
+        <img id="game-payment-qr" width="128" height="128" alt="Payment request QR code">
+        <a id="game-payment-link">Open payment request</a>
+        <p id="game-payment-status" class="fine" role="status"></p>
+        <button id="game-payment-dismiss" class="small-button" type="button" aria-label="Dismiss payment request">×</button>
+      </div>
       <div id="game-chain-ticker" class="market-ticker game-chain-ticker" role="region" tabindex="0" aria-label="Detailed BCHN node statistics">Loading blockchain status…</div>
       <div id="game-wizard-speech" class="game-wizard-speech" role="status" aria-live="polite" hidden>
         <img src="/wizard.svg" alt="">

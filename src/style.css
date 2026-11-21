@@ -2788,6 +2788,18 @@ body::before { content: none; display: none; }
 .game-switcher[hidden], #game-pk2[hidden] { display: none; }
 .game-switcher [aria-pressed="true"] { border-color: var(--ice); color: var(--ice); }
 .game-stage { position: relative; overflow: hidden; border: 1px solid var(--glass-border); border-radius: 12px; background: #080e17; -webkit-touch-callout: none; }
+.game-payment-bubble {
+  position: absolute; z-index: 3; inset: 4rem 1rem auto auto;
+  display: grid; gap: .4rem; justify-items: start;
+  padding: .75rem 2.5rem .75rem .75rem; border-radius: .75rem .75rem 0 .75rem;
+  background: #10271e; color: #fff; border: 1px solid #7ab99b;
+}
+.game-payment-bubble[hidden], .game-payment-bubble img[hidden] { display: none; }
+.game-payment-bubble p { margin: 0; overflow-wrap: anywhere; }
+.game-payment-bubble p:empty { display: none; }
+.game-payment-bubble a { color: #b9ffe8; text-decoration: underline; }
+.game-payment-bubble button { position: absolute; top: .25rem; right: .25rem; }
+.game-payment-bubble img { background: #fff; }
 .game-wallet-actions { position: absolute; top: 12px; left: 12px; z-index: 1; }
 .game-wallet-actions .quick-action { min-height: 44px; }
 @media (max-width: 520px) {

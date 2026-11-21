@@ -43,7 +43,7 @@ if (!['mainnet', 'chipnet'].includes(network)) {
   );
 }
 
-function fillFromUrl(params = new URLSearchParams(window.location.search), note = '') {
+function fillFromUrl(params = new URLSearchParams(window.location.search), note = '', showPreview = true) {
   const sharedLink = {
     address: params.get('addr'),
     category: params.get('category'),
@@ -83,7 +83,7 @@ function fillFromUrl(params = new URLSearchParams(window.location.search), note 
     $('shared-link-preview').classList.remove('hidden');
     $('notifications-empty').hidden = true;
     $('notification-indicator').hidden = false;
-    $('notifications-dialog').showModal();
+    if (showPreview) $('notifications-dialog').showModal();
 
     const title = `${sharedLink.amount} CashToken base units requested`;
     const description =
@@ -2116,6 +2116,7 @@ updateGameRewardAddress = setupGames($, {
   isWalletConnected: () => walletReady,
   hasMinaPickaxe: () => walletReady && minaPickaxe,
   openPlayerTransfer,
+  openGamePaymentRequest,
 });
 const donationDependencies = async () => {
   await loadWalletDependencies();
@@ -2392,6 +2393,7 @@ function updateReceiveAddress() {
 let tokenQrGeneration = 0;
 let continueTokenQr = null;
 let showGameReceiveQr = null;
+let shareGameReceiveQr = null;
 let gameReceiveGeneration = 0;
 const minaColors = [['green', 'MINA Green'], ['red', 'MINA Red'], ['blue', 'MINA Blue']];
 
@@ -2403,9 +2405,10 @@ function setReceiveOreOption(element, color, label) {
   element.replaceChildren(gem, document.createTextNode(translate(label)));
 }
 
-async function openGameReceive(showInGame) {
+async function openGameReceive(showInGame, shareInGame) {
   const version = ++gameReceiveGeneration;
   showGameReceiveQr = showInGame;
+  shareGameReceiveQr = shareInGame;
   $('receive-address').value = addressFor(0, 0);
   $('receive-address').readOnly = true;
   $('edit-receive-address').hidden = true;
@@ -2460,6 +2463,7 @@ async function openGameReceive(showInGame) {
 function exitGameReceive() {
   if (!showGameReceiveQr) return;
   showGameReceiveQr = null;
+  shareGameReceiveQr = null;
   gameReceiveGeneration++;
   paymentGeneration++;
   $('receive-ore-picker').hidden = true;
@@ -2499,13 +2503,13 @@ function openTokenQr({ title, hint, value, label, action }) {
   });
 }
 
-async function openPlayerTransfer(target, showInGame) {
+async function openPlayerTransfer(target, showInGame, shareInGame) {
   try {
     if (!target) {
-      if (walletReady) await openGameReceive(showInGame);
+      if (walletReady) await openGameReceive(showInGame, shareInGame);
       else {
         $('connection-dialog').addEventListener('close', () => {
-          if (walletReady) void openGameReceive(showInGame);
+          if (walletReady) void openGameReceive(showInGame, shareInGame);
         }, { once: true });
         openConnectionDialog();
       }
@@ -2540,6 +2544,31 @@ async function openPlayerTransfer(target, showInGame) {
     $('game-dialog-status').textContent = error.message;
     report(error);
   }
+}
+
+async function openGamePaymentRequest({ id, name, path }, leaveGame) {
+  const link = await openShortLink(id);
+  if (link.one_time !== false) throw new Error(translate('Invalid payment request.'));
+  await loadWalletDependencies();
+  const address = validateRecipient(link.address);
+  if (!/^[0-9a-f]{64}$/.test(link.category) || !/^[1-9][0-9]*$/.test(link.amount)) {
+    throw new Error(translate('Invalid payment request.'));
+  }
+  if (!await leaveGame()) return;
+  document.exitPointerLock?.();
+  exitGameReceive();
+  $('crafting-note').hidden = true;
+  $('pickaxe-recovery').hidden = true;
+  const params = new URLSearchParams({ addr: address, category: link.category, amount: link.amount });
+  fillFromUrl(params, link.note, false);
+  setTransferTab('send');
+  openTokenQr({
+    title: `${name}: ${translate('MINA payment request')}`,
+    hint: translate('Game names are not verified. Confirm this address with the recipient before sending.'),
+    value: new URL(path, window.location.origin).href,
+    label: translate('View payment request'),
+    action: () => $('view-payment-request').click(),
+  });
 }
 
 $('token-qr-close').addEventListener('click', () => $('token-qr-dialog').close());
@@ -2796,6 +2825,7 @@ $('generate-payment').addEventListener('click', async () => {
 let originalPaymentQr = null;
 async function generateGameReceiveQr({ address, category, amount, generation }) {
   const showInGame = showGameReceiveQr;
+  const shareInGame = shareGameReceiveQr;
   if (!walletReady || address !== addressFor(0, 0)) {
     $('payment-input-status').textContent = translate('Connect your wallet to create this request.');
     return;
@@ -2813,9 +2843,10 @@ async function generateGameReceiveQr({ address, category, amount, generation }) 
     const value = new URL(`/s/${link.id}`, window.location.origin).href;
     const show = () => openTokenQr({
       title: translate('MINA payment request'),
-      hint: translate('Share this QR code or copy the link. The link expires after one week.'),
+      hint: translate('Select Done to share this request with other players. The link expires after one week.'),
       value,
       label: translate('Done'),
+      action: () => shareInGame?.(link.id),
     });
     $('payment-input-status').textContent = '';
     if (!showInGame($('token-qr-dialog'), show)) show();

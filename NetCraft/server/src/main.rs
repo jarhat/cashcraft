@@ -1629,6 +1629,19 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                         _ => send(&player, b"T,No online player has that name.\n".to_vec()),
                     }
                 }
+            } else if let Some(link) = text.strip_prefix("/request ") {
+                if !(8..=32).contains(&link.len()) ||
+                    !link.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-') {
+                    send(&player, b"T,Invalid payment link.\n".to_vec());
+                } else {
+                    let now = Instant::now();
+                    if player.last_chat.is_some_and(|last| now.duration_since(last) < Duration::from_secs(1)) {
+                        send(&player, b"T,Please wait a second before sharing a payment link.\n".to_vec());
+                    } else {
+                        state.players.get_mut(&id).unwrap().last_chat = Some(now);
+                        broadcast(&state, Some(id), &format!("PR,{},{link}\n", player.name));
+                    }
+                }
             } else if text == "/list" {
                 let names = state
                     .players
@@ -2129,6 +2142,22 @@ mod tests {
         second.try_recv().unwrap();
         handle_command(&server, 1, "T,/send guest2").unwrap();
         assert!(first.try_recv().unwrap().starts_with(b"T,That name is ambiguous"));
+        assert!(second.try_recv().is_err());
+    }
+
+    #[test]
+    fn payment_request_chat_shares_only_a_valid_short_link_id_with_other_players() {
+        let (server, first, second) = setup();
+        handle_command(&server, 1, "T,/request https://example.org/s/abc12345").unwrap();
+        assert!(first.try_recv().unwrap().starts_with(b"T,Invalid payment link"));
+        assert!(second.try_recv().is_err());
+
+        handle_command(&server, 1, "T,/request abc12345_-").unwrap();
+        assert_eq!(second.try_recv().unwrap(), b"PR,guest1,abc12345_-\n");
+        assert!(first.try_recv().is_err());
+
+        handle_command(&server, 1, "T,/request another123").unwrap();
+        assert!(first.try_recv().unwrap().starts_with(b"T,Please wait"));
         assert!(second.try_recv().is_err());
     }
 

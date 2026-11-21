@@ -6,7 +6,7 @@ const games = {
 };
 const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 
-export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, hasMinaPickaxe = () => false, getGuestId = getGameGuestId, openPlayerTransfer, autoOpen = false, autoOpenGame = 'netcraft' }) {
+export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, hasMinaPickaxe = () => false, getGuestId = getGameGuestId, openPlayerTransfer, openGamePaymentRequest, autoOpen = false, autoOpenGame = 'netcraft' }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
@@ -27,6 +27,34 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   stage.addEventListener('contextmenu', (event) => event.preventDefault());
   let generation = 0;
   let activeGame = null;
+  let paymentRequest = null;
+  const dismissPayment = () => {
+    paymentRequest = null;
+    $('game-payment-bubble').hidden = true;
+  };
+  $('game-payment-dismiss').addEventListener('click', dismissPayment);
+  $('game-payment-qr').addEventListener('error', () => { $('game-payment-qr').hidden = true; });
+  $('game-payment-link').addEventListener('click', async (event) => {
+    if (!paymentRequest || !openGamePaymentRequest || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    const request = paymentRequest;
+    if (request.opening) return;
+    request.opening = true;
+    $('game-payment-status').textContent = '';
+    const session = generation;
+    try {
+      await openGamePaymentRequest(request, async () => {
+        if (session !== generation || dialog.hidden || request !== paymentRequest) return false;
+        if (!await minimize() || session !== generation) return false;
+        if (request === paymentRequest) dismissPayment();
+        return true;
+      });
+    } catch (error) {
+      if (request === paymentRequest) $('game-payment-status').textContent = error.message;
+    } finally {
+      request.opening = false;
+    }
+  });
   let guideShown = false;
   let reopenGuide = false;
   let reopenPrompt = false;
@@ -173,6 +201,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
           throw new Error(translate('Game build unavailable. Check the server mount.'));
         }
         if (request !== generation) return;
+        dismissPayment();
         if (guide.open) guide.close();
         sound.hidden = true;
         status.textContent = '';
@@ -270,8 +299,9 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     document.exitPointerLock?.();
     const session = generation;
     if (!await minimize() || session !== generation) return;
+    const currentSession = () => session === generation && activeGame === 'netcraft' && dialog.open;
     await openPlayerTransfer(target, (popup, show) => {
-      if (session !== generation || activeGame !== 'netcraft' || !dialog.open) return false;
+      if (!currentSession()) return false;
       restore.click();
       const home = popup.parentNode;
       const next = popup.nextSibling;
@@ -279,6 +309,10 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       popup.addEventListener('close', () => home.insertBefore(popup, next), { once: true });
       show();
       return true;
+    }, (id) => {
+      if (!currentSession() || dialog.hidden) return;
+      frame.contentWindow?.postMessage({ type: 'netcraft-share-payment', id }, '*');
+      frame.focus({ preventScroll: true });
     });
   };
   $('game-receive').addEventListener('click', () => openTransfer(null));
@@ -325,6 +359,20 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   }
   window.addEventListener('message', async (event) => {
     if (event.source !== frame.contentWindow || activeGame !== 'netcraft') return;
+    if (event.data?.type === 'netcraft-payment-request') {
+      const { id, name } = event.data;
+      if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{8,32}$/.test(id) ||
+          typeof name !== 'string' || !/^[A-Za-z0-9_]{1,24}$/.test(name)) return;
+      const path = `/s/${id}`;
+      paymentRequest = { id, name, path };
+      $('game-payment-speaker').textContent = `${name}: ${translate('MINA payment request')}`;
+      $('game-payment-link').href = path;
+      $('game-payment-qr').hidden = false;
+      $('game-payment-qr').src = `/api/qr.png?s=${id}`;
+      $('game-payment-status').textContent = '';
+      $('game-payment-bubble').hidden = false;
+      return;
+    }
     if (event.data?.type === 'netcraft-wallet-send' || event.data?.type === 'netcraft-wallet-receive') {
       if (!openPlayerTransfer || dialog.hidden) return;
       const send = event.data.type === 'netcraft-wallet-send';

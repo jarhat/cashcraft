@@ -1448,6 +1448,11 @@
             if (ready) Module.ccall('netcraft_send_to_player', null, ['string'], [event.data.name]);
             return;
           }
+          if (event.data.type === 'netcraft-share-payment' &&
+              typeof event.data.id === 'string' && /^[A-Za-z0-9_-]{8,32}$/.test(event.data.id)) {
+            if (ready) Module.ccall('netcraft_share_payment', null, ['string'], [event.data.id]);
+            return;
+          }
           if (event.data.type !== 'netcraft-reward-address' || typeof event.data.address !== 'string') return;
           if (event.data.embeddedSound === true) Module.enableEmbeddedSound();
           pending = event.data.address;

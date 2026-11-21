@@ -2801,6 +2801,19 @@ EMSCRIPTEN_KEEPALIVE void netcraft_send_to_player(const char *name) {
     client_talk(command);
 }
 
+EMSCRIPTEN_KEEPALIVE void netcraft_share_payment(const char *link) {
+    if (!online_ready || g->mode != MODE_ONLINE) {
+        add_message("Connect to the game server before sharing a payment request.");
+        return;
+    }
+    size_t length = strlen(link);
+    if (length < 8 || length > 32 ||
+        strspn(link, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") != length) return;
+    char command[42];
+    snprintf(command, sizeof(command), "/request %s", link);
+    client_talk(command);
+}
+
 EMSCRIPTEN_KEEPALIVE void netcraft_set_guest_id(const char *id) {
     if (strlen(id) != 64 || strspn(id, "0123456789abcdef") != 64) {
         fprintf(stderr, "Invalid guest mining identity\n");
@@ -4110,6 +4123,20 @@ void parse_buffer(char *buffer, int len) {
 #endif
         }
         char mined_reward_address[121];
+#ifdef __EMSCRIPTEN__
+        int payment_offset = 0;
+        char requester[25];
+        if (sscanf(line, "PR,%24[^,],%n", requester, &payment_offset) == 1 && payment_offset > 0) {
+            const char *link = line + payment_offset;
+            EM_ASM_ARGS({
+                parent.postMessage({
+                    type: 'netcraft-payment-request',
+                    name: UTF8ToString($0),
+                    id: UTF8ToString($1)
+                }, '*');
+            }, requester, link);
+        }
+#endif
         char recipient_name[25], recipient_address[121];
         if (sscanf(line, "WR,%24[^,],%120[^\n]", recipient_name, recipient_address) == 2) {
 #ifdef __EMSCRIPTEN__

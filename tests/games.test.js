@@ -13,7 +13,8 @@ test('game buttons minimize and restore without unloading the active game', asyn
   const originalFetch = globalThis.fetch;
   const originalDocument = globalThis.document;
   const originalRaf = globalThis.requestAnimationFrame;
-  t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; globalThis.requestAnimationFrame = originalRaf; });
+  const originalWindow = globalThis.window;
+  t.after(() => { globalThis.fetch = originalFetch; globalThis.document = originalDocument; globalThis.requestAnimationFrame = originalRaf; globalThis.window = originalWindow; });
   globalThis.requestAnimationFrame = () => {};
   const elements = new Map();
   const $ = (id) => {
@@ -51,7 +52,29 @@ test('game buttons minimize and restore without unloading the active game', asyn
   $('top-receive').parentNode = $('quick-nav');
   $('game-controls-right').parentNode = toolbar;
   $('game-ranking').parentNode = { insertBefore(child) { child.parentNode = this; } };
-  setupGames($, { translate: (text) => text, getRewardAddress: () => address });
+  let receiveGameEvent;
+  globalThis.window = { addEventListener(type, listener) { if (type === 'message') receiveGameEvent = listener; } };
+  const postedMessages = [];
+  const gameWindow = { postMessage(message) { postedMessages.push(message); } };
+  $('game-frame').contentWindow = gameWindow;
+  $('game-restore').click = () => $('game-restore').listeners.click();
+  let reviewed;
+  setupGames($, {
+    translate: (text) => text,
+    getRewardAddress: () => address,
+    openPlayerTransfer: async (target, show, share) => {
+      assert.equal(target, null);
+      const popup = $('token-qr-dialog');
+      popup.parentNode = $('quick-nav');
+      assert.equal(show(popup, () => popup.show()), true);
+      popup.close();
+      share('mine12345678');
+    },
+    openGamePaymentRequest: async (request, leave) => {
+      assert.equal(await leave(), true);
+      reviewed = request.id;
+    },
+  });
   assert.equal(gameToolbarSelected, true);
   let wallet = 0;
   $('connection-open').click = () => { wallet++; };
@@ -87,6 +110,21 @@ test('game buttons minimize and restore without unloading the active game', asyn
   const gameUrl = '/games/netcraft/craftw.html#-+4080+bitcoincash%3Aztest';
   assert.equal($('game-frame').src, gameUrl);
   assert.equal($('game-frame').title, 'CashCraft');
+  await $('game-receive').listeners.click();
+  assert.deepEqual(postedMessages.at(-1), { type: 'netcraft-share-payment', id: 'mine12345678' });
+  const payment = { type: 'netcraft-payment-request', name: 'Miner', id: 'abc123456789' };
+  await receiveGameEvent({ source: {}, data: payment });
+  await receiveGameEvent({ source: gameWindow, data: { ...payment, id: '../malicious' } });
+  assert.equal($('game-payment-bubble').hidden, true);
+  await receiveGameEvent({ source: gameWindow, data: payment });
+  assert.equal($('game-payment-bubble').hidden, false);
+  assert.equal($('game-payment-qr').src, '/api/qr.png?s=abc123456789');
+  assert.equal($('game-payment-link').href, '/s/abc123456789');
+  await $('game-payment-link').listeners.click({ preventDefault() {} });
+  assert.equal(reviewed, payment.id);
+  assert.equal($('game-payment-bubble').hidden, true);
+  assert.equal($('game-dialog').hidden, true);
+  $('game-restore').click();
   address = null;
   $('game-frame').listeners.load();
   $('game-notifications').listeners.click();

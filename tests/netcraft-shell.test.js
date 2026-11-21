@@ -56,6 +56,11 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
   assert.deepEqual(updates.at(-1), ['mining_set_wallet_connected', 0]);
   window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: '', pickaxe: false, guestId: 'a'.repeat(64) } });
   assert.deepEqual(updates.slice(-4), [['netcraft_set_guest_id', 'a'.repeat(64)], ['netcraft_set_reward_address', ''], ['mining_set_pickaxe', 0], ['mining_set_wallet_connected', 0]]);
+  updates.length = 0;
+  window.listeners.message({ source: {}, data: { type: 'netcraft-share-payment', id: 'abc123456789' } });
+  window.listeners.message({ source: parent, data: { type: 'netcraft-share-payment', id: '../not-a-link' } });
+  window.listeners.message({ source: parent, data: { type: 'netcraft-share-payment', id: 'abc123456789' } });
+  assert.deepEqual(updates, [['netcraft_share_payment', 'abc123456789']]);
   assert.ok(context.Module.websocket);
   assert.equal(typeof $('mobile-mine').listeners.pointerdown, 'function');
   assert.equal(typeof window.listeners.pointermove, 'function');
