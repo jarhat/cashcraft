@@ -33,7 +33,10 @@ int world_stream(int x, int z, int *bottom, int *top) {
     int upstream = x - world_stream_direction(x);
     *top = phase64(x) == 0 || phase64(x) == 63 ? *bottom : stream_height(upstream);
     if (*top < *bottom) *top = *bottom;
-    return water <= 2 ? Item_WATER : lava <= 2 ? Item_LAVA : Item_EMPTY;
+    int phase = phase64(x);
+    int water_width = 2 + (phase >= 7 && phase <= 12);
+    int lava_width = 2 + (phase >= 50 && phase <= 60) + (phase >= 53 && phase <= 57);
+    return water <= water_width ? Item_WATER : lava <= lava_width ? Item_LAVA : Item_EMPTY;
 }
 
 static void generate_underworld(int x, int z, int flag, world_func func, void *arg) {
@@ -51,6 +54,9 @@ static void generate_underworld(int x, int z, int flag, world_func func, void *a
         int bottom, unused;
         int bank = (world_stream(x, z - 1, &bottom, &unused) ||
                     world_stream(x, z + 1, &bottom, &unused)) ? height : -20;
+        if (bank == -20 && simplex2(x * .05f, z * .05f, 2, .5f, 2) > .62f) {
+            bank += 2;
+        }
         for (int y = WORLD_MIN_Y + 1; y <= bank; y++) {
             func(x, y, z, deep_stone(x, y, z) * flag, arg);
         }

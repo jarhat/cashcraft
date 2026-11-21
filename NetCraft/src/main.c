@@ -229,6 +229,7 @@ typedef struct {
     double message_times[MAX_MESSAGES];
     int ore_progress[3];
     int lives;
+    double lava_exposure;
     bool zombies_active;
 #ifdef __EMSCRIPTEN__
     double next_zombie_sound;
@@ -2787,6 +2788,19 @@ static char access_token[128] = {0};
 static char reward_address[128] = {0};
 static char guest_id[65] = {0};
 
+EMSCRIPTEN_KEEPALIVE void netcraft_send_to_player(const char *name) {
+    size_t length = strlen(name);
+    if (!online_ready || g->mode != MODE_ONLINE) {
+        add_message("Connect to the game server before looking up a player.");
+        return;
+    }
+    if (!length || length > 24 ||
+        strspn(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_") != length) return;
+    char command[31];
+    snprintf(command, sizeof(command), "/send %s", name);
+    client_talk(command);
+}
+
 EMSCRIPTEN_KEEPALIVE void netcraft_set_guest_id(const char *id) {
     if (strlen(id) != 64 || strspn(id, "0123456789abcdef") != 64) {
         fprintf(stderr, "Invalid guest mining identity\n");
@@ -3896,6 +3910,28 @@ void handle_movement(double dt) {
     if (s->y < WORLD_MIN_Y) {
         s->y = highest_block(s->x, s->z) + 2;
     }
+    if (g->mode == MODE_OFFLINE) {
+        int x = roundf(s->x), z = roundf(s->z);
+        bool hot = get_block(x, roundf(s->y), z) == Item_LAVA ||
+            get_block(x, roundf(s->y - 1.0f), z) == Item_LAVA ||
+            get_block(x, roundf(s->y - 1.5f), z) == Item_LAVA;
+        g->lava_exposure = hot ? g->lava_exposure + dt : 0;
+        if (g->lava_exposure >= .4) {
+            g->lava_exposure = 0;
+            g->lives -= 5;
+            if (g->lives <= 0) {
+                mining_stop();
+                building_stop();
+                Inventory_reset(&g->inventory);
+                sync_inventory_items();
+                s->x = 0; s->y = 0; s->z = 0;
+                force_chunks(g->players);
+                s->y = highest_block(0, 0) + 2;
+                g->lives = PLAYER_LIVES;
+                add_message("Lava burned you. You respawned without your mined blocks.");
+            }
+        }
+    }
 #ifdef __EMSCRIPTEN__
     double audio_now = glfwGetTime();
     if (g->zombies_active && audio_now >= g->next_zombie_sound) {
@@ -4023,11 +4059,11 @@ void parse_buffer(char *buffer, int len) {
         }
         unsigned int animal_id;
         float ax, ay, az;
-        int heading, pacified = 0;
+        int heading, pacified = 0, species = 0;
         char animal_name[ANIMAL_NAME_LENGTH + 1] = {0};
-        if (line[0] == 'M' && sscanf(line, "M,%u,%f,%f,%f,%d,%15[^,],%d",
-            &animal_id, &ax, &ay, &az, &heading, animal_name, &pacified) >= 5) {
-            animals_update(animal_id, ax, ay, az, heading, animal_name, pacified != 0);
+        if (line[0] == 'M' && sscanf(line, "M,%u,%f,%f,%f,%d,%15[^,],%d,%d",
+            &animal_id, &ax, &ay, &az, &heading, animal_name, &pacified, &species) >= 5) {
+            animals_update(animal_id, ax, ay, az, heading, animal_name, pacified != 0, species);
         }
         if (line[0] == 'M' && sscanf(line, "MD,%u", &animal_id) == 1) {
             animals_remove(animal_id);
@@ -4331,6 +4367,7 @@ void reset_model() {
     memset(g->message_times, 0, sizeof(g->message_times));
     memset(g->ore_progress, 0, sizeof(g->ore_progress));
     g->lives = PLAYER_LIVES;
+    g->lava_exposure = 0;
     g->zombies_active = false;
 #ifdef __EMSCRIPTEN__
     g->next_zombie_sound = 0;
@@ -4958,10 +4995,12 @@ void render_scene() {
         }
         if (g->show_ui) {
             const int ores[] = {Item_MINA_ORE, Item_LAPIS_LAZULI_ORE, Item_REDSTONE_ORE};
+            float unit = fminf(g->scale, fminf(g->width / 390.0f, g->height / 250.0f));
+            float base = 12.0f * g->scale + fminf(20.0f * g->scale, g->width / 16.0f);
             float matrix[16];
             set_matrix_item(matrix, g->width, g->height, g->scale);
-            for (int i = 0; i < 12; i++) matrix[i] *= 0.65f;
-            matrix[13] = -1.0f + 80.0f * g->scale / g->height;
+            for (int i = 0; i < 12; i++) matrix[i] *= unit / g->scale;
+            matrix[13] = -1.0f + 2.0f * (base + 56.0f * unit) / g->height;
             glUseProgram(block_attrib.program);
             glUniform3f(block_attrib.camera, 0, 0, 5);
             glUniform1i(block_attrib.sampler, 0);
@@ -4975,10 +5014,19 @@ void render_scene() {
                 if (!item_buffers[ore]) {
                     item_buffers[ore] = gen_cube_buffer(0, 0, 0, 0.5, ore);
                 }
-                matrix[12] = (i * 54.0f - 72.0f) * 2 * g->scale / g->width;
+                matrix[12] = (i - 1) * 174.0f * unit / g->width;
                 glUniformMatrix4fv(block_attrib.matrix, 1, GL_FALSE, matrix);
                 draw_cube(&block_attrib, item_buffers[ore]);
             }
+            glDisable(GL_DEPTH_TEST);
+            for (int i = 0; i < 3; i++) {
+                char count[8];
+                snprintf(count, sizeof(count), "%d/10", g->ore_progress[i]);
+                render_text(&text_attrib, ALIGN_CENTER,
+                    g->width * .5f + (i - 1) * 87.0f * unit,
+                    base + 19.0f * unit, 14.0f * unit, count);
+            }
+            glEnable(GL_DEPTH_TEST);
         }
     } else {
         face_count = 0;
@@ -4988,13 +5036,6 @@ void render_scene() {
     char text_buffer[1024];
     float tx = ts / 2;
     float ty = g->height - ts;
-    if (g->show_ui && g->initialized) {
-        for (int i = 0; i < 3; i++) {
-            snprintf(text_buffer, sizeof(text_buffer), "%d/10", g->ore_progress[i]);
-            render_text(&text_attrib, ALIGN_LEFT, g->width / 2 + (i * 54.0f - 60.0f) * g->scale,
-                40.0f * g->scale, ts * 0.8f, text_buffer);
-        }
-    }
     if (g->show_info_text && g->show_ui && g->initialized) {
         static char *build_info_string =
            "CashCraft"

@@ -6,7 +6,7 @@
 
 #define ANIMAL_NAME_LENGTH 15
 
-void animals_update(unsigned int id, float x, float y, float z, int heading, const char *name, bool pacified);
+void animals_update(unsigned int id, float x, float y, float z, int heading, const char *name, bool pacified, int species);
 void animals_remove(unsigned int id);
 void animals_clear(void);
 void animals_shutdown(void);

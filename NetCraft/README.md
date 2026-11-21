@@ -237,16 +237,21 @@ as hearts at the bottom center of the screen, and can
 lose one every two seconds to zombie attacks. After the last life is lost, the
 player respawns at spawn with 10 lives. Animals do not spawn on the central sky
 park platform, though they can still spawn elsewhere. Movement and attacks are
-shared by the server and follow terrain and block edits. Animals despawn when no
+shared by the server and follow terrain and block edits. Separate, sparse wildlife
+includes rainforest monkeys and tigers, desert elephants and giraffes, temperate
+deer, and taiga foxes. They never become zombies; only tigers attack nearby players.
+Animals despawn when no
 players are nearby and are not persisted across server restarts.
 
 ### Preview-inspired world
 
 Terrain generation is shared by the client and server. When upgrading, rebuild
 both together. Saved block edits are preserved, but the terrain underneath those
-edits is regenerated. On the Rust server, blocks placed in underground streams
-dam the current; removing a dam lets the liquid flow downstream again. Flow
-stays within the generated channels.
+edits is regenerated. The caverns below the bedrock roof have terraced floors,
+wider water pools, and red lava basins. On the Rust server, breaking a bank lets
+liquid spill into excavated passages. It drops first, then spreads sideways,
+up to seven blocks for water and three for lava. Blocks can dam either liquid.
+Lava burns through a full health bar in about a second; stay clear of the banks.
 
 With the server stopped, run from the repository root:
 
@@ -375,7 +380,11 @@ opens the wallet dashboard and shows the online player's token receive address
 as a QR code. Connecting a wallet for mining makes its public receive address
 available to players who look up your in-game name. Verify the address separately:
 nicknames are not authenticated. Choose the category and amount and approve in
-your wallet. Use `/receive` to show your own address and create a payment QR.
+your wallet. The game's Send and Receive buttons provide the same actions.
+Use `/receive` to select a configured MINA color and amount in the Receive tab,
+then generate a shareable QR and one-week short link back in the game.
+Fullscreen shows a BCHN ticker below the game with the tip hash, header lag,
+difficulty, verification progress, median block time, chainwork, and storage stats.
 New joins appear in chat. The Sound button
 controls block and footstep sounds and the original looping tune after a user
 gesture; the game panel also has a fullscreen button. The `?game=cashcraft` URL

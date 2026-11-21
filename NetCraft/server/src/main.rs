@@ -33,6 +33,7 @@ const DAY_LENGTH: u64 = 600;
 const PLAYER_LIVES: u8 = 10;
 const ATTACK_INTERVAL: u64 = 2;
 const ZOMBIE_SPEED: f64 = 1.3;
+const WILDLIFE_LIMIT: usize = 24;
 // Central sky park footprint from builder.py; lower terrain remains spawnable.
 const PARK_FLOOR: i32 = 180;
 type Blocks = HashMap<(i32, i32, i32), i32>;
@@ -46,6 +47,7 @@ extern "C" {
     );
     fn world_stream(x: i32, z: i32, bottom: *mut i32, top: *mut i32) -> i32;
     fn world_stream_direction(x: i32) -> i32;
+    fn biome_at_pos(x: i32, z: i32) -> std::ffi::c_uint;
 }
 
 extern "C" fn collect_block(x: i32, y: i32, z: i32, w: i32, arg: *mut c_void) {
@@ -124,10 +126,26 @@ struct Animal {
     z: f64,
     heading: u8,
     pacified: bool,
+    wildlife: Option<(Species, i32, i32)>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+enum Species {
+    Tiger = 1,
+    Monkey,
+    Elephant,
+    Giraffe,
+    Deer,
+    Fox,
 }
 
 impl Animal {
     fn message(&self) -> String {
+        if let Some((species, _, _)) = self.wildlife {
+            return format!("M,{},{:.2},{:.2},{:.2},{},-,0,{}\n",
+                self.id, self.x, self.y, self.z, self.heading, species as u8);
+        }
         format!(
             "M,{},{:.2},{:.2},{:.2},{},{}...{},{}\n",
             self.id,
@@ -331,7 +349,8 @@ fn hit_animal(
     }
     player.last_pickaxe = Some(now);
     let [x, y, z, rx, ry] = player.position;
-    let Some(index) = state.animals.iter().position(|a| a.id == animal_id && !a.pacified) else {
+    let Some(index) = state.animals.iter()
+        .position(|a| a.id == animal_id && a.wildlife.is_none() && !a.pacified) else {
         return Ok(());
     };
     let animal = &state.animals[index];
@@ -383,6 +402,11 @@ fn move_animal(
     dz: f64,
 ) -> rusqlite::Result<bool> {
     let (x, z) = (animal.x + dx, animal.z + dz);
+    if let Some((_, home_x, home_z)) = animal.wildlife {
+        if (x - f64::from(home_x)).hypot(z - f64::from(home_z)) > 12.0 {
+            return Ok(false);
+        }
+    }
     if let Some(y) = animal_ground(terrain, db, x.round() as i32, z.round() as i32)? {
         let feet = f64::from(y) + 0.5;
         if (feet - animal.y).abs() <= 1.0 {
@@ -406,6 +430,116 @@ fn world_time() -> u64 {
 
 fn update_animals(server: &Server) -> rusqlite::Result<()> {
     update_animals_at(server, world_time())
+}
+
+fn damage_player(state: &mut State, id: u32, amount: u8, death: &[u8]) {
+    let Some(player) = state.players.get_mut(&id) else { return };
+    player.lives = player.lives.saturating_sub(amount);
+    let respawn = player.lives == 0;
+    if respawn {
+        player.position = [0.0; 5];
+        player.lives = PLAYER_LIVES;
+        player.inventory.fill(0);
+        send(player, death.to_vec());
+    }
+    send(player, format!("HP,{}\n", player.lives));
+    if respawn {
+        broadcast(state, Some(id), &format!("P,{id},0,0,0,0,0\n"));
+    }
+}
+
+fn damage_from_lava(server: &Server) -> rusqlite::Result<()> {
+    let mut state = server.state.lock().unwrap();
+    let mut hit = Vec::new();
+    let mut settled = HashMap::new();
+    for (&id, player) in &state.players {
+        let [x, y, z, _, _] = player.position;
+        if y >= 1.5 || y < f64::from(WORLD_MIN_Y) {
+            continue;
+        }
+        for offset in [0.0, 1.0, 1.5] {
+            let cell @ (bx, _, bz) = (x.round() as i32, (y - offset).round() as i32, z.round() as i32);
+            if !flow::can_spill(cell) {
+                continue;
+            }
+            let region = flow::region(bx, bz);
+            let material = if let Some(flow) = state.flows.get(&region) {
+                flow.channel.material(&flow.wet, cell)
+            } else {
+                let simulation = match settled.entry(region) {
+                    std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(flow::Channel::load(&state.db, region)?
+                            .map(|channel| {
+                                let wet = channel.reachable();
+                                (channel, wet)
+                            }))
+                    }
+                };
+                match simulation {
+                    Some((channel, wet)) => channel.material(wet, cell),
+                    None => Some(flow::natural_material(cell)),
+                }
+            };
+            if material == Some(13) {
+                hit.push(id);
+                break;
+            }
+        }
+    }
+    for id in hit {
+        damage_player(&mut state, id, 5, b"ZD\nT,Lava burned you. You respawned without your mined blocks.\n");
+    }
+    Ok(())
+}
+
+fn wildlife_species(biome: u32, choice: u32) -> Species {
+    match biome {
+        0 => Species::Deer,
+        1 if choice % 3 == 0 => Species::Elephant,
+        1 => Species::Giraffe,
+        2 if choice % 4 == 0 => Species::Tiger,
+        2 => Species::Monkey,
+        _ => Species::Fox,
+    }
+}
+
+fn spawn_wildlife(
+    state: &mut State, terrain: &mut Terrain, positions: &[[f64; 5]], updates: &mut String,
+) -> rusqlite::Result<()> {
+    if positions.is_empty() || state.animal_tick % 4 != 0 ||
+        state.animals.iter().filter(|a| a.wildlife.is_some()).count() >= WILDLIFE_LIMIT {
+        return Ok(());
+    }
+    let tick = state.animal_tick / 4;
+    let player = positions[tick as usize % positions.len()];
+    for attempt in 0..3 {
+        let angle = ((tick * 7 + attempt * 11) % 32) as f64 * std::f64::consts::TAU / 32.0;
+        let x = (player[0] + 26.0 * angle.cos()).round() as i32;
+        let z = (player[2] + 26.0 * angle.sin()).round() as i32;
+        if state.animals.iter().any(|a| a.wildlife.is_some() &&
+            (a.x - f64::from(x)).hypot(a.z - f64::from(z)) < 52.0) {
+            continue;
+        }
+        let Some(y) = animal_ground(terrain, &state.db, x, z)? else { continue };
+        if (player[1] - f64::from(y) - 2.0).abs() > 12.0 || is_sky_park(x, y, z) {
+            continue;
+        }
+        let hash = (x as u32).wrapping_mul(0x9e3779b1)
+            ^ (z as u32).wrapping_mul(0x85ebca77);
+        let species = wildlife_species(unsafe { biome_at_pos(x, z) }, hash ^ (hash >> 16));
+        let id = state.next_animal_id;
+        state.next_animal_id = id.wrapping_add(1).max(1);
+        let animal = Animal {
+            id, txid: String::new(), x: f64::from(x), y: f64::from(y) + 0.5,
+            z: f64::from(z), heading: (id % 4) as u8, pacified: false,
+            wildlife: Some((species, x, z)),
+        };
+        updates.push_str(&animal.message());
+        state.animals.push(animal);
+        break;
+    }
+    Ok(())
 }
 
 fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
@@ -444,7 +578,7 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
         let nearby = positions
             .iter()
             .any(|p| (p[0] - a.x).powi(2) + (p[2] - a.z).powi(2) < 64.0 * 64.0);
-        let keep = nearby && mempool.contains(&a.txid);
+        let keep = nearby && (a.wildlife.is_some() || mempool.contains(&a.txid));
         if !keep {
             removed.push_str(&format!("MD,{}\n", a.id));
         }
@@ -460,9 +594,12 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
     let State { animals, db, .. } = &mut *state;
     for offset in 0..count.min(ANIMAL_MOVES_PER_TICK) {
         let animal = &mut animals[(start + offset) % count];
-        let target = if night && !animal.pacified {
+        let tiger = matches!(animal.wildlife, Some((Species::Tiger, _, _)));
+        let target = if tiger || (animal.wildlife.is_none() && night && !animal.pacified) {
             positions
                 .iter()
+                .filter(|p| !tiger || ((p[0] - animal.x).hypot(p[2] - animal.z) < 6.0 &&
+                    (p[1] - 1.5 - animal.y).abs() < 1.5))
                 .min_by(|a, b| {
                     let distance = |p: &&[f64; 5]| {
                         (p[0] - animal.x).powi(2)
@@ -528,9 +665,10 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
     }
     state.animal_cursor = (start + ANIMAL_MOVES_PER_TICK) % count.max(1);
 
-    if night {
+    {
         let attackers: Vec<_> = state.animals.iter()
-            .filter(|a| !a.pacified)
+            .filter(|a| matches!(a.wildlife, Some((Species::Tiger, _, _))) ||
+                (a.wildlife.is_none() && night && !a.pacified))
             .map(|a| (a.x, a.y, a.z))
             .collect();
         let mut hit = Vec::new();
@@ -559,31 +697,18 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
                 }
             }
         }
-        let mut respawned = Vec::new();
         for id in hit {
             if let Some(player) = state.players.get_mut(&id) {
                 player.last_attack_tick = Some(tick);
-                player.lives -= 1;
-                if player.lives == 0 {
-                    player.position = [0.0; 5];
-                    player.lives = PLAYER_LIVES;
-                    player.inventory.fill(0);
-                    send(
-                        player,
-                        b"ZD\nT,You lost all your lives and respawned without your mined blocks.\n".to_vec(),
-                    );
-                    respawned.push(id);
-                }
-                send(player, format!("HP,{}\n", player.lives));
             }
-        }
-        for id in respawned {
-            broadcast(&state, Some(id), &format!("P,{id},0,0,0,0,0\n"));
+            damage_player(&mut state, id, 1,
+                b"ZD\nT,You lost all your lives and respawned without your mined blocks.\n");
         }
     }
 
-    if !positions.is_empty() && state.animals.len() < state.mempool.len() {
-        let active: HashSet<_> = state.animals.iter().map(|a| a.txid.as_str()).collect();
+    let active: HashSet<_> = state.animals.iter().filter(|a| a.wildlife.is_none())
+        .map(|a| a.txid.as_str()).collect();
+    if !positions.is_empty() && active.len() < state.mempool.len() {
         let missing: Vec<_> = state
             .mempool
             .iter()
@@ -613,11 +738,13 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
                     z: f64::from(z),
                     heading: (id % 4) as u8,
                     pacified: false,
+                    wildlife: None,
                 };
                 updates.push_str(&animal.message());
                 state.animals.push(animal);
             }
         }
+        spawn_wildlife(&mut state, &mut terrain, &positions, &mut updates)?;
     }
     if !updates.is_empty() {
         broadcast(&state, None, &updates);
@@ -835,8 +962,9 @@ fn chunk_response(server: &Server, id: u32, p: i32, q: i32, key: i64) -> rusqlit
         }
     }
     let region = (p & !1, q & !1);
-    let neighbor = (if p == region.0 { p - 2 } else { p + 1 }, region.1);
-    for key in [region, neighbor] {
+    let adjacent_p = if p == region.0 { p - 2 } else { p + 1 };
+    let adjacent_q = if q == region.1 { q - 2 } else { q + 1 };
+    for key in [region, (adjacent_p, region.1), (region.0, adjacent_q), (adjacent_p, adjacent_q)] {
         if let Some(flow) = state.flows.get(&key) {
             flow.channel.snapshot(&flow.wet, p, q, &mut output);
         } else if let Some(channel) = flow::Channel::load(&state.db, key)? {
@@ -942,9 +1070,27 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
             |r| r.get(0),
         )
         .optional()?;
-    let previous = edited.unwrap_or(default);
-    let channel_cell = y < 0 && flow::is_channel((x, y, z));
-    let replace_liquid = channel_cell && matches!(previous, 12 | 13);
+    let cell = (x, y, z);
+    let region = flow::region(x, z);
+    let base = edited.unwrap_or(default);
+    let channel_cell = y < 0 && flow::is_channel(cell);
+    let affects_flow = channel_cell || flow::can_spill(cell);
+    let old_flow = if affects_flow {
+        Some(match state.flows.get(&region) {
+            Some(flow) => flow.wet.clone(),
+            None => flow::Channel::settled(&state.db, region)?,
+        })
+    } else {
+        None
+    };
+    let previous = if channel_cell && matches!(base, 0 | 12 | 13) {
+        old_flow.as_ref().and_then(|wet| wet.get(&cell)).map_or(0, |v| v.0)
+    } else if base == 0 {
+        old_flow.as_ref().and_then(|wet| wet.get(&cell)).map_or(base, |v| v.0)
+    } else {
+        base
+    };
+    let replace_liquid = y < 0 && matches!(previous, 12 | 13);
     let allowed =
         (0..=15).contains(&w) || (17..=23).contains(&w) || (32..=67).contains(&w)
             || w == MINA_ORE || w == LAPIS_LAZULI_ORE;
@@ -970,15 +1116,6 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
         }
         return Ok(());
     }
-    let region = flow::region(x, z);
-    let old_flow = if channel_cell {
-        Some(match state.flows.get(&region) {
-            Some(flow) => flow.wet.clone(),
-            None => flow::Channel::settled(&state.db, region)?,
-        })
-    } else {
-        None
-    };
     let transaction = state.db.transaction()?;
     let mut changes = Vec::new();
     for dx in -1..=1 {
@@ -1112,6 +1249,8 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
     transaction.commit()?;
     if let Some(flow) = pending_flow {
         state.flows.insert(region, flow);
+    } else if affects_flow {
+        state.flows.remove(&region);
     }
     if w == 0 {
         let inventory = &mut state.players.get_mut(&id).unwrap().inventory;
@@ -1776,8 +1915,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let server = server.clone();
         thread::spawn(move || loop {
-            thread::sleep(Duration::from_millis(200));
-            advance_flows(&mut server.state.lock().unwrap());
+            for _ in 0..2 {
+                thread::sleep(Duration::from_millis(200));
+                advance_flows(&mut server.state.lock().unwrap());
+            }
+            if let Err(error) = damage_from_lava(&server) {
+                eprintln!("lava damage update failed: {error}");
+            }
         });
     }
     {
@@ -2653,6 +2797,7 @@ mod tests {
                 z: 0.0,
                 heading: 0,
                 pacified: false,
+                wildlife: None,
             });
         }
         update_animals_at(&server, 300).unwrap();
@@ -2810,7 +2955,7 @@ mod tests {
             state.players.get_mut(&2).unwrap().position = [20.0, 202.0, 0.0, 0.0, 0.0];
             let txid = "a".repeat(64);
             state.mempool.insert(txid.clone());
-            state.animals.push(Animal { id: 1, txid, x: 0.0, y: 200.5, z: -3.0, heading: 0, pacified: false });
+            state.animals.push(Animal { id: 1, txid, x: 0.0, y: 200.5, z: -3.0, heading: 0, pacified: false, wildlife: None });
             state.db.execute("INSERT INTO block (p,q,x,y,z,w) VALUES (0,-1,0,202,-1,6)", []).unwrap();
             for z in -2..=1 {
                 state.db.execute(
@@ -2877,6 +3022,7 @@ mod tests {
                 z: 0.0,
                 heading: 0,
                 pacified: false,
+                wildlife: None,
             });
         }
         update_animals_at(&server, 0).unwrap();
@@ -2929,6 +3075,55 @@ mod tests {
             [20.0, -18.0, 0.0, 0.0, 0.0];
         block_edit(&server, 1, 20, -20, 0, 0).unwrap();
         assert_eq!(server.state.lock().unwrap().players[&1].inventory[6], 1);
+    }
+
+    #[test]
+    fn wildlife_stays_wild_and_only_tigers_attack_in_daylight() {
+        let (server, first, _) = setup();
+        {
+            let mut state = server.state.lock().unwrap();
+            state.players.get_mut(&1).unwrap().position = [0.0, 202.0, 0.0, 0.0, 0.0];
+            state.db.execute("INSERT INTO block (p,q,x,y,z,w) VALUES (0,0,0,200,0,6)", []).unwrap();
+            state.animals.push(Animal {
+                id: 3, txid: String::new(), x: 0.0, y: 200.5, z: 0.0,
+                heading: 0, pacified: false, wildlife: Some((Species::Monkey, 0, 0)),
+            });
+        }
+        update_animals_at(&server, 300).unwrap();
+        {
+            let mut state = server.state.lock().unwrap();
+            assert_eq!(state.players[&1].lives, PLAYER_LIVES);
+            state.animals[0].wildlife = Some((Species::Tiger, 0, 0));
+        }
+        update_animals_at(&server, 300).unwrap();
+        update_animals_at(&server, 0).unwrap();
+        let messages = String::from_utf8(first.try_iter().flatten().collect()).unwrap();
+        assert!(messages.contains(",-,0,1\n"));
+        assert!(messages.contains("HP,9\n"));
+        assert_eq!(server.state.lock().unwrap().animals[0].wildlife, Some((Species::Tiger, 0, 0)));
+    }
+
+    #[test]
+    fn lava_spills_into_a_breached_bank_and_burns_the_player() {
+        let (server, first, _) = setup();
+        move_to(&server, (30, -17, 55));
+        block_edit(&server, 1, 30, -17, 55, 0).unwrap();
+        block_edit(&server, 1, 30, -18, 55, 0).unwrap();
+        for _ in 0..4 {
+            advance_flows(&mut server.state.lock().unwrap());
+        }
+        let messages = String::from_utf8(first.try_iter().flatten().collect()).unwrap();
+        assert!(messages.contains("FL,0,1,30,-17,55,13\n"));
+        assert!(messages.contains("FL,0,1,30,-18,55,13\n"));
+        damage_from_lava(&server).unwrap();
+        assert_eq!(server.state.lock().unwrap().players[&1].lives, 5);
+        damage_from_lava(&server).unwrap();
+        let messages = String::from_utf8(first.try_iter().flatten().collect()).unwrap();
+        assert!(messages.contains("ZD\nT,Lava burned you."));
+        let state = server.state.lock().unwrap();
+        assert_eq!(state.players[&1].lives, PLAYER_LIVES);
+        assert_eq!(state.players[&1].position, [0.0; 5]);
+        assert_eq!(state.players[&2].lives, PLAYER_LIVES);
     }
 
     #[test]
@@ -3015,6 +3210,7 @@ mod tests {
                     z: 0.0,
                     heading: 3,
                     pacified: false,
+                    wildlife: None,
                 });
             }
             update_animals_at(&server, 0).unwrap();
@@ -3058,6 +3254,7 @@ mod tests {
                 z: 0.0,
                 heading: 1,
                 pacified: false,
+                wildlife: None,
             });
         }
         update_animals_at(&server, 0).unwrap();

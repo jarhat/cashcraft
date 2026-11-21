@@ -61,6 +61,8 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     'game-close': 'Minimize the game; use the game icon to return.',
     'game-crafting': 'Craft a permanent MINA pickaxe for 2 MINA.',
     'game-ranking': 'Ranking shows ores mined.',
+    'game-send': 'Send tokens to an online player by name.',
+    'game-receive': 'Create a MINA payment request.',
     'game-invite': 'Invite shares the game.',
     'game-sound': 'Sound toggles audio.',
     'game-notifications': 'The gem opens your wallet and notifications.',
@@ -115,6 +117,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     $('game-notifications').setAttribute('aria-controls', connected ? 'notifications-dialog' : 'connection-dialog');
     $('game-guide-wallet').textContent = translate(connected ? 'Wallet and notifications' : 'Connect wallet');
     $('game-ranking').hidden = activeGame !== 'netcraft';
+    $('game-send').hidden = $('game-receive').hidden = activeGame !== 'netcraft';
     if (activeGame) {
       const title = games[activeGame].title;
       $('game-restore').setAttribute('aria-label', `Resume ${title}`);
@@ -262,6 +265,40 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     $(connected ? 'notifications-toggle' : 'connection-open').click();
   };
   $('game-notifications').addEventListener('click', openWallet);
+  const openTransfer = async (target) => {
+    if (!openPlayerTransfer || dialog.hidden || activeGame !== 'netcraft') return;
+    document.exitPointerLock?.();
+    const session = generation;
+    if (!await minimize() || session !== generation) return;
+    await openPlayerTransfer(target, (popup, show) => {
+      if (session !== generation || activeGame !== 'netcraft' || !dialog.open) return false;
+      restore.click();
+      const home = popup.parentNode;
+      const next = popup.nextSibling;
+      stage.appendChild(popup);
+      popup.addEventListener('close', () => home.insertBefore(popup, next), { once: true });
+      show();
+      return true;
+    });
+  };
+  $('game-receive').addEventListener('click', () => openTransfer(null));
+  $('game-send').addEventListener('click', () => {
+    if (dialog.hidden || activeGame !== 'netcraft') return;
+    document.exitPointerLock?.();
+    const prompt = $('game-send-dialog');
+    if (!prompt.open) prompt.showModal();
+    $('game-send-name').focus();
+  });
+  $('game-send-cancel').addEventListener('click', () => $('game-send-dialog').close());
+  $('game-send-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (dialog.hidden || activeGame !== 'netcraft') return;
+    const name = $('game-send-name').value.trim();
+    if (!/^[A-Za-z0-9_]{1,24}$/.test(name)) return;
+    $('game-send-dialog').close();
+    frame.contentWindow?.postMessage({ type: 'netcraft-send-to-player', name }, '*');
+    frame.focus();
+  });
   sound.addEventListener('click', () => {
     if (activeGame !== 'netcraft' || sound.hidden) return;
     soundEnabled = !soundEnabled;
@@ -297,8 +334,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         $('game-dialog-status').textContent = translate('Invalid player receive address.');
         return;
       }
-      document.exitPointerLock?.();
-      if (await minimize()) await openPlayerTransfer(send ? { name, address } : null);
+      await openTransfer(send ? { name, address } : null);
       return;
     }
     if (event.data?.type === 'netcraft-sound-state' && typeof event.data.enabled === 'boolean') {

@@ -420,6 +420,18 @@ def token_reward() -> dict[str, str]:
     return {"category": BCH_REWARD_CATEGORY}
 
 
+@app.get("/api/ore-categories")
+def ore_categories() -> dict[str, str]:
+    categories = {"green": BCH_REWARD_CATEGORY}
+    for color, key in (("red", "BCH_REDSTONE_REWARD_CATEGORY"), ("blue", "BCH_LAPIS_REWARD_CATEGORY")):
+        category = os.getenv(key, "").lower()
+        if category:
+            if not CATEGORY_RE.fullmatch(category) or category in categories.values():
+                raise HTTPException(status_code=503, detail="Ore categories are misconfigured.")
+            categories[color] = category
+    return categories
+
+
 @app.get("/api/crafting")
 def crafting() -> dict[str, str | None]:
     if not CRAFTING_ADDRESS:
@@ -497,6 +509,18 @@ def chain_status() -> dict:
                 "difficulty": difficulty,
                 "syncing": info["initialblockdownload"] or headers > blocks,
             }
+            for key, field in (("mediantime", "median_time"), ("size_on_disk", "size_on_disk")):
+                value = info.get(key)
+                if type(value) is int and 0 <= value <= 2**53 - 1:
+                    _chain_status_cache[field] = value
+            work = info.get("chainwork")
+            if isinstance(work, str) and re.fullmatch(r"[0-9a-fA-F]{1,64}", work):
+                _chain_status_cache["chainwork"] = work.lower()
+            progress = info.get("verificationprogress")
+            if type(progress) in (int, float) and 0 <= progress <= 1:
+                _chain_status_cache["verification_progress"] = progress
+            if type(info.get("pruned")) is bool:
+                _chain_status_cache["pruned"] = info["pruned"]
             _chain_status_cached_at = time.monotonic()
             return _chain_status_cache
         except (RuntimeError, ValueError, KeyError) as exc:

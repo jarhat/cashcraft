@@ -2804,10 +2804,25 @@ body::before { content: none; display: none; }
 .game-guide .notifications-heading { position: static; display: flex; justify-content: space-between; align-items: center; }
 .game-guide p { margin: 8px 0; }
 .game-stage:fullscreen { width: 100%; height: 100%; border: 0; border-radius: 0; }
-.game-stage:fullscreen iframe { height: 100%; }
+.game-stage:fullscreen iframe { height: calc(100% - 2rem); }
+.game-chain-ticker { display: none; }
+.game-stage:fullscreen .game-chain-ticker {
+  display: block; box-sizing: border-box; height: 2rem;
+  border-top: 1px solid #285345; background: #0b1a15;
+  color: #c0e2d2; line-height: 1rem;
+}
+.game-chain-ticker .market-ticker-item strong { color: #92f4b8; }
+.game-chain-ticker:focus-within { overflow-x: auto; }
 .game-stage:fullscreen .game-wallet-actions { display: none; }
 #token-qr-value { overflow-wrap: anywhere; user-select: all; }
 #token-qr-image[hidden] { display: none; }
+.receive-ore-picker summary { cursor: pointer; padding: .6rem; }
+.receive-ore-options { display: grid; gap: .25rem; }
+.receive-ore-options button { text-align: left; }
+.receive-ore-gem { color: var(--ore-color); margin-inline-end: .45em; }
+.receive-ore-gem.green { --ore-color: #36ca81; }
+.receive-ore-gem.red { --ore-color: #ee5665; }
+.receive-ore-gem.blue { --ore-color: #429bfa; }
 .game-dialog.is-fullscreen #game-close, .game-dialog.is-fullscreen .game-share { display: none; }
 .game-share svg { width: 20px; height: 20px; }
 .game-controls button { position: relative; }
@@ -3144,7 +3159,7 @@ html[data-theme="voxel"] .topbar > .mesh-sun {
 .game-panel, .game-stage {
   container-type: inline-size;
   --game-controls-inset: 8px;
-  --game-control-size: clamp(24px, calc((100cqw - 54px) / 8), 52px);
+  --game-control-size: clamp(23px, calc((100cqw - 66px) / 10), 52px);
 }
 .game-panel { margin: 12px 0; }
 .game-panel > .game-toolbar { margin: 0; }
@@ -3179,7 +3194,7 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
 .game-panel > .game-auto-open,
 .game-auto-open .game-stage { min-height: 0; flex: 1; }
 .game-auto-open[open]:not([hidden]) { display: flex; flex-direction: column; }
-.game-auto-open .game-stage iframe { height: 100%; }
+.game-auto-open .game-stage:not(:fullscreen) iframe { height: 100%; }
 .game-controls-right {
   inset: var(--game-controls-inset) var(--game-controls-inset) auto auto;
   display: flex;

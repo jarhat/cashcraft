@@ -486,11 +486,27 @@ class RewardTests(unittest.TestCase):
         with patch.object(backend, "NETCRAFT_DB_PATH", str(path) + "-missing"):
             self.assertEqual(client.get("/api/mina-rewards-sent").json(), {"sent": "1"})
 
+    def test_ore_categories_publish_only_configured_distinct_tokens(self):
+        client = TestClient(backend.app)
+        with patch.dict(os.environ, {
+            "BCH_REDSTONE_REWARD_CATEGORY": "C" * 64,
+            "BCH_LAPIS_REWARD_CATEGORY": "d" * 64,
+        }):
+            self.assertEqual(client.get("/api/ore-categories").json(), {
+                "green": "b" * 64, "red": "c" * 64, "blue": "d" * 64,
+            })
+        with patch.dict(os.environ, {"BCH_REDSTONE_REWARD_CATEGORY": "", "BCH_LAPIS_REWARD_CATEGORY": ""}):
+            self.assertEqual(client.get("/api/ore-categories").json(), {"green": "b" * 64})
+        with patch.dict(os.environ, {"BCH_REDSTONE_REWARD_CATEGORY": "b" * 64}):
+            self.assertEqual(client.get("/api/ore-categories").status_code, 503)
+
     def test_chain_status_uses_cached_node_data_and_reports_sync(self):
         info = {
             "chain": "main", "blocks": 800000, "headers": 800002,
             "difficulty": 123.5, "bestblockhash": "A" * 64,
             "initialblockdownload": False, "private_field": "not exposed",
+            "chainwork": "FF", "mediantime": 1234, "verificationprogress": .95,
+            "size_on_disk": 5678, "pruned": True,
         }
         client = TestClient(backend.app)
         with patch.object(backend, "_chain_status_cache", None), \
@@ -502,6 +518,8 @@ class RewardTests(unittest.TestCase):
             self.assertEqual(first.json(), {
                 "network": "mainnet", "blocks": 800000, "headers": 800002,
                 "difficulty": 123.5, "best_block_hash": "a" * 64, "syncing": True,
+                "chainwork": "ff", "median_time": 1234, "verification_progress": .95,
+                "size_on_disk": 5678, "pruned": True,
             })
             self.assertEqual(second.json(), first.json())
             rpc.assert_called_once_with("getblockchaininfo", [])

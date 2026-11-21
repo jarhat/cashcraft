@@ -50,13 +50,16 @@ test('chain ticker renders node and payout data independently', async (t) => {
     addEventListener(_type, callback) { visibility = callback; },
   };
   const requests = [];
+  const technical = { ...status, chainwork: 'abcdef', verification_progress: .9,
+    median_time: 1700000000, size_on_disk: 2 ** 30, pruned: true };
   globalThis.fetch = async (url) => {
     requests.push(url);
-    return { ok: true, json: async () => url.includes('mina-ore') ? { mined: '5678' } : url.includes('payout-balance') ? { satoshis: '120000000' } : status };
+    return { ok: true, json: async () => url.includes('mina-ore') ? { mined: '5678' } : url.includes('payout-balance') ? { satoshis: '120000000' } : technical };
   };
   globalThis.setInterval = (callback, delay) => { refresh = callback; interval = delay; };
   const container = new Element();
-  setupChainTicker(container, { warn() {} });
+  const game = new Element();
+  setupChainTicker(container, { warn() {} }, game);
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(interval, 30000);
   const [first, duplicate] = container.children[0].children;
@@ -69,6 +72,17 @@ test('chain ticker renders node and payout data independently', async (t) => {
   assert.equal(first.children[7].children[1].textContent, '1.20000000 BCH');
   assert.ok(!requests.includes('/api/mina-rewards-sent'));
   assert.equal(duplicate.attributes['aria-hidden'], 'true');
+  const track = game.children[0];
+  const detail = Object.fromEntries(track.children[0].children.map(({ children: [label, value] }) =>
+    [label.textContent, value.textContent]));
+  assert.equal(detail['Tip hash'], status.best_block_hash);
+  assert.equal(detail['Header lag'], '2');
+  assert.equal(detail.Chainwork, '0xabcdef');
+  assert.equal(detail.Verification, '90.00000%');
+  assert.equal(detail.Storage, 'Pruned');
+  assert.equal(requests.length, 3);
+  await refresh();
+  assert.equal(game.children[0], track);
   globalThis.fetch = async () => ({ ok: false, status: 503 });
   await refresh();
   assert.equal(container.children[0].children[0].children[0].children[1].textContent, 'Unavailable');

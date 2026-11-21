@@ -42,7 +42,46 @@ export async function fetchPayoutBalance() {
   return `${(amount / 100000000n).toLocaleString()}.${(amount % 100000000n).toString().padStart(8, '0')} BCH`;
 }
 
-export function setupChainTicker(container, logger = console) {
+export function setupChainTicker(container, logger = console, gameContainer = null) {
+  const rendered = new WeakMap();
+  function render(target, items) {
+    const update = (detail, [, value, title]) => {
+      detail.textContent = value;
+      detail.title = title || '';
+    };
+    const previous = rendered.get(target);
+    if (previous && previous.labels.length === items.length &&
+        items.every(([label], index) => label === previous.labels[index])) {
+      for (const details of previous.groups) details.forEach((detail, index) => update(detail, items[index]));
+      return;
+    }
+    const track = document.createElement('div');
+    track.className = 'market-ticker-track';
+    const groups = [];
+    for (let copy = 0; copy < 2; copy++) {
+      const group = document.createElement('div');
+      const details = [];
+      group.className = 'market-ticker-group';
+      if (copy) group.setAttribute('aria-hidden', 'true');
+      for (const entry of items) {
+        const [label] = entry;
+        const item = document.createElement('span');
+        item.className = 'market-ticker-item';
+        const name = document.createElement('strong');
+        name.textContent = label;
+        if (label === 'MINA ore') name.className = 'mina-label';
+        const detail = document.createElement('span');
+        update(detail, entry);
+        details.push(detail);
+        item.append(name, detail);
+        group.append(item);
+      }
+      track.append(group);
+      groups.push(details);
+    }
+    target.replaceChildren(track);
+    rendered.set(target, { labels: items.map(([label]) => label), groups });
+  }
   let loading = false;
   async function refresh() {
     if (loading || document.hidden) return;
@@ -73,27 +112,37 @@ export function setupChainTicker(container, logger = console) {
         logger.warn('Payout wallet balance unavailable:', balance.reason);
         items.push(['Payout wallet', 'Unavailable']);
       }
-      const track = document.createElement('div');
-      track.className = 'market-ticker-track';
-      for (let copy = 0; copy < 2; copy++) {
-        const group = document.createElement('div');
-        group.className = 'market-ticker-group';
-        if (copy) group.setAttribute('aria-hidden', 'true');
-        for (const [label, value, title] of items) {
-          const item = document.createElement('span');
-          item.className = 'market-ticker-item';
-          const name = document.createElement('strong');
-          name.textContent = label;
-          if (label === 'MINA ore') name.className = 'mina-label';
-          const detail = document.createElement('span');
-          detail.textContent = value;
-          if (title) detail.title = title;
-          item.append(name, detail);
-          group.append(item);
+      render(container, items);
+      if (gameContainer) {
+        const detailed = [];
+        if (chain.status === 'fulfilled') {
+          const s = chain.value;
+          detailed.push(
+            ['BCHN', s.syncing ? 'Mainnet / syncing' : 'Mainnet / synced'],
+            ['Height', s.blocks.toLocaleString()],
+            ['Headers', s.headers.toLocaleString()],
+            ['Header lag', (s.headers - s.blocks).toLocaleString()],
+            ['Difficulty', s.difficulty.toLocaleString(undefined, { maximumSignificantDigits: 12 })],
+            ['Tip hash', s.best_block_hash],
+          );
+          if (typeof s.verification_progress === 'number' && s.verification_progress >= 0 && s.verification_progress <= 1) {
+            detailed.push(['Verification', `${(s.verification_progress * 100).toFixed(5)}%`]);
+          }
+          if (Number.isSafeInteger(s.median_time) && s.median_time >= 0 && s.median_time <= 8640000000000) {
+            detailed.push(['Median block time', new Date(s.median_time * 1000).toISOString()]);
+          }
+          if (typeof s.chainwork === 'string' && /^[0-9a-f]{1,64}$/.test(s.chainwork)) {
+            detailed.push(['Chainwork', `0x${s.chainwork}`]);
+          }
+          if (Number.isSafeInteger(s.size_on_disk) && s.size_on_disk >= 0) {
+            detailed.push(['Block data', `${(s.size_on_disk / 2 ** 30).toFixed(2)} GiB`]);
+          }
+          if (typeof s.pruned === 'boolean') detailed.push(['Storage', s.pruned ? 'Pruned' : 'Unpruned']);
+        } else {
+          detailed.push(['BCHN', 'Unavailable']);
         }
-        track.append(group);
+        render(gameContainer, [...detailed, ...items.slice(-2)]);
       }
-      container.replaceChildren(track);
     } finally {
       loading = false;
     }

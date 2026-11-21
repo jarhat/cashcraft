@@ -1273,7 +1273,7 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
   const end = source.indexOf("\nfor (const id of ['receive-address'", start);
   const helpers = source.slice(source.indexOf('function paymentQrImage()'), source.indexOf("\n$('download-payment-qr')"));
   const context = {
-    $: element, walletReady: false, mainnet: true, loadWalletDependencies: async () => {},
+    $: element, walletReady: false, mainnet: true, loadWalletDependencies: async () => {}, showGameReceiveQr: null,
     validateRecipient: (address) => address,
     network: 'mainnet', paymentGeneration: 0, paymentPriceSnapshot: null,
     window: { location: { href: 'https://ctf.example/' } }, URL,

@@ -152,6 +152,12 @@
           <img src="/mina-gem.svg" alt="">
           <span id="game-notification-indicator" class="visually-hidden" hidden>Unread wallet notification</span>
         </button>
+        <button id="game-send" type="button" aria-label="Send tokens to a player" title="Send tokens to a player" aria-haspopup="dialog" aria-controls="game-send-dialog" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17V4m-5 5 5-5 5 5M4 17v3h16v-3"/></svg>
+        </button>
+        <button id="game-receive" type="button" aria-label="Receive tokens" title="Receive tokens" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v13m-5-5 5 5 5-5M4 17v3h16v-3"/></svg>
+        </button>
         <button id="game-fullscreen" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/></svg>
         </button>
@@ -376,6 +382,11 @@
 
         <div class="form receive-form">
           <div>
+            <details id="receive-ore-picker" class="receive-ore-picker" hidden>
+              <summary id="receive-ore-selection">Choose a MINA category</summary>
+              <div id="receive-ore-options" class="receive-ore-options"></div>
+            </details>
+            <div id="receive-custom-category">
             <label for="receive-category">Token category ID</label>
             <div class="receive-category-field">
             <button id="edit-receive-category" class="edit-field" type="button" aria-label="Edit token category" aria-controls="receive-category"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4-.8L20 7l-3-3L5 16zm10-13 3 3"/></svg></button>
@@ -390,6 +401,7 @@
             <span id="receive-pusd" class="receive-token" hidden>ParyonUSD</span>
             </div>
             <span class="fine">Mainnet defaults to ParyonUSD (PUSD); you can enter another category.</span>
+            </div>
           </div>
 
           <label>
@@ -403,7 +415,7 @@
               autocomplete="off"
               value="1"
             >
-            <span class="fine">Enter base units; 100 base units equal 1 PUSD.</span>
+            <span class="fine">Enter whole base units.<span id="receive-pusd-units"> 100 base units equal 1 PUSD.</span></span>
           </label>
           <label class="full">
             Sharing note (optional)
@@ -633,11 +645,23 @@
     <p id="game-dialog-status" class="fine" role="status"></p>
     <div id="game-stage" class="game-stage">
       <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="autoplay *; fullscreen; gamepad *" allowfullscreen></iframe>
+      <div id="game-chain-ticker" class="market-ticker game-chain-ticker" role="region" tabindex="0" aria-label="Detailed BCHN node statistics">Loading blockchain status…</div>
       <div id="game-wizard-speech" class="game-wizard-speech" role="status" aria-live="polite" hidden>
         <img src="/wizard.svg" alt="">
         <div><p id="game-wizard-message"></p><div id="game-wizard-ores" class="ore-stats" hidden></div></div>
       </div>
       <nav id="game-wallet-actions" class="game-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
+      <dialog id="game-send-dialog" class="notifications-dialog" aria-labelledby="game-send-title">
+        <form id="game-send-form">
+          <h2 id="game-send-title">Send tokens to a player</h2>
+          <label for="game-send-name">Online player name</label>
+          <input id="game-send-name" required maxlength="24" pattern="[A-Za-z0-9_]+" autocomplete="off" spellcheck="false">
+          <div class="browser-wallet-actions">
+            <button class="small-button" type="submit">Find player</button>
+            <button id="game-send-cancel" class="small-button" type="button">Cancel</button>
+          </div>
+        </form>
+      </dialog>
       <dialog id="game-guide" class="game-guide" aria-labelledby="game-guide-title">
         <div class="game-guide-body">
           <div class="notifications-heading">

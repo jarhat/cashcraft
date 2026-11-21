@@ -1443,6 +1443,11 @@
             Module.setEmbeddedSound(event.data.enabled);
             return;
           }
+          if (event.data.type === 'netcraft-send-to-player' &&
+              typeof event.data.name === 'string' && /^[A-Za-z0-9_]{1,24}$/.test(event.data.name)) {
+            if (ready) Module.ccall('netcraft_send_to_player', null, ['string'], [event.data.name]);
+            return;
+          }
           if (event.data.type !== 'netcraft-reward-address' || typeof event.data.address !== 'string') return;
           if (event.data.embeddedSound === true) Module.enableEmbeddedSound();
           pending = event.data.address;
