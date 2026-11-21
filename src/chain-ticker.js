@@ -16,19 +16,6 @@ export async function fetchChainStatus() {
   return status;
 }
 
-export async function fetchMinaRewardsSent() {
-  const response = await fetch('/api/mina-rewards-sent', {
-    cache: 'no-store',
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!response.ok) throw new Error(`MINA payout total request failed (${response.status}).`);
-  const data = await response.json();
-  if (typeof data.sent !== 'string' || !/^(0|[1-9][0-9]*)$/.test(data.sent)) {
-    throw new Error('Invalid MINA payout total.');
-  }
-  return BigInt(data.sent).toLocaleString();
-}
-
 export async function fetchMinaOreMined() {
   const response = await fetch('/api/mina-ore-mined', {
     cache: 'no-store',
@@ -61,8 +48,8 @@ export function setupChainTicker(container, logger = console) {
     if (loading || document.hidden) return;
     loading = true;
     try {
-      const [chain, rewards, balance, mined] = await Promise.allSettled([
-        fetchChainStatus(), fetchMinaRewardsSent(), fetchPayoutBalance(), fetchMinaOreMined(),
+      const [chain, mined, balance] = await Promise.allSettled([
+        fetchChainStatus(), fetchMinaOreMined(), fetchPayoutBalance(),
       ]);
       const items = [];
       if (chain.status === 'fulfilled') {
@@ -79,21 +66,12 @@ export function setupChainTicker(container, logger = console) {
         logger.warn('Blockchain status unavailable:', chain.reason);
         items.push(['Blockchain status', 'Unavailable']);
       }
-      if (rewards.status === 'fulfilled') {
-        items.push(['MINA rewards sent', rewards.value]);
-      } else {
-        logger.warn('MINA payout total unavailable:', rewards.reason);
-        items.push(['MINA rewards sent', 'Unavailable']);
-      }
+      if (mined.status !== 'fulfilled') logger.warn('MINA ore total unavailable:', mined.reason);
+      items.push(['MINA ore', mined.status === 'fulfilled' ? mined.value : 'Unavailable', 'Ore blocks mined since tracking began']);
       if (balance.status === 'fulfilled') items.push(['Payout wallet', balance.value]);
       else {
         logger.warn('Payout wallet balance unavailable:', balance.reason);
         items.push(['Payout wallet', 'Unavailable']);
-      }
-      if (mined.status === 'fulfilled') items.push(['MINA ore mined', mined.value, 'Ore mined since tracking began']);
-      else {
-        logger.warn('MINA ore total unavailable:', mined.reason);
-        items.push(['MINA ore mined', 'Unavailable', 'Ore mined since tracking began']);
       }
       const track = document.createElement('div');
       track.className = 'market-ticker-track';
@@ -106,7 +84,7 @@ export function setupChainTicker(container, logger = console) {
           item.className = 'market-ticker-item';
           const name = document.createElement('strong');
           name.textContent = label;
-          if (label === 'MINA rewards sent' || label === 'MINA ore mined') name.className = 'mina-label';
+          if (label === 'MINA ore') name.className = 'mina-label';
           const detail = document.createElement('span');
           detail.textContent = value;
           if (title) detail.title = title;

@@ -45,7 +45,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   let tutorialActive = false;
   const tutorialTips = [
     'Use WASD to move, space to jump, left click to mine and right click to build. On mobile, use the joystick and the jump, mine and build buttons. Scroll to choose blocks.',
-    'Mine 10 natural MINA ore blocks to earn 1 MINA. Your progress appears above your hearts.',
+    'Mine 10 natural MINA ore blocks to earn 1 MINA. Your mined ore count appears above your hearts.',
     'The gem opens your wallet and notifications. Connect a wallet to receive your mining rewards.',
     'Invite shares the game; Ranking shows mining rewards; fullscreen expands the game; sound toggles audio.',
     'After earning 2 MINA, use the crafting table to review a 2 MINA payment for a permanent MINA pickaxe.',

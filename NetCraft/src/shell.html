@@ -1478,7 +1478,7 @@
             if (context.state !== 'running') throw new Error('Audio requires a user gesture');
             if (!Module.FS) return;
             if (!loading) {
-              loading = Promise.all(['mine', 'build', 'step'].map(async function(name) {
+              loading = Promise.all(['mine', 'build', 'step', 'swim', 'dive'].map(async function(name) {
                 var bytes = Module.FS.readFile('/sounds/' + name + '.wav');
                 buffers[name] = await context.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
               })).catch(function(error) { loading = null; throw error; });
@@ -1548,7 +1548,7 @@
             var rate = name === 'step' ? .88 : name === 'mine' ? .96 : .92;
             source.playbackRate.value = rate + Math.random() * (name === 'step' ? .2 : .1);
             var effectGain = context.createGain();
-            effectGain.gain.value = (name === 'step' ? .15 : .25) * (.9 + Math.random() * .2);
+            effectGain.gain.value = (name === 'step' || name === 'swim' ? .15 : .25) * (.9 + Math.random() * .2);
             source.connect(effectGain);
             effectGain.connect(context.destination);
             source.start();

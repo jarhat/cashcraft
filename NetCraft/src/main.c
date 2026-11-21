@@ -229,7 +229,6 @@ typedef struct {
     double message_times[MAX_MESSAGES];
     uint32_t mina_mined;
     int lives;
-    int mina_progress;
     bool zombies_active;
     int width;
     int height;
@@ -772,10 +771,10 @@ int chunk_distance(Chunk *chunk, int p, int q) {
     return MAX(dp, dq);
 }
 
-int chunk_visible(float planes[6][4], int p, int q, int miny, int maxy) {
-    int x = p * CHUNK_SIZE - 1;
-    int z = q * CHUNK_SIZE - 1;
-    int d = CHUNK_SIZE + 1;
+int chunk_visible(float planes[6][4], int p, int q, int miny, int maxy, int padding) {
+    int x = p * CHUNK_SIZE - 1 - padding;
+    int z = q * CHUNK_SIZE - 1 - padding;
+    int d = CHUNK_SIZE + 1 + 2 * padding;
     float points[8][3] = {
         {x + 0, miny, z + 0},
         {x + d, miny, z + 0},
@@ -1893,7 +1892,7 @@ void ensure_chunks_worker(Player *player, Worker *worker) {
             }
 
             const int distance = MAX(ABS(dp), ABS(dq));
-            const int invisible = !chunk_visible(planes, a, b, WORLD_MIN_Y, WORLD_MAX_Y);
+            const int invisible = !chunk_visible(planes, a, b, WORLD_MIN_Y, WORLD_MAX_Y, 0);
 
             /*
              * Lower scores run first: visible, nearby chunks are preferred.
@@ -2207,11 +2206,12 @@ int get_block(int x, int y, int z) {
     return 0;
 }
 
+static bool water_at_player(const State *s, float offset) {
+    return abs(get_block(roundf(s->x), roundf(s->y + offset), roundf(s->z))) == Item_WATER;
+}
+
 static bool player_in_water(const State *s) {
-    int x = roundf(s->x), z = roundf(s->z);
-    int head = get_block(x, roundf(s->y), z);
-    int body = get_block(x, roundf(s->y - 1.0f), z);
-    return abs(head) == Item_WATER || abs(body) == Item_WATER;
+    return water_at_player(s, 0) || water_at_player(s, -1);
 }
 
 void builder_block(int x, int y, int z, int w) {
@@ -2248,7 +2248,10 @@ int render_chunks(Attrib *attrib, Player *player) {
     glUniform1f(attrib->extra3, g->render_radius * CHUNK_SIZE);
     glUniform1i(attrib->extra4, g->ortho);
     glUniform1f(attrib->timer, time_of_day());
-    glUniform1f(attrib->extra5, fmod(glfwGetTime(), 20.0));
+    double now = glfwGetTime();
+    glUniform1f(attrib->extra5, fmod(now, 20.0));
+    const int drift = 12;
+    glUniform2f(attrib->cloud_offset, drift * sin(now / 48.0), drift * cos(now / 48.0));
     for (int i = 0; i < g->chunk_count; i++) {
         Chunk *chunk = g->chunks + i;
 #ifdef __EMSCRIPTEN__
@@ -2258,7 +2261,7 @@ int render_chunks(Attrib *attrib, Player *player) {
             continue;
         }
         if (!chunk_visible(
-            planes, chunk->p, chunk->q, chunk->miny, chunk->maxy))
+            planes, chunk->p, chunk->q, chunk->miny, chunk->maxy, chunk->maxy >= 128 ? drift : 0))
         {
             continue;
         }
@@ -2291,7 +2294,7 @@ void render_signs(Attrib *attrib, Player *player) {
             continue;
         }
         if (!chunk_visible(
-            planes, chunk->p, chunk->q, chunk->miny, chunk->maxy))
+            planes, chunk->p, chunk->q, chunk->miny, chunk->maxy, 0))
         {
             continue;
         }
@@ -3669,7 +3672,8 @@ void handle_movement(double dt) {
 #ifdef __EMSCRIPTEN__
     static float step_distance = 0;
     static double last_grounded = 0;
-    float old_x = g->players->state.x, old_z = g->players->state.z;
+    static SwimAudio swim_audio;
+    State old = g->players->state;
     bool grounded = false;
 #endif
     State *s = &g->players->state;
@@ -3791,9 +3795,17 @@ void handle_movement(double dt) {
         s->y = highest_block(s->x, s->z) + 2;
     }
 #ifdef __EMSCRIPTEN__
-    if (grounded) last_grounded = glfwGetTime();
-    if (!g->flying && (grounded || (dy < 0 && glfwGetTime() - last_grounded < 0.25))) {
-        step_distance += hypotf(s->x - old_x, s->z - old_z);
+    bool submerged = !g->flying && water_at_player(s, 0);
+    bool wet = submerged || (!g->flying && water_at_player(s, -1));
+    float horizontal = hypotf(s->x - old.x, s->z - old.z);
+    float stroke_distance = (sx || sz || jumping || crouching) ? hypotf(horizontal, s->y - old.y) : 0;
+    SwimSound effect = swim_sound(&swim_audio, wet, submerged, stroke_distance, dt);
+    if (effect != SWIM_SILENT) {
+        EM_ASM({ if (Module.playGameSound) Module.playGameSound($0 ? 'dive' : 'swim'); }, effect == SWIM_DIVE);
+    }
+    if (grounded && !wet) last_grounded = glfwGetTime();
+    if (!wet && !g->flying && (grounded || (dy < 0 && glfwGetTime() - last_grounded < 0.25))) {
+        step_distance += horizontal;
         if (step_distance >= 2.0f) {
             step_distance = 0;
             EM_ASM(if (Module.playGameSound) Module.playGameSound('step'););
@@ -3927,7 +3939,6 @@ void parse_buffer(char *buffer, int len) {
         int guest_blocks, guest_unlocked;
         if (line[0] == 'G' && sscanf(line, "G,%d,%d", &guest_blocks, &guest_unlocked) == 2 &&
             guest_blocks >= 0 && guest_blocks < 10 && (guest_unlocked == 0 || guest_unlocked == 1)) {
-            g->mina_progress = guest_blocks;
 #ifdef __EMSCRIPTEN__
             EM_ASM_ARGS({
                 parent.postMessage({ type: 'netcraft-mining-progress', blocks: $0, unlocked: !!$1 }, '*');
@@ -4267,6 +4278,7 @@ int main(int argc, char **argv) {
     block_attrib.extra3 = glGetUniformLocation(program, "fog_distance");
     block_attrib.extra4 = glGetUniformLocation(program, "ortho");
     block_attrib.extra5 = glGetUniformLocation(program, "flow_time");
+    block_attrib.cloud_offset = glGetUniformLocation(program, "cloud_offset");
     block_attrib.camera = glGetUniformLocation(program, "camera");
     block_attrib.timer = glGetUniformLocation(program, "timer");
 
@@ -4780,8 +4792,9 @@ void render_scene() {
             }
             float matrix[16];
             set_matrix_item(matrix, g->width, g->height, g->scale);
-            matrix[12] = -38.0f * g->scale / g->width;
-            matrix[13] = 1.0f - 58.0f * g->scale / g->height;
+            for (int i = 0; i < 12; i++) matrix[i] *= 0.65f;
+            matrix[12] = -120.0f * g->scale / g->width;
+            matrix[13] = -1.0f + 80.0f * g->scale / g->height;
             glUseProgram(block_attrib.program);
             glUniform3f(block_attrib.camera, 0, 0, 5);
             glUniform1i(block_attrib.sampler, 0);
@@ -4802,10 +4815,8 @@ void render_scene() {
     float tx = ts / 2;
     float ty = g->height - ts;
     if (g->show_ui && g->initialized) {
-        snprintf(text_buffer, sizeof(text_buffer), "x%u", (unsigned)g->mina_mined);
-        render_text(&text_attrib, ALIGN_LEFT, g->width / 2 + 5 * g->scale, g->height - 29 * g->scale, ts, text_buffer);
-        snprintf(text_buffer, sizeof(text_buffer), "MINA %d/10", g->mina_progress);
-        render_text(&text_attrib, ALIGN_CENTER, g->width / 2, 40.0f * g->scale, ts, text_buffer);
+        snprintf(text_buffer, sizeof(text_buffer), "MINA ore: %u", (unsigned)g->mina_mined);
+        render_text(&text_attrib, ALIGN_LEFT, g->width / 2 - 42.0f * g->scale, 40.0f * g->scale, ts, text_buffer);
     }
     if (g->show_info_text && g->show_ui && g->initialized) {
         static char *build_info_string =

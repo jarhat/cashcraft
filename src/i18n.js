@@ -3,7 +3,7 @@ import { wikiTranslations } from './wiki-translations.js';
 const spanish = {
   'Craft a MINA pickaxe with 2 MINA': 'Fabricar un pico MINA con 2 MINA',
   'Next wizard tutorial tip': 'Siguiente consejo del mago',
-  'Mine 10 natural MINA ore blocks to earn 1 MINA. Your progress appears above your hearts.': 'Mina 10 bloques naturales de mineral MINA para ganar 1 MINA. Tu progreso aparece sobre los corazones.',
+  'Mine 10 natural MINA ore blocks to earn 1 MINA. Your mined ore count appears above your hearts.': 'Mina 10 bloques naturales de mineral MINA para ganar 1 MINA. El total de mineral extraído aparece sobre los corazones.',
   'After earning 2 MINA, use the crafting table to review a 2 MINA payment for a permanent MINA pickaxe.': 'Tras ganar 2 MINA, usa la mesa de fabricación para revisar un pago de 2 MINA por un pico MINA permanente.',
   'You earned 2 MINA! Use the crafting table to review a payment for your pickaxe.': '¡Ganaste 2 MINA! Usa la mesa de fabricación para revisar el pago de tu pico.',
   '1 MINA earned! Connect a wallet to receive your reward.': '¡Ganaste 1 MINA! Conecta una cartera para recibir tu recompensa.',
@@ -248,7 +248,7 @@ const spanish = {
 const french = {
   'Craft a MINA pickaxe with 2 MINA': 'Fabriquer une pioche MINA avec 2 MINA',
   'Next wizard tutorial tip': 'Conseil suivant du magicien',
-  'Mine 10 natural MINA ore blocks to earn 1 MINA. Your progress appears above your hearts.': 'Minez 10 blocs naturels de minerai MINA pour gagner 1 MINA. Votre progression apparaît au-dessus des cœurs.',
+  'Mine 10 natural MINA ore blocks to earn 1 MINA. Your mined ore count appears above your hearts.': 'Minez 10 blocs naturels de minerai MINA pour gagner 1 MINA. Le nombre de blocs minés apparaît au-dessus des cœurs.',
   'After earning 2 MINA, use the crafting table to review a 2 MINA payment for a permanent MINA pickaxe.': 'Après avoir gagné 2 MINA, utilisez la table pour vérifier un paiement de 2 MINA pour une pioche MINA permanente.',
   'You earned 2 MINA! Use the crafting table to review a payment for your pickaxe.': 'Vous avez gagné 2 MINA ! Utilisez la table pour vérifier le paiement de votre pioche.',
   '1 MINA earned! Connect a wallet to receive your reward.': '1 MINA gagné ! Connectez un portefeuille pour recevoir votre récompense.',
@@ -493,7 +493,7 @@ const french = {
 const german = {
   'Craft a MINA pickaxe with 2 MINA': 'MINA-Spitzhacke für 2 MINA herstellen',
   'Next wizard tutorial tip': 'Nächster Tipp des Zauberers',
-  'Mine 10 natural MINA ore blocks to earn 1 MINA. Your progress appears above your hearts.': 'Baue 10 natürliche MINA-Erzblöcke ab, um 1 MINA zu verdienen. Dein Fortschritt erscheint über den Herzen.',
+  'Mine 10 natural MINA ore blocks to earn 1 MINA. Your mined ore count appears above your hearts.': 'Baue 10 natürliche MINA-Erzblöcke ab, um 1 MINA zu verdienen. Die Anzahl abgebauter Erzblöcke erscheint über den Herzen.',
   'After earning 2 MINA, use the crafting table to review a 2 MINA payment for a permanent MINA pickaxe.': 'Nutze nach 2 verdienten MINA die Werkbank, um eine Zahlung von 2 MINA für eine dauerhafte MINA-Spitzhacke zu prüfen.',
   'You earned 2 MINA! Use the crafting table to review a payment for your pickaxe.': 'Du hast 2 MINA verdient! Prüfe an der Werkbank die Zahlung für deine Spitzhacke.',
   '1 MINA earned! Connect a wallet to receive your reward.': '1 MINA verdient! Verbinde eine Wallet, um deine Belohnung zu erhalten.',

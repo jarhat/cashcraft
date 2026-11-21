@@ -23,6 +23,15 @@ int main(void) {
     assert(swim_velocity(0, 1, true, false) > 0);
     assert(swim_velocity(0, 1, false, true) < 0);
     assert(swim_velocity(0, 1, false, false) < 0);
+    SwimAudio audio = {0};
+    assert(swim_sound(&audio, false, false, 3, 1) == SWIM_SILENT);
+    assert(swim_sound(&audio, true, false, 0, .1f) == SWIM_DIVE);
+    assert(swim_sound(&audio, true, true, 0, .1f) == SWIM_SILENT);
+    assert(swim_sound(&audio, true, false, 0, 1) == SWIM_SILENT);
+    assert(swim_sound(&audio, true, true, 0, .1f) == SWIM_DIVE);
+    assert(swim_sound(&audio, true, true, 1, .3f) == SWIM_SILENT);
+    assert(swim_sound(&audio, true, true, 1, .3f) == SWIM_STROKE);
+    assert(swim_sound(&audio, true, true, 0, 1) == SWIM_SILENT);
     int palms = 0;
     for (int x = 0; x < 32; x++) {
         for (int z = 0; z < 32; z++) {

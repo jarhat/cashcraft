@@ -28,11 +28,11 @@ and also natively, as with the original Craft:
 * Simple but nice looking terrain generation using perlin / simplex noise.
 * More than 10 types of blocks and more can be added easily.
 * Supports plants (grass, flowers, trees, etc.) and transparency (glass).
-* Simple clouds in the sky (they don't move).
+* Voxel clouds that drift across the sky.
 * Day / night cycles and a textured sky dome.
 * Classic rolling hills blended into regional biomes. Deep caves lead through
   openings in the bedrock into caverns with animated water and lava streams.
-* A swimmable valley lake east of spawn and palm trees in the desert.
+* A swimmable valley lake east of spawn, with splash sounds in the browser, and palm trees in the desert.
 * World changes persisted in a sqlite3 database.
 * Multiplayer support!
 

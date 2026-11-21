@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchChainStatus, fetchMinaRewardsSent, fetchMinaOreMined, fetchPayoutBalance, setupChainTicker } from '../src/chain-ticker.js';
+import { fetchChainStatus, fetchMinaOreMined, fetchPayoutBalance, setupChainTicker } from '../src/chain-ticker.js';
 
 const status = {
   network: 'mainnet', blocks: 800000, headers: 800002,
@@ -19,10 +19,6 @@ test('chain status rejects malformed or unavailable node responses', async (t) =
 test('MINA totals require a nonnegative integer string', async (t) => {
   const original = globalThis.fetch;
   t.after(() => { globalThis.fetch = original; });
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ sent: '9007199254740993' }) });
-  assert.equal(await fetchMinaRewardsSent(), 9007199254740993n.toLocaleString());
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ sent: '-1' }) });
-  await assert.rejects(fetchMinaRewardsSent(), /Invalid MINA/);
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ mined: '9007199254740993' }) });
   assert.equal(await fetchMinaOreMined(), 9007199254740993n.toLocaleString());
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ mined: '-1' }) });
@@ -53,7 +49,11 @@ test('chain ticker renders node and payout data independently', async (t) => {
     createElement: () => new Element(),
     addEventListener(_type, callback) { visibility = callback; },
   };
-  globalThis.fetch = async (url) => ({ ok: true, json: async () => url.includes('mina-rewards') ? { sent: '1234' } : url.includes('mina-ore') ? { mined: '5678' } : url.includes('payout-balance') ? { satoshis: '120000000' } : status });
+  const requests = [];
+  globalThis.fetch = async (url) => {
+    requests.push(url);
+    return { ok: true, json: async () => url.includes('mina-ore') ? { mined: '5678' } : url.includes('payout-balance') ? { satoshis: '120000000' } : status };
+  };
   globalThis.setInterval = (callback, delay) => { refresh = callback; interval = delay; };
   const container = new Element();
   setupChainTicker(container, { warn() {} });
@@ -64,18 +64,17 @@ test('chain ticker renders node and payout data independently', async (t) => {
   assert.equal(first.children[2].children[1].title, status.best_block_hash);
   assert.equal(first.children[4].children[1].textContent, 'Syncing');
   assert.equal(first.children[5].children[0].textContent, 'Headers');
-  assert.equal(first.children[6].children[0].textContent, 'MINA rewards sent');
-  assert.equal(first.children[6].children[1].textContent, (1234).toLocaleString());
+  assert.equal(first.children[6].children[0].textContent, 'MINA ore');
+  assert.equal(first.children[6].children[1].textContent, (5678).toLocaleString());
   assert.equal(first.children[7].children[1].textContent, '1.20000000 BCH');
-  assert.equal(first.children[8].children[0].textContent, 'MINA ore mined');
-  assert.equal(first.children[8].children[1].textContent, (5678).toLocaleString());
+  assert.ok(!requests.includes('/api/mina-rewards-sent'));
   assert.equal(duplicate.attributes['aria-hidden'], 'true');
   globalThis.fetch = async () => ({ ok: false, status: 503 });
   await refresh();
   assert.equal(container.children[0].children[0].children[0].children[1].textContent, 'Unavailable');
   assert.equal(container.children[0].children[0].children[1].children[1].textContent, 'Unavailable');
   globalThis.document.hidden = false;
-  globalThis.fetch = async (url) => url.includes('mina-rewards')
+  globalThis.fetch = async (url) => url.includes('mina-ore')
     ? { ok: false, status: 503 }
     : { ok: true, json: async () => ({ ...status, syncing: false, headers: status.blocks }) };
   visibility();

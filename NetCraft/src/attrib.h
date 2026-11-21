@@ -15,6 +15,7 @@ typedef struct {
     GLuint extra3;
     GLuint extra4;
     GLuint extra5;
+    GLuint cloud_offset;
 } Attrib;
 
 #endif
