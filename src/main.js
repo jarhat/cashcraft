@@ -2675,7 +2675,7 @@ $('pickaxe-retry').addEventListener('click', async () => {
 $('game-crafting').addEventListener('click', async () => {
   try {
     if (!walletReady || !registeredRewardAddress) {
-      if (!walletReady) $('game-notifications').click();
+      if (!walletReady) $('game-guide-wallet').click();
       else throw new Error('Your wallet is still registering. Try crafting again shortly.');
       return;
     }
@@ -3095,9 +3095,9 @@ const tutorialSteps = [
     message: 'Select a token to send, or switch to Receive to create a payment QR. Amounts are whole base units; review every transaction in your wallet.',
   },
   {
-    id: 'games-toggle',
+    id: 'game-netcraft',
     title: 'Play CashCraft',
-    message: 'Open the game menu to launch CashCraft. Use the gem in the game to see your wallet and rewards, and Ranking to compare mining rewards.',
+    message: 'Select CashCraft to play in fullscreen. Use the gem in the game to see your wallet and rewards, and Ranking to compare mining rewards.',
   },
 ];
 let tutorialStep = 0;
@@ -3110,7 +3110,7 @@ function showTutorialStep() {
   const focused = dialog.contains(document.activeElement) ? document.activeElement : null;
   panel.classList.add('tutorial-highlight');
   if (tutorialStep === 0) openConnectionDialog();
-  if (step.id === 'games-toggle') (panel.closest('.topbar') || panel.closest('.game-toolbar')).after(dialog);
+  if (step.id === 'game-netcraft') (panel.closest('.topbar') || panel.closest('.game-toolbar')).after(dialog);
   else panel.before(dialog);
   if (tutorialStep !== 0 && $('connection-dialog').open) $('connection-dialog').close();
   $('wizard-title').textContent = step.title;
