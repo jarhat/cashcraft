@@ -9,6 +9,11 @@ totals and rankings, challenge mining progress, short links, donation
 addresses and pickaxe orders.
 Auth does not query the world database.
 
+On a fresh install, NetCraft creates missing database directories, both SQLite
+files, and the world and mining tables at startup. Auth initializes its own
+tables in the shared CashAddr file. Do not remove either file while a service
+is running; restore a matched backup rather than recreating a lost payout ledger.
+
 NetCraft attaches CashAddr to its world connection and commits mining edits
 and their rewards/stats in a single transaction. Both files use rollback
 journals rather than WAL so SQLite can recover a transaction that modifies
