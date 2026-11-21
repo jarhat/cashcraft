@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::env;
 use std::ffi::c_void;
@@ -787,6 +787,14 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
 }
 
 fn open_database(path: &str, cashaddr: &str) -> Result<Connection, Box<dyn std::error::Error>> {
+    if cashaddr.is_empty() || (cashaddr == ":memory:" && path != ":memory:") {
+        return Err("CASHADDR_DB_PATH must point to a persistent SQLite database".into());
+    }
+    for database in [path, cashaddr] {
+        if let Some(parent) = Path::new(database).parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
     let db = Connection::open(path)?;
     db.busy_timeout(Duration::from_secs(10))?;
     let has_legacy_data: bool = db.query_row(
@@ -798,9 +806,6 @@ fn open_database(path: &str, cashaddr: &str) -> Result<Connection, Box<dyn std::
     )?;
     if has_legacy_data {
         return Err("Run the CashAddr storage migration in backend/README.md before starting NetCraft".into());
-    }
-    if cashaddr.is_empty() || (cashaddr == ":memory:" && path != ":memory:") {
-        return Err("CASHADDR_DB_PATH must point to a persistent SQLite database".into());
     }
     db.execute("ATTACH DATABASE ?1 AS cashaddr", [cashaddr])?;
     if path != ":memory:" {
@@ -1213,7 +1218,7 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
         }
         return Ok(());
     }
-    let transaction = state.db.transaction()?;
+    let transaction = state.db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let mut changes = Vec::new();
     for dx in -1..=1 {
         for dz in -1..=1 {
@@ -1254,9 +1259,20 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
                     params![ore_miner(&player), default, player.name],
                 )?;
             }
+            // A retained ledger can cover blocks regenerated in a new world database.
+            let reward_already_recorded: bool = if server.reward_categories.contains_key(&default) {
+                transaction.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM cashaddr.mining_rewards WHERE x=?1 AND y=?2 AND z=?3)
+                         OR EXISTS(SELECT 1 FROM cashaddr.guest_mining_rewards WHERE x=?1 AND y=?2 AND z=?3)",
+                    params![x, y, z],
+                    |row| row.get(0),
+                )?
+            } else {
+                false
+            };
             if let (Some(address), Some(category)) = (
                 player.reward_address.as_ref(),
-                server.reward_categories.get(&default),
+                server.reward_categories.get(&default).filter(|_| !reward_already_recorded),
             ) {
                 let mut qualifies = true;
                 if TRACKED_ORES.contains(&default) {
@@ -1295,7 +1311,7 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
                     )?;
                     reward_id = Some(transaction.last_insert_rowid());
                 }
-            } else if TRACKED_ORES.contains(&default) && player.reward_address.is_none() {
+            } else if !reward_already_recorded && TRACKED_ORES.contains(&default) && player.reward_address.is_none() {
                 if let (Some(guest), Some(category)) = (
                     player.guest_id.as_ref(),
                     server.reward_categories.get(&default),
@@ -1351,6 +1367,10 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
             [player.reward_address.as_deref().unwrap()],
         )?;
     }
+    let completed = match (guest_progress, server.reward_categories.get(&MINA_ORE)) {
+        (Some(_), Some(category)) => Some(completed_mina_rewards(&transaction, &player, category)?),
+        _ => None,
+    };
     transaction.commit()?;
     if challenge_block {
         state.challenges.mined(id);
@@ -1371,8 +1391,7 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
         }
         if let Some((blocks, unlocked)) = guest_progress {
             send(&player, format!("G,{blocks},{}\n", i32::from(unlocked)));
-            if let Some(category) = server.reward_categories.get(&MINA_ORE) {
-                let completed = completed_mina_rewards(&state.db, &player, category)?;
+            if let Some(completed) = completed {
                 send(&player, format!("ME,{completed}\n"));
             }
         }
@@ -1401,6 +1420,23 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
         }
     }
     Ok(())
+}
+
+fn handle_mining_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, mode: BreakMode) {
+    if let Err(error) = apply_block_edit(server, id, x, y, z, 0, mode) {
+        eprintln!("client {id} mining edit at ({x},{y},{z}) failed: {error}");
+        if let Some(player) = server.state.lock().unwrap().players.get(&id) {
+            send(player, b"T,Could not save mined block. Try again.\n".to_vec());
+        }
+        // The client predicts edits, including mirrored blocks at chunk borders.
+        for p in chunked(x - 1)..=chunked(x + 1) {
+            for q in chunked(z - 1)..=chunked(z + 1) {
+                if let Err(error) = chunk_response(server, id, p, q, 0) {
+                    eprintln!("client {id} chunk ({p},{q}) resync failed: {error}");
+                }
+            }
+        }
+    }
 }
 
 fn light_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusqlite::Result<()> {
@@ -1692,14 +1728,18 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                 args[2].parse(),
                 args[3].parse(),
             ) {
-                apply_block_edit(server, id, x, y, z, w, BreakMode::Timed)?;
+                if w == 0 {
+                    handle_mining_edit(server, id, x, y, z, BreakMode::Timed);
+                } else {
+                    apply_block_edit(server, id, x, y, z, w, BreakMode::Timed)?;
+                }
             }
         }
         "MB" | "AB" if args.len() == 3 => {
             if let (Ok(x), Ok(y), Ok(z)) = (args[0].parse(), args[1].parse(), args[2].parse()) {
                 if command == "AB" {
                     if server.state.lock().unwrap().players.get(&id).is_some_and(|p| p.admin.granted) {
-                        apply_block_edit(server, id, x, y, z, 0, BreakMode::Admin)?;
+                        handle_mining_edit(server, id, x, y, z, BreakMode::Admin);
                     }
                 } else if let Some(player) = server.state.lock().unwrap().players.get_mut(&id) {
                     let target = [x, y, z];
@@ -2370,6 +2410,82 @@ mod tests {
             .get_mut(&1)
             .unwrap()
             .position = [x as f64, y as f64, z as f64, 0.0, 0.0];
+    }
+
+    #[test]
+    fn missing_database_directories_allow_mining_without_replaying_saved_rewards() {
+        let root = env::temp_dir().join(format!(
+            "netcraft-new-db-{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let world = root.join("world/craft.db");
+        let new_world = root.join("new-world/craft.db");
+        let ledger = root.join("ledger/cash-addresses.sqlite3");
+        let open = |path: &Path| open_database(path.to_str().unwrap(), ledger.to_str().unwrap()).unwrap();
+        let (server, _first, _second) = setup();
+        let address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz";
+        let category = &server.reward_categories[&MINA_ORE];
+        {
+            let mut state = server.state.lock().unwrap();
+            state.db = open(&world);
+            state.players.get_mut(&1).unwrap().reward_address = Some(address.into());
+            state.db.execute(
+                "INSERT INTO cashaddr.mina_mining_progress VALUES (?1,?2,9)",
+                params![address, category],
+            ).unwrap();
+        }
+        let ore = ore_positions(&server)[0];
+        move_to(&server, ore);
+        let (x, y, z) = ore;
+        block_edit(&server, 1, x, y, z, 0).unwrap();
+        assert!(world.is_file() && ledger.is_file());
+        server.state.lock().unwrap().db = open(&new_world);
+        block_edit(&server, 1, x, y, z, 0).unwrap();
+        {
+            let state = server.state.lock().unwrap();
+            let (rewards, progress, block): (i64, i64, i32) = state.db.query_row(
+                "SELECT (SELECT COUNT(*) FROM cashaddr.mining_rewards),
+                        (SELECT blocks FROM cashaddr.mina_mining_progress),
+                        (SELECT w FROM block WHERE p=?1 AND q=?2 AND x=?3 AND y=?4 AND z=?5)",
+                params![chunked(x), chunked(z), x, y, z],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            ).unwrap();
+            assert_eq!((rewards, progress, block), (1, 0, 0));
+        }
+        drop(server);
+        for path in [&world, &new_world, &ledger] {
+            std::fs::remove_file(path).unwrap();
+            std::fs::remove_dir(path.parent().unwrap()).unwrap();
+        }
+        std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn mining_write_failure_corrects_predicted_edit_and_keeps_connection() {
+        let (server, first, second) = setup();
+        let mine = || {
+            assert!(handle_command(&server, 1, "MB,0,1,0").unwrap());
+            server.state.lock().unwrap().players.get_mut(&1).unwrap()
+                .mining_target.as_mut().unwrap().1 -= Duration::from_secs(10);
+            assert!(handle_command(&server, 1, "B,0,1,0,0").unwrap());
+        };
+        server.state.lock().unwrap().db.execute_batch(
+            "CREATE TRIGGER reject_edit BEFORE INSERT ON block
+             BEGIN SELECT RAISE(ABORT, 'simulated write failure'); END;",
+        ).unwrap();
+        mine();
+        assert_eq!(first.try_recv().unwrap(), b"T,Could not save mined block. Try again.\n");
+        assert!(first.try_iter().any(|data| {
+            String::from_utf8(data).unwrap().contains("B,0,0,0,1,0,6\n")
+        }));
+        assert!(second.try_recv().is_err());
+        server.state.lock().unwrap().db.execute_batch("DROP TRIGGER reject_edit").unwrap();
+        // Discard any other chunk correction packets before the retry.
+        first.try_iter().for_each(drop);
+        mine();
+        assert_eq!(first.try_recv().unwrap(), b"I,6\n");
+        assert!(String::from_utf8(second.try_recv().unwrap()).unwrap().contains("B,0,0,0,1,0,0\n"));
     }
 
     #[test]
