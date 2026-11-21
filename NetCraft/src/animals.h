@@ -13,5 +13,6 @@ void animals_shutdown(void);
 void animals_render(Attrib *attrib, float *view, float x, float y, float z, int radius, bool night);
 void animals_render_names(Attrib *attrib, float *view, float x, float y, float z, bool night);
 unsigned int animals_target(float x, float y, float z, float vx, float vy, float vz, float *distance);
+float animals_nearest_distance(float x, float y, float z, float range);
 
 #endif

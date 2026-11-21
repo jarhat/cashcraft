@@ -40,20 +40,27 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   let lastProgress = null;
   let earnedRewards = null;
   let firstBlockShown = false;
+  let oreOverviewVisible = false;
+  let oreCounts = [0, 0, 0];
+  const ores = [
+    ['green', 'MINA ore'],
+    ['blue', 'Lapis ore'],
+    ['red', 'Redstone ore'],
+  ];
   let wizardTimer;
   let tutorialStep = 0;
   let tutorialActive = false;
   const tutorialTips = [
     'Use WASD to move, space to jump, left click to mine and right click to build. On mobile, use the joystick and the jump, mine and build buttons. Scroll to choose blocks.',
-    'Mine 10 natural MINA ore blocks to earn 1 MINA. Your mined ore count appears above your hearts.',
+    'Mine 10 natural blocks of the same ore to earn one token of its type when rewards are configured. Your progress appears above your hearts.',
     'The gem opens your wallet and notifications. Connect a wallet to receive your mining rewards.',
-    'Invite shares the game; Ranking shows mining rewards; fullscreen expands the game; sound toggles audio.',
+    'Invite shares the game; Ranking shows ores mined; fullscreen expands the game; sound toggles audio.',
     'After earning 2 MINA, use the crafting table to review a 2 MINA payment for a permanent MINA pickaxe.',
   ];
   const controlTips = {
     'game-close': 'Minimize the game; use the game icon to return.',
     'game-crafting': 'Craft a permanent MINA pickaxe for 2 MINA.',
-    'game-ranking': 'Ranking shows mining rewards.',
+    'game-ranking': 'Ranking shows ores mined.',
     'game-invite': 'Invite shares the game.',
     'game-sound': 'Sound toggles audio.',
     'game-notifications': 'The gem opens your wallet and notifications.',
@@ -64,14 +71,35 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     'mobile-jump': 'Use jump to leap or swim upward.',
     'block-scroll-strip': 'Drag the strip to choose a block.',
   };
-  function showWizard(message) {
+  function renderOreBars(container, counts, max, showGoal) {
+    container.replaceChildren();
+    for (const [index, [color, name]] of ores.entries()) {
+      const label = document.createElement('label');
+      const bar = document.createElement('progress');
+      label.textContent = `${translate(name)}: ${counts[index]}${showGoal ? `/${max}` : ''}`;
+      bar.className = `ore-bar ore-${color}`;
+      bar.max = max;
+      bar.value = counts[index];
+      label.append(bar);
+      container.append(label);
+    }
+  }
+
+  function showWizard(message, overview = false) {
     const bubble = $('game-wizard-speech');
+    const bars = $('game-wizard-ores');
     clearTimeout(wizardTimer);
     bubble.hidden = true;
+    oreOverviewVisible = overview;
+    bars.hidden = !overview;
+    if (overview) renderOreBars(bars, oreCounts, 10, true);
     $('game-wizard-message').textContent = translate(message);
     void bubble.offsetWidth;
     bubble.hidden = false;
-    wizardTimer = setTimeout(() => { bubble.hidden = true; }, 6000);
+    wizardTimer = setTimeout(() => {
+      bubble.hidden = true;
+      oreOverviewVisible = false;
+    }, 6000);
   }
   for (const [id, message] of Object.entries(controlTips).filter(([id]) => id.startsWith('game-'))) {
     for (const event of ['focus', 'mouseenter']) {
@@ -272,15 +300,24 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       return;
     }
     const connected = isWalletConnected ? isWalletConnected() : Boolean(getRewardAddress());
-    if (event.data?.type === 'netcraft-block-mined' && !firstBlockShown) {
+    if (event.data?.type === 'netcraft-ore-progress' &&
+        Array.isArray(event.data.counts) && event.data.counts.length === 3 &&
+        event.data.counts.every(count => Number.isInteger(count) && count >= 0 && count < 10)) {
+      oreCounts = event.data.counts;
+      if (oreOverviewVisible) renderOreBars($('game-wizard-ores'), oreCounts, 10, true);
+      return;
+    }
+    if (event.data?.type === 'netcraft-block-mined' && !firstBlockShown &&
+        Number.isInteger(event.data.block) && event.data.block > 0 &&
+        ![49, 70, 73, 83].includes(event.data.block)) {
       firstBlockShown = true;
-      showWizard('Next, find green MINA ore and mine 10 natural blocks to earn 1 MINA.');
+      showWizard('Mine 10 natural blocks of one ore for its token when rewards are configured. Look deep for blue ore; red is the rarest.', true);
       return;
     }
     if (event.data?.type === 'netcraft-mina-earned' &&
         Number.isSafeInteger(event.data.rewards) && event.data.rewards >= 0) {
       $('game-crafting').hidden = event.data.rewards < 2;
-      if (event.data.rewards >= 2 && earnedRewards !== null && earnedRewards < 2) {
+      if (!oreOverviewVisible && event.data.rewards >= 2 && earnedRewards !== null && earnedRewards < 2) {
         showWizard('You earned 2 MINA! Use the crafting table to review a payment for your pickaxe.');
       }
       earnedRewards = event.data.rewards;
@@ -292,9 +329,9 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         typeof event.data.unlocked !== 'boolean') return;
     $('game-guide-progress').textContent = `${translate('MINA ore progress')}: ${event.data.blocks} / 10` +
       (event.data.unlocked ? ` · ${translate(connected ? 'MINA earned' : 'Connect a wallet to receive your reward')}` : '');
-    if (guestUnlocked === false && event.data.unlocked && !connected) {
+    if (!oreOverviewVisible && guestUnlocked === false && event.data.unlocked && !connected) {
       showWizard('1 MINA earned! Connect a wallet to receive your reward.');
-    } else if (lastProgress !== null && event.data.blocks !== lastProgress) {
+    } else if (!oreOverviewVisible && lastProgress !== null && event.data.blocks !== lastProgress) {
       showWizard(`${translate('MINA ore progress')}: ${event.data.blocks} / 10`);
     }
     lastProgress = event.data.blocks;
@@ -322,32 +359,34 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     const status = $('ranking-status');
     const list = $('ranking-list');
     list.replaceChildren();
-    status.textContent = 'Loading ranking…';
+    status.textContent = translate('Loading ranking…');
     try {
-      const response = await fetch('/api/mina-ranking', { cache: 'no-store' });
-      if (!response.ok) throw new Error('Ranking is unavailable. Please try again.');
+      const response = await fetch('/api/ore-ranking', { cache: 'no-store' });
+      if (!response.ok) throw new Error(translate('Ranking is unavailable. Please try again.'));
       const data = await response.json();
-      if (!Array.isArray(data.players) || data.players.some((player) =>
-        typeof player.name !== 'string' || !Number.isSafeInteger(player.rewards) || player.rewards < 1)) {
-        throw new Error('Ranking data is invalid.');
+      if (!Array.isArray(data?.players) || data.players.some((player) =>
+        typeof player?.name !== 'string' ||
+        !ores.every(([color]) => Number.isSafeInteger(player[color]) && player[color] >= 0) ||
+        !Number.isSafeInteger(player.total) || player.total < 1 ||
+        player.total !== player.green + player.blue + player.red)) {
+        throw new Error(translate('Ranking data is invalid.'));
       }
-      const max = data.players[0]?.rewards || 1;
+      const max = data.players[0]?.total || 1;
       for (const player of data.players) {
         const row = document.createElement('li');
         const label = document.createElement('span');
         const value = document.createElement('strong');
-        const bar = document.createElement('span');
+        const bars = document.createElement('div');
         label.textContent = player.name;
-        value.textContent = `${player.rewards} MINA`;
-        bar.className = 'ranking-bar';
-        bar.style.width = `${player.rewards / max * 100}%`;
-        bar.setAttribute('aria-hidden', 'true');
-        row.append(label, value, bar);
+        value.textContent = `${translate('Total')}: ${player.total}`;
+        bars.className = 'ore-stats';
+        renderOreBars(bars, ores.map(([color]) => player[color]), max, false);
+        row.append(label, value, bars);
         list.append(row);
       }
-      status.textContent = data.players.length ? '' : 'No mining rewards have been sent yet.';
+      status.textContent = data.players.length ? '' : translate('No natural ore has been recorded yet.');
     } catch (error) {
-      status.textContent = error.message || 'Ranking is unavailable. Please try again.';
+      status.textContent = error.message || translate('Ranking is unavailable. Please try again.');
     }
   });
   $('ranking-close').addEventListener('click', () => $('ranking-dialog').close());

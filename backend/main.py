@@ -1224,6 +1224,31 @@ def mina_ranking() -> dict:
     return {"players": [{"name": name, "rewards": count} for name, count in rows]}
 
 
+@app.get("/api/ore-ranking")
+def ore_ranking() -> dict:
+    if not NETCRAFT_DB_PATH:
+        raise HTTPException(status_code=503, detail="Ranking database unavailable.")
+    try:
+        uri = Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+            rows = db.execute(
+                """SELECT MAX(player_name) AS player,
+                          SUM(CASE WHEN ore = 83 THEN blocks ELSE 0 END),
+                          SUM(CASE WHEN ore = 73 THEN blocks ELSE 0 END),
+                          SUM(CASE WHEN ore = 49 THEN blocks ELSE 0 END),
+                          SUM(blocks) AS total
+                   FROM ore_scores GROUP BY miner
+                   ORDER BY total DESC, player COLLATE NOCASE, miner LIMIT 20"""
+            ).fetchall()
+    except sqlite3.Error as exc:
+        logger.error("Could not read ore ranking: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Ranking unavailable.") from exc
+    return {"players": [
+        {"name": name, "green": green, "blue": blue, "red": red, "total": total}
+        for name, green, blue, red, total in rows
+    ]}
+
+
 @app.get("/api/mina-ore-mined")
 def mina_ore_mined() -> dict:
     if not NETCRAFT_DB_PATH:

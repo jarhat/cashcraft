@@ -1468,16 +1468,49 @@
           var button = document.getElementById('sound-toggle');
           var loading = null;
           var music = null;
+          var effects = null;
+          function makeCombatSound(name, duration) {
+            var length = Math.ceil(context.sampleRate * duration);
+            var buffer = context.createBuffer(1, length, context.sampleRate);
+            var samples = buffer.getChannelData(0);
+            var phase = 0;
+            var rumble = 0;
+            for (var i = 0; i < length; i++) {
+              var t = i / context.sampleRate;
+              var p = t / duration;
+              var noise = Math.random() * 2 - 1;
+              rumble += (noise - rumble) * .045;
+              var pitch = name === 'zombie-groan' ? 68 + 26 * Math.sin(Math.PI * p) + 7 * Math.sin(t * 43)
+                : name === 'zombie-hit' ? 230 - 145 * p
+                : name === 'zombie-hurt' ? 115 - 62 * p : 90 - 48 * p;
+              phase += 2 * Math.PI * pitch / context.sampleRate;
+              var voice = Math.sin(phase) * .48 + Math.sin(2 * phase) * .22 + Math.sin(5 * phase) * .09;
+              var attack = Math.min(1, t / (name === 'zombie-groan' ? .15 : .008));
+              var tail = Math.pow(1 - p, name === 'zombie-hit' ? 4 : 1.5);
+              var impact = name === 'zombie-hit' ? noise * Math.exp(-t * 42) * .5 : 0;
+              samples[i] = attack * tail * (voice + rumble * .7 + impact);
+            }
+            return buffer;
+          }
           async function unlock() {
             if (!enabled) return;
             var AudioContext = window.AudioContext || window.webkitAudioContext;
             if (!AudioContext) throw new Error('Audio is not supported');
             context = context || new AudioContext();
+            if (!effects) {
+              effects = context.createGain();
+              effects.connect(context.destination);
+            }
+            effects.gain.value = enabled ? 1 : 0;
             await context.resume();
             if (!enabled) return;
             if (context.state !== 'running') throw new Error('Audio requires a user gesture');
             if (!Module.FS) return;
             if (!loading) {
+              buffers['zombie-groan'] = makeCombatSound('zombie-groan', .95);
+              buffers['zombie-hit'] = makeCombatSound('zombie-hit', .22);
+              buffers['zombie-hurt'] = makeCombatSound('zombie-hurt', .32);
+              buffers['zombie-respawn'] = makeCombatSound('zombie-respawn', .66);
               loading = Promise.all(['mine', 'build', 'step', 'swim', 'dive'].map(async function(name) {
                 var bytes = Module.FS.readFile('/sounds/' + name + '.wav');
                 buffers[name] = await context.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
@@ -1512,6 +1545,7 @@
           document.addEventListener('keydown', unlockOnGesture, true);
           function setSound(next, attemptUnlock) {
             enabled = next;
+            if (effects) effects.gain.value = enabled ? 1 : 0;
             if (!enabled && music) music.pause();
             button.setAttribute('aria-pressed', String(enabled));
             var label = enabled ? 'Sound enabled; interact with the game to hear it' : 'Enable sound';
@@ -1537,7 +1571,7 @@
             setSound(next, context && context.state === 'running');
             window.parent.postMessage({ type: 'netcraft-sound-state', enabled: enabled }, '*');
           };
-          Module.playGameSound = function(name) {
+          Module.playGameSound = function(name, strength = 1) {
             if (!enabled || !context || context.state !== 'running') return;
             if (!buffers[name]) {
               unlock().catch(function(error) { console.error('Game sound could not load:', error); });
@@ -1548,9 +1582,10 @@
             var rate = name === 'step' ? .88 : name === 'mine' ? .96 : .92;
             source.playbackRate.value = rate + Math.random() * (name === 'step' ? .2 : .1);
             var effectGain = context.createGain();
-            effectGain.gain.value = (name === 'step' || name === 'swim' ? .15 : .25) * (.9 + Math.random() * .2);
+            var volume = name === 'step' || name === 'swim' || name === 'zombie-groan' ? .15 : .25;
+            effectGain.gain.value = volume * strength * (.9 + Math.random() * .2);
             source.connect(effectGain);
-            effectGain.connect(context.destination);
+            effectGain.connect(effects);
             source.start();
           };
           Module.playBlockSound = function(placed) { Module.playGameSound(placed ? 'build' : 'mine'); };

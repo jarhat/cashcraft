@@ -19,6 +19,8 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
       addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute(name, value) { this[name] = value; },
       appendChild(child) { child.parentNode = this; },
+      append(...children) { this.children.push(...children); },
+      replaceChildren(...children) { this.children = children; },
       classList: { add() {}, remove() {}, toggle() {} },
       show() { this.open = true; },
       close() { this.open = false; this.listeners.close?.(); },
@@ -31,6 +33,7 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
     documentElement: { classList: { remove() {} } },
     body: { classList: { toggle() {} } }, fullscreenElement: null,
     querySelector() { return toolbar; }, addEventListener() {},
+    createElement() { return { children: [], append(child) { this.children.push(child); } }; },
   };
   globalThis.requestAnimationFrame = () => {};
   let dismiss;
@@ -57,11 +60,21 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
   assert.equal($('game-guide').open, false);
   $('game-restore').listeners.click();
   assert.equal($('game-guide').open, false);
-  handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-block-mined' } });
+  const message = (data) => handlers.message({ source: $('game-frame').contentWindow, data });
+  message({ type: 'netcraft-ore-progress', counts: [2, 3, 4] });
+  message({ type: 'netcraft-block-mined', block: 73 });
+  assert.equal($('game-wizard-ores').hidden, true);
+  message({ type: 'netcraft-block-mined', block: 3 });
   assert.equal($('mining-prompt').open, false);
   assert.match($('game-wizard-message').textContent, /10 natural blocks/);
+  assert.deepEqual($('game-wizard-ores').children.map(row => row.textContent),
+    ['MINA ore: 2/10', 'Lapis ore: 3/10', 'Redstone ore: 4/10']);
+  message({ type: 'netcraft-ore-progress', counts: [2, 4, 4] });
+  assert.equal($('game-wizard-ores').children[1].children[0].value, 4);
   handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-mining-progress', blocks: 9, unlocked: false } });
   assert.equal($('game-guide-progress').textContent, 'MINA ore progress: 9 / 10');
+  assert.match($('game-wizard-message').textContent, /10 natural blocks/);
+  dismiss();
   handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-mining-progress', blocks: 0, unlocked: true } });
   assert.equal($('mining-prompt').open, false);
   assert.match($('game-wizard-message').textContent, /1 MINA earned/);

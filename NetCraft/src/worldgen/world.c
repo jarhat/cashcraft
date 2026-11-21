@@ -42,7 +42,7 @@ static void generate_underworld(int x, int z, int flag, world_func func, void *a
     func(x, WORLD_MIN_Y, z, Item_BEDROCK * flag, arg);
     if (material) {
         for (int y = WORLD_MIN_Y + 1; y < height; y++) {
-            func(x, y, z, Item_STONE * flag, arg);
+            func(x, y, z, deep_stone(x, y, z) * flag, arg);
         }
         for (int y = height; y <= top; y++) {
             func(x, y, z, material * flag, arg);
@@ -52,7 +52,7 @@ static void generate_underworld(int x, int z, int flag, world_func func, void *a
         int bank = (world_stream(x, z - 1, &bottom, &unused) ||
                     world_stream(x, z + 1, &bottom, &unused)) ? height : -20;
         for (int y = WORLD_MIN_Y + 1; y <= bank; y++) {
-            func(x, y, z, Item_STONE * flag, arg);
+            func(x, y, z, deep_stone(x, y, z) * flag, arg);
         }
     }
 }

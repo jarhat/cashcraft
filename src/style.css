@@ -2872,10 +2872,16 @@ body:not(.wallet-connected) .dashboard { padding-bottom: 0; }
 .ranking-list { display: grid; gap: 12px; padding-left: 2rem; }
 .ranking-list li { padding: 8px; border-radius: 10px; background: color-mix(in srgb, var(--glass-tint) 75%, var(--ice)); }
 .ranking-list li > strong { float: right; }
-.ranking-bar { display: block; min-width: 4px; height: 10px; margin-top: 6px; border-radius: 8px; background: linear-gradient(90deg, #098859, #43ed94); }
+.ore-stats { display: grid; gap: 4px; margin-top: 6px; }
+.ore-stats[hidden] { display: none; }
+.ore-stats label { display: grid; grid-template-columns: minmax(8rem, auto) 1fr; gap: 8px; align-items: center; }
+.ore-bar { width: 100%; min-width: 0; height: 10px; }
+.ore-green { accent-color: #24bd79; }
+.ore-blue { accent-color: #258ce8; }
+.ore-red { accent-color: #e04752; }
 .mina-gem { display: inline-block; width: 1.2em; height: 1.2em; vertical-align: -.2em; }
 .mina-label::before { content: ""; display: inline-block; width: 1.2em; height: 1.2em; vertical-align: -.25em; margin-right: 4px; background: url('/mina-gem.svg') center / contain no-repeat; }
-#mina-receipt-count::before, #mining-reward-queue-notice strong::before, .ranking-list strong::before {
+#mina-receipt-count::before, #mining-reward-queue-notice strong::before {
   content: ""; display: inline-block; width: 1.2em; height: 1.2em; vertical-align: -.25em;
   margin-right: 4px; background: url('/mina-gem.svg') center / contain no-repeat;
 }

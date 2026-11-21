@@ -272,11 +272,15 @@ Existing block, light and sign edits are preserved; park blocks at those
 positions are skipped, so existing edits may leave gaps or obstruct paths.
 Restart the server to load the changes; do not run the builder while it runs.
 
-Compose enables mining rewards by default. One base unit is earned for every
-ten naturally generated, previously unedited green MINA ore blocks mined online.
+Compose enables mining rewards by default. Each ten naturally generated,
+previously unedited blocks of green MINA, blue lapis, or red redstone ore mined
+online earn one base unit of the corresponding configured token. Blue and red
+occur in deep stone near bedrock, with red rarer than blue.
+The leaderboard counts natural blocks by ore and sorts by total, including
+blocks mined when a token category is not configured. It does not backfill from payouts.
 Progress is saved per browser identity or registered address and token category;
 unclaimed browser rewards are queued for payout when a wallet is connected. Earlier
-paid rewards are unchanged. Deposits currently appear on roughly one in 32 terrain columns; placed or
+paid rewards are unchanged. Green deposits appear on roughly one in 32 terrain columns; placed or
 previously mined blocks do not earn another reward. Offline play and disconnected edits
 cannot create rewards; payout requires a valid token-aware wallet address.
 The interface calls the default reward MINA; the configured

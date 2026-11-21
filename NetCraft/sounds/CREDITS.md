@@ -19,3 +19,6 @@
 The gravel step and world impacts were obtained from the credited CC0 recordings in
 `byteab/operation-ink` at commit `10c5857b05fca41b943f63c365c2f76cc7e80331`
 and converted from AAC to mono 22,050 Hz PCM WAV.
+
+Zombie groans, pickaxe hits, damage, and respawn sounds are synthesized by the
+browser client. They use no external recordings.

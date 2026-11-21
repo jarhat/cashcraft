@@ -95,6 +95,20 @@ unsigned int animals_target(float x, float y, float z, float vx, float vy, float
     return 0;
 }
 
+float animals_nearest_distance(float x, float y, float z, float range) {
+    float nearest = range * range;
+    double now = glfwGetTime();
+    for (size_t i = 0; i < animal_count; ++i) {
+        if (animals[i].pacified) continue;
+        float pos[3];
+        animal_position(&animals[i], now, pos);
+        float dx = pos[0] - x, dy = pos[1] + 1.0f - y, dz = pos[2] - z;
+        float distance = dx * dx + dy * dy + dz * dz;
+        if (distance < nearest) nearest = distance;
+    }
+    return sqrtf(nearest);
+}
+
 void animals_remove(unsigned int id) {
     size_t i = animal_index(id);
     if (i < animal_count && animals[i].id == id) {

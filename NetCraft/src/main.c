@@ -227,9 +227,12 @@ typedef struct {
     int message_view_index;
     char messages[MAX_MESSAGES][MAX_TEXT_LENGTH];
     double message_times[MAX_MESSAGES];
-    uint32_t mina_mined;
+    int ore_progress[3];
     int lives;
     bool zombies_active;
+#ifdef __EMSCRIPTEN__
+    double next_zombie_sound;
+#endif
     int width;
     int height;
     int observe1;
@@ -3165,13 +3168,12 @@ void on_mine() {
         if (g->mode != MODE_ONLINE) {
             Inventory_collect(&g->inventory, hw);
             sync_inventory_items();
-            if (hw == Item_MINA_ORE && g->mina_mined < UINT32_MAX) g->mina_mined++;
         }
 #ifdef __EMSCRIPTEN__
-        if (g->mode != MODE_ONLINE) EM_ASM({
+        if (g->mode != MODE_ONLINE) EM_ASM_ARGS({
             if (Module.playBlockSound) Module.playBlockSound(0);
-            parent.postMessage({ type: 'netcraft-block-mined' }, '*');
-        });
+            parent.postMessage({ type: 'netcraft-block-mined', block: $0 }, '*');
+        }, hw);
 #endif
 
         //struct ItemStack stack = { .type = hw, .count = 1 };
@@ -3795,6 +3797,18 @@ void handle_movement(double dt) {
         s->y = highest_block(s->x, s->z) + 2;
     }
 #ifdef __EMSCRIPTEN__
+    double audio_now = glfwGetTime();
+    if (g->zombies_active && audio_now >= g->next_zombie_sound) {
+        const float range = 14.0f;
+        float distance = animals_nearest_distance(s->x, s->y, s->z, range);
+        g->next_zombie_sound = audio_now + 0.5;
+        if (distance < range) {
+            g->next_zombie_sound = audio_now + 3.5 + 2.0 * distance / range;
+            EM_ASM_ARGS({
+                if (Module.playGameSound) Module.playGameSound('zombie-groan', $0);
+            }, 1.0 - distance / range);
+        }
+    }
     bool submerged = !g->flying && water_at_player(s, 0);
     bool wet = submerged || (!g->flying && water_at_player(s, -1));
     float horizontal = hypotf(s->x - old.x, s->z - old.z);
@@ -3882,9 +3896,22 @@ void parse_buffer(char *buffer, int len) {
             g->zombies_active = value;
         }
         if (sscanf(line, "HP,%d", &value) == 1 && value >= 0 && value <= PLAYER_LIVES) {
+#ifdef __EMSCRIPTEN__
+            if (value < g->lives) {
+                EM_ASM(if (Module.playGameSound) Module.playGameSound('zombie-hurt'););
+            }
+#endif
             g->lives = value;
         }
+#ifdef __EMSCRIPTEN__
+        if (strcmp(line, "ZH") == 0) {
+            EM_ASM(if (Module.playGameSound) Module.playGameSound('zombie-hit'););
+        }
+#endif
         if (strcmp(line, "ZD") == 0) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM(if (Module.playGameSound) Module.playGameSound('zombie-respawn'););
+#endif
             mining_stop();
             building_stop();
             pending_placement.active = false;
@@ -3927,12 +3954,23 @@ void parse_buffer(char *buffer, int len) {
         if (line[0] == 'I' && sscanf(line, "I,%d", &mined_item) == 1) {
             Inventory_collect(&g->inventory, mined_item);
             sync_inventory_items();
-            if (mined_item == Item_MINA_ORE && g->mina_mined < UINT32_MAX) g->mina_mined++;
 #ifdef __EMSCRIPTEN__
-            EM_ASM({
+            EM_ASM_ARGS({
                 if (Module.playBlockSound) Module.playBlockSound(0);
-                parent.postMessage({ type: 'netcraft-block-mined' }, '*');
-            });
+                parent.postMessage({ type: 'netcraft-block-mined', block: $0 }, '*');
+            }, mined_item);
+#endif
+        }
+        int green, blue, red;
+        if (sscanf(line, "OP,%d,%d,%d", &green, &blue, &red) == 3 &&
+            green >= 0 && green < 10 && blue >= 0 && blue < 10 && red >= 0 && red < 10) {
+            g->ore_progress[0] = green;
+            g->ore_progress[1] = blue;
+            g->ore_progress[2] = red;
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({ type: 'netcraft-ore-progress', counts: [$0, $1, $2] }, '*');
+            }, green, blue, red);
 #endif
         }
         char mined_reward_address[121];
@@ -4163,9 +4201,12 @@ void reset_model() {
     g->just_clicked = false;
     memset(g->messages, 0, sizeof(char) * MAX_MESSAGES * MAX_TEXT_LENGTH);
     memset(g->message_times, 0, sizeof(g->message_times));
-    g->mina_mined = 0;
+    memset(g->ore_progress, 0, sizeof(g->ore_progress));
     g->lives = PLAYER_LIVES;
     g->zombies_active = false;
+#ifdef __EMSCRIPTEN__
+    g->next_zombie_sound = 0;
+#endif
     g->message_index = 0;
     g->message_view_index = 0;
     g->day_length = DAY_LENGTH;
@@ -4787,13 +4828,10 @@ void render_scene() {
             render_item_counts(&text_attrib);
         }
         if (g->show_ui) {
-            if (!item_buffers[Item_MINA_ORE]) {
-                item_buffers[Item_MINA_ORE] = gen_cube_buffer(0, 0, 0, 0.5, Item_MINA_ORE);
-            }
+            const int ores[] = {Item_MINA_ORE, Item_LAPIS_LAZULI_ORE, Item_REDSTONE_ORE};
             float matrix[16];
             set_matrix_item(matrix, g->width, g->height, g->scale);
             for (int i = 0; i < 12; i++) matrix[i] *= 0.65f;
-            matrix[12] = -120.0f * g->scale / g->width;
             matrix[13] = -1.0f + 80.0f * g->scale / g->height;
             glUseProgram(block_attrib.program);
             glUniform3f(block_attrib.camera, 0, 0, 5);
@@ -4803,8 +4841,15 @@ void render_scene() {
             glUniform1f(block_attrib.extra3, 100000);
             glUniform1i(block_attrib.extra4, 0);
             glUniform1f(block_attrib.timer, time_of_day());
-            glUniformMatrix4fv(block_attrib.matrix, 1, GL_FALSE, matrix);
-            draw_cube(&block_attrib, item_buffers[Item_MINA_ORE]);
+            for (int i = 0; i < 3; i++) {
+                int ore = ores[i];
+                if (!item_buffers[ore]) {
+                    item_buffers[ore] = gen_cube_buffer(0, 0, 0, 0.5, ore);
+                }
+                matrix[12] = (i * 54.0f - 72.0f) * 2 * g->scale / g->width;
+                glUniformMatrix4fv(block_attrib.matrix, 1, GL_FALSE, matrix);
+                draw_cube(&block_attrib, item_buffers[ore]);
+            }
         }
     } else {
         face_count = 0;
@@ -4815,8 +4860,11 @@ void render_scene() {
     float tx = ts / 2;
     float ty = g->height - ts;
     if (g->show_ui && g->initialized) {
-        snprintf(text_buffer, sizeof(text_buffer), "MINA ore: %u", (unsigned)g->mina_mined);
-        render_text(&text_attrib, ALIGN_LEFT, g->width / 2 - 42.0f * g->scale, 40.0f * g->scale, ts, text_buffer);
+        for (int i = 0; i < 3; i++) {
+            snprintf(text_buffer, sizeof(text_buffer), "%d/10", g->ore_progress[i]);
+            render_text(&text_attrib, ALIGN_LEFT, g->width / 2 + (i * 54.0f - 60.0f) * g->scale,
+                40.0f * g->scale, ts * 0.8f, text_buffer);
+        }
     }
     if (g->show_info_text && g->show_ui && g->initialized) {
         static char *build_info_string =

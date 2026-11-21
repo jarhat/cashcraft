@@ -91,6 +91,27 @@ class RewardTests(unittest.TestCase):
             self.assertEqual(client.get("/api/mina-ranking").status_code, 503)
             self.assertFalse(missing.exists())
 
+    def test_ore_ranking_counts_all_colors_and_sorts_by_natural_block_total(self):
+        path = Path(self.tmp.name) / "netcraft.sqlite3"
+        client = TestClient(backend.app)
+        with patch.object(backend, "NETCRAFT_DB_PATH", str(path)):
+            self.assertEqual(client.get("/api/ore-ranking").status_code, 503)
+            self.assertFalse(path.exists())
+            with sqlite3.connect(path) as db:
+                db.execute("CREATE TABLE ore_scores (miner TEXT, ore INTEGER, player_name TEXT, blocks INTEGER)")
+            self.assertEqual(client.get("/api/ore-ranking").json(), {"players": []})
+            with sqlite3.connect(path) as db:
+                db.executemany("INSERT INTO ore_scores VALUES (?, ?, ?, ?)", [
+                    ("guest:a", 83, "Alice", 7), ("guest:a", 49, "Alice", 2),
+                    ("wallet:b", 73, "Bob", 8), ("wallet:b", 49, "Bob", 2),
+                    ("guest:c", 83, "Charlie", 9),
+                ])
+            self.assertEqual(client.get("/api/ore-ranking").json(), {"players": [
+                {"name": "Bob", "green": 0, "blue": 8, "red": 2, "total": 10},
+                {"name": "Alice", "green": 7, "blue": 0, "red": 2, "total": 9},
+                {"name": "Charlie", "green": 9, "blue": 0, "red": 0, "total": 9},
+            ]})
+
     def test_mined_count_only_includes_paid_rewards_for_the_address_and_category(self):
         path = Path(self.tmp.name) / "netcraft.sqlite3"
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
