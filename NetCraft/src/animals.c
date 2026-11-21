@@ -140,62 +140,62 @@ void animals_render(Attrib *attrib, float *view, float x, float y, float z, int 
             dy, -sinf(angle) * dx + cosf(angle) * dz);
         draw_triangles_3d_ao(attrib, animal_buffer, ANIMAL_PARTS * 36);
     }
+}
 
-    void animals_render_names(Attrib *attrib, float *view, float x, float y, float z) {
-        const float glyph = .045f;
-        const double now = glfwGetTime();
-        float right[3] = {view[0], view[4], view[8]};
-        float up[3] = {view[1], view[5], view[9]};
-        normalize(right, right + 1, right + 2);
-        normalize(up, up + 1, up + 2);
-        float *data = NULL;
-        size_t faces = 0, capacity = 0;
-        for (size_t i = 0; i < animal_count; ++i) {
-            if (!animals[i].name[0]) continue;
-            float pos[3];
-            animal_position(&animals[i], now, pos);
-            float dx = pos[0] - x, dy = pos[1] - y, dz = pos[2] - z;
-            if (dx * dx + dy * dy + dz * dz > 32 * 32) continue;
-            pos[1] += 1.45f;
-            float clip[4], anchor[4] = {pos[0], pos[1], pos[2], 1};
-            mat_vec_multiply(clip, view, anchor);
-            if (clip[3] <= 0 || fabsf(clip[0]) > clip[3] || fabsf(clip[1]) > clip[3]) continue;
-            if (faces + ANIMAL_NAME_LENGTH > capacity) {
-                capacity = capacity ? capacity * 2 : 64;
-                float *grown = realloc(data, capacity * 30 * sizeof(*data));
-                if (!grown) break;
-                data = grown;
-            }
-            for (int j = 0; j < ANIMAL_NAME_LENGTH; ++j) {
-                float vertices[24];
-                make_character(vertices, (j - (ANIMAL_NAME_LENGTH - 1) / 2) * glyph,
-                    0, glyph / 2, glyph, animals[i].name[j]);
-                for (int v = 0; v < 6; ++v) {
-                    const float *vertex = vertices + v * 4;
-                    float *out = data + faces * 30 + v * 5;
-                    for (int axis = 0; axis < 3; ++axis) {
-                        out[axis] = pos[axis] + right[axis] * vertex[0] + up[axis] * vertex[1];
-                    }
-                    out[3] = vertex[2];
-                    out[4] = vertex[3];
+void animals_render_names(Attrib *attrib, float *view, float x, float y, float z) {
+    const float glyph = .045f;
+    const double now = glfwGetTime();
+    float right[3] = {view[0], view[4], view[8]};
+    float up[3] = {view[1], view[5], view[9]};
+    normalize(right, right + 1, right + 2);
+    normalize(up, up + 1, up + 2);
+    float *data = NULL;
+    size_t faces = 0, capacity = 0;
+    for (size_t i = 0; i < animal_count; ++i) {
+        if (!animals[i].name[0]) continue;
+        float pos[3];
+        animal_position(&animals[i], now, pos);
+        float dx = pos[0] - x, dy = pos[1] - y, dz = pos[2] - z;
+        if (dx * dx + dy * dy + dz * dz > 32 * 32) continue;
+        pos[1] += 1.45f;
+        float clip[4], anchor[4] = {pos[0], pos[1], pos[2], 1};
+        mat_vec_multiply(clip, view, anchor);
+        if (clip[3] <= 0 || fabsf(clip[0]) > clip[3] || fabsf(clip[1]) > clip[3]) continue;
+        if (faces + ANIMAL_NAME_LENGTH > capacity) {
+            capacity = capacity ? capacity * 2 : 64;
+            float *grown = realloc(data, capacity * 30 * sizeof(*data));
+            if (!grown) break;
+            data = grown;
+        }
+        for (int j = 0; j < ANIMAL_NAME_LENGTH; ++j) {
+            float vertices[24];
+            make_character(vertices, (j - (ANIMAL_NAME_LENGTH - 1) / 2) * glyph,
+                0, glyph / 2, glyph, animals[i].name[j]);
+            for (int v = 0; v < 6; ++v) {
+                const float *vertex = vertices + v * 4;
+                float *out = data + faces * 30 + v * 5;
+                for (int axis = 0; axis < 3; ++axis) {
+                    out[axis] = pos[axis] + right[axis] * vertex[0] + up[axis] * vertex[1];
                 }
-                ++faces;
+                out[3] = vertex[2];
+                out[4] = vertex[3];
             }
+            ++faces;
         }
-        if (faces) {
-            glUseProgram(attrib->program);
-            glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, view);
-            glUniform1i(attrib->sampler, 1);
-            glUniform1i(attrib->extra1, 0);
-            glUniform1f(attrib->extra2, 1);
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            GLuint buffer = gen_faces(5, faces, data);
-            draw_triangles_3d_text(attrib, buffer, faces * 6);
-            del_buffer(buffer);
-            glDisable(GL_BLEND);
-        } else {
-            free(data);
-        }
+    }
+    if (faces) {
+        glUseProgram(attrib->program);
+        glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, view);
+        glUniform1i(attrib->sampler, 1);
+        glUniform1i(attrib->extra1, 0);
+        glUniform1f(attrib->extra2, 1);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        GLuint buffer = gen_faces(5, faces, data);
+        draw_triangles_3d_text(attrib, buffer, faces * 6);
+        del_buffer(buffer);
+        glDisable(GL_BLEND);
+    } else {
+        free(data);
     }
 }
