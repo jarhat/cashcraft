@@ -96,6 +96,7 @@ extern const int blocks[256][6];
 extern const int plants[256];
 
 void init_blocks(void);
+int block_id_by_name(const char *name);
 int get_block_data(int id);
 bool has_block_data(int id);
 //int is_plant(int w);
