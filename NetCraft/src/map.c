@@ -51,6 +51,8 @@ bool map_set(Map *map, int x, int y, int z, int w) {
     x -= map->dx;
     y -= map->dy;
     z -= map->dz;
+    if ((unsigned)x > MAP_XZ_MAX || (unsigned)y > MAP_Y_MAX ||
+        (unsigned)z > MAP_XZ_MAX || w < -128 || w > 127) return false;
     MapEntry *entry = map->data + index;
     int overwrite = 0;
     while (!EMPTY_ENTRY(entry)) {
@@ -72,6 +74,7 @@ bool map_set(Map *map, int x, int y, int z, int w) {
         entry->e.y = y;
         entry->e.z = z;
         entry->e.w = w;
+        entry->e.used = 1;
         map->size++;
         if (map->size * 2 > map->mask) {
             map_grow(map);
@@ -86,9 +89,8 @@ int map_get(Map *map, int x, int y, int z) {
     x -= map->dx;
     y -= map->dy;
     z -= map->dz;
-    if (x < 0 || x > 255) return 0;
-    if (y < 0 || y > 255) return 0;
-    if (z < 0 || z > 255) return 0;
+    if ((unsigned)x > MAP_XZ_MAX || (unsigned)y > MAP_Y_MAX ||
+        (unsigned)z > MAP_XZ_MAX) return 0;
     MapEntry *entry = map->data + index;
     while (!EMPTY_ENTRY(entry)) {
         if (entry->e.x == x && entry->e.y == y && entry->e.z == z) {

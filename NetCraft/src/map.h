@@ -1,7 +1,9 @@
 #ifndef _map_h_
 #define _map_h_
 
-#define EMPTY_ENTRY(entry) ((entry)->value == 0)
+#define MAP_XZ_MAX 127
+#define MAP_Y_MAX 511
+#define EMPTY_ENTRY(entry) (!(entry)->e.used)
 
 #define MAP_FOR_EACH(map, ex, ey, ez, ew) \
     for (unsigned int i = 0; i <= map->mask; i++) { \
@@ -16,13 +18,14 @@
 
 #define END_MAP_FOR_EACH }
 
-typedef union {
-    unsigned int value;
+typedef struct {
+    // Keep entries to one word while supporting 9-bit relative heights.
     struct {
-        unsigned char x;
-        unsigned char y;
-        unsigned char z;
-        char w;
+        unsigned int x : 7;
+        unsigned int y : 9;
+        unsigned int z : 7;
+        signed int w : 8;
+        unsigned int used : 1;
     } e;
 } MapEntry;
 

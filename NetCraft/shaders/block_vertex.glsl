@@ -18,6 +18,8 @@ varying float fragment_light;
 varying float fog_factor;
 varying float fog_height;
 varying float diffuse;
+varying vec3 flow_position;
+varying float horizontal_face;
 
 const float pi = 3.14159265;
 vec3 light_direction = normalize(vec3(-1.0, 1.0, -1.0));
@@ -25,6 +27,8 @@ vec3 light_direction = normalize(vec3(-1.0, 1.0, -1.0));
 void main() {
     gl_Position = matrix * position;
     fragment_uv = uv.xy;
+    flow_position = vec3(mod(position.x, 64.0), position.y, position.z);
+    horizontal_face = abs(normal.y);
     fragment_ao = 0.3 + (1.0 - uv.z) * 0.7;
     fragment_light = uv.w;
     diffuse = max(0.0, dot(normal, light_direction));

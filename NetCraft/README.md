@@ -30,6 +30,8 @@ and also natively, as with the original Craft:
 * Supports plants (grass, flowers, trees, etc.) and transparency (glass).
 * Simple clouds in the sky (they don't move).
 * Day / night cycles and a textured sky dome.
+* Classic rolling hills blended into regional biomes. Deep caves lead through
+  openings in the bedrock into caverns with animated water and lava streams.
 * World changes persisted in a sqlite3 database.
 * Multiplayer support!
 
@@ -239,6 +241,12 @@ shared by the server and follow terrain and block edits. Animals despawn when no
 players are nearby and are not persisted across server restarts.
 
 ### Preview-inspired world
+
+Terrain generation is shared by the client and server. When upgrading, rebuild
+both together. Saved block edits are preserved, but the terrain underneath those
+edits is regenerated. On the Rust server, blocks placed in underground streams
+dam the current; removing a dam lets the liquid flow downstream again. Flow
+stays within the generated channels.
 
 With the server stopped, run from the repository root:
 
