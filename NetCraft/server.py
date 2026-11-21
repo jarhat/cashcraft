@@ -38,7 +38,8 @@ DAY_LENGTH = 600
 SPAWN_POINT = (0, 0, 0, 0, 0)
 RATE_LIMIT = False
 RECORD_HISTORY = True
-INDESTRUCTIBLE_ITEMS = {16}
+INDESTRUCTIBLE_ITEMS = {16, 65}
+WORLD_MIN_Y = -24
 ALLOWED_ITEMS = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
     17, 18, 19, 20, 21, 22, 23, 32, 33, 34, 35, 36, 37, 38,
@@ -635,7 +636,7 @@ class Model:
 
         if AUTH_REQUIRED and client.user_id is None:
             message = "Only logged in users are allowed to build."
-        elif y <= 0 or y > 255:
+        elif y <= WORLD_MIN_Y or y > 255:
             message = "Invalid block coordinates."
         elif w not in ALLOWED_ITEMS:
             message = "That item is not allowed."
@@ -643,7 +644,7 @@ class Model:
             message = "Cannot create blocks in a non-empty space."
         elif not w and not previous:
             message = "That space is already empty."
-        elif previous in INDESTRUCTIBLE_ITEMS:
+        elif previous in INDESTRUCTIBLE_ITEMS or (y < 0 and previous in (12, 13)):
             message = "Cannot destroy that type of block."
 
         if message:
@@ -739,7 +740,7 @@ class Model:
         text = ",".join(args)
         x, y, z, face = map(int, (x, y, z, face))
 
-        if y <= 0 or y > 255 or face < 0 or face > 7 or len(text) > 48:
+        if y <= WORLD_MIN_Y or y > 255 or face < 0 or face > 7 or len(text) > 48:
             return
 
         p, q = chunked(x), chunked(z)

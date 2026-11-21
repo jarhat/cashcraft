@@ -812,7 +812,7 @@ int chunk_visible(float planes[6][4], int p, int q, int miny, int maxy) {
 }
 
 int highest_block(float x, float z) {
-    int result = -1;
+    int result = WORLD_MIN_Y - 1;
     int nx = roundf(x);
     int nz = roundf(z);
     int p = chunked(x);
@@ -1179,7 +1179,7 @@ void occlusion(
 #define XZ_SIZE (CHUNK_SIZE * 3 + 2)
 #define XZ_LO (CHUNK_SIZE)
 #define XZ_HI (CHUNK_SIZE * 2 + 1)
-#define Y_SIZE 258
+#define Y_SIZE (WORLD_MAX_Y - WORLD_MIN_Y + 3)
 #define XYZ(x, y, z) ((y) * XZ_SIZE * XZ_SIZE + (x) * XZ_SIZE + (z))
 #define XZ(x, z) ((x) * XZ_SIZE + (z))
 
@@ -1216,7 +1216,7 @@ void compute_chunk(WorkerItem *item) {
     short *highest = (short *)calloc(XZ_SIZE * XZ_SIZE, sizeof(short));
 
     int ox = item->p * CHUNK_SIZE - CHUNK_SIZE - 1;
-    int oy = -1;
+    int oy = WORLD_MIN_Y - 1;
     int oz = item->q * CHUNK_SIZE - CHUNK_SIZE - 1;
 
     // check for lights
@@ -1292,7 +1292,7 @@ void compute_chunk(WorkerItem *item) {
 
     // count exposed faces
     int miny = 256;
-    int maxy = 0;
+    int maxy = WORLD_MIN_Y;
     int faces = 0;
     MAP_FOR_EACH(map, ex, ey, ez, ew) {
         if (ew <= 0) {
@@ -1472,7 +1472,7 @@ void init_chunk(Chunk *chunk, int p, int q) {
     Map *block_map = &chunk->map;
     Map *light_map = &chunk->lights;
     int dx = p * CHUNK_SIZE - 1;
-    int dy = 0;
+    int dy = WORLD_MIN_Y;
     int dz = q * CHUNK_SIZE - 1;
     map_alloc(block_map, dx, dy, dz, 0x7fff);
     map_alloc(light_map, dx, dy, dz, 0xf);
@@ -1791,9 +1791,9 @@ void force_chunks(Player *player) {
             map_free(&chunk->lights);
             sign_list_free(&chunk->signs);
             sign_list_alloc(&chunk->signs, 16);
-            map_alloc(&chunk->map, chunk->p * CHUNK_SIZE - 1, 0,
+            map_alloc(&chunk->map, chunk->p * CHUNK_SIZE - 1, WORLD_MIN_Y,
                 chunk->q * CHUNK_SIZE - 1, 0x7fff);
-            map_alloc(&chunk->lights, chunk->p * CHUNK_SIZE - 1, 0,
+            map_alloc(&chunk->lights, chunk->p * CHUNK_SIZE - 1, WORLD_MIN_Y,
                 chunk->q * CHUNK_SIZE - 1, 0xf);
             WorkerItem item = {0};
             item.p = chunk->p; item.q = chunk->q;
@@ -1888,7 +1888,7 @@ void ensure_chunks_worker(Player *player, Worker *worker) {
             }
 
             const int distance = MAX(ABS(dp), ABS(dq));
-            const int invisible = !chunk_visible(planes, a, b, 0, 256);
+            const int invisible = !chunk_visible(planes, a, b, WORLD_MIN_Y, WORLD_MAX_Y);
 
             /*
              * Lower scores run first: visible, nearby chunks are preferred.
@@ -2203,7 +2203,7 @@ int get_block(int x, int y, int z) {
 }
 
 void builder_block(int x, int y, int z, int w) {
-    if (y <= 0 || y >= 256) {
+    if (y <= WORLD_MIN_Y || y > WORLD_MAX_Y || get_block(x, y, z) == Item_BEDROCK) {
         return;
     }
     if (is_destructable(get_block(x, y, z))) {
@@ -2236,6 +2236,7 @@ int render_chunks(Attrib *attrib, Player *player) {
     glUniform1f(attrib->extra3, g->render_radius * CHUNK_SIZE);
     glUniform1i(attrib->extra4, g->ortho);
     glUniform1f(attrib->timer, time_of_day());
+    glUniform1f(attrib->extra5, fmod(glfwGetTime(), 20.0));
     for (int i = 0; i < g->chunk_count; i++) {
         Chunk *chunk = g->chunks + i;
 #ifdef __EMSCRIPTEN__
@@ -2759,7 +2760,7 @@ void paste() {
     int oy = p1->y - c1->y;
     int dx = ABS(c2->x - c1->x);
     int dz = ABS(c2->z - c1->z);
-    for (int y = 0; y < 256; y++) {
+    for (int y = WORLD_MIN_Y; y <= WORLD_MAX_Y; y++) {
         for (int x = 0; x <= dx; x++) {
             for (int z = 0; z <= dz; z++) {
                 int w = get_block(c1->x + x * scx, y, c1->z + z * scz);
@@ -3102,7 +3103,7 @@ void on_light() {
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(false, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (hy > 0 && hy < 256 && is_destructable(hw)) {
+    if (hy > WORLD_MIN_Y && hy <= WORLD_MAX_Y && is_destructable(hw)) {
         toggle_light(hx, hy, hz);
     }
 }
@@ -3144,7 +3145,7 @@ void on_mine() {
 #endif
     int hx, hy, hz, face;
     int hw = get_targeted_block(&hx, &hy, &hz, &face);
-    if (hw && hy > 0 && hy < 256 && is_destructable(hw)) {
+    if (hw && hy > WORLD_MIN_Y && hy <= WORLD_MAX_Y && is_destructable(hw)) {
         set_block(hx, hy, hz, 0);
         if (g->mode != MODE_ONLINE) {
             Inventory_collect(&g->inventory, hw);
@@ -3175,13 +3176,13 @@ void on_build() {
     State *s = &g->players->state;
     int hx, hy, hz;
     int hw = hit_test(true, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
-    if (hw && hy > 0 && hy < 256) {
+    if (hw && hy > WORLD_MIN_Y && hy <= WORLD_MAX_Y) {
         if (!is_obstacle(hw)) {
             hw = hit_test(false, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
             if (!hw) return;
         }
 
-        if (hy > 0 && hy < 256 && !player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
+        if (hy > WORLD_MIN_Y && hy <= WORLD_MAX_Y && !player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
             if (!inventory_item_count) {
                 add_message("Mine a block before building.");
                 return;
@@ -3769,7 +3770,7 @@ void handle_movement(double dt) {
             dy = 0;
         }
     }
-    if (s->y < 0) {
+    if (s->y < WORLD_MIN_Y) {
         s->y = highest_block(s->x, s->z) + 2;
     }
 #ifdef __EMSCRIPTEN__
@@ -3950,11 +3951,20 @@ void parse_buffer(char *buffer, int len) {
             if (accepted) EM_ASM(if (Module.playBlockSound) Module.playBlockSound(1););
 #endif
         }
+        if (line[0] == 'F' && sscanf(line, "FL,%d,%d,%d,%d,%d,%d",
+            &bp, &bq, &bx, &by, &bz, &bw) == 6 &&
+            by > WORLD_MIN_Y && by < 0 &&
+            (bw == 0 || bw == Item_WATER || bw == -Item_WATER ||
+             bw == Item_LAVA || bw == -Item_LAVA))
+        {
+            Chunk *chunk = find_chunk(bp, bq);
+            if (chunk && map_set(&chunk->map, bx, by, bz, bw)) dirty_chunk(chunk);
+        }
         if (line[0] == 'B' && sscanf(line, "B,%d,%d,%d,%d,%d,%d",
             &bp, &bq, &bx, &by, &bz, &bw) == 6)
         {
             _set_block(bp, bq, bx, by, bz, bw, false);
-            if (player_intersects_block(2, s->x, s->y, s->z, bx, by, bz)) {
+            if (bw > 0 && is_obstacle(bw) && player_intersects_block(2, s->x, s->y, s->z, bx, by, bz)) {
                 s->y = highest_block(s->x, s->z) + 2;
             }
         }
@@ -4231,6 +4241,7 @@ int main(int argc, char **argv) {
     block_attrib.extra2 = glGetUniformLocation(program, "daylight");
     block_attrib.extra3 = glGetUniformLocation(program, "fog_distance");
     block_attrib.extra4 = glGetUniformLocation(program, "ortho");
+    block_attrib.extra5 = glGetUniformLocation(program, "flow_time");
     block_attrib.camera = glGetUniformLocation(program, "camera");
     block_attrib.timer = glGetUniformLocation(program, "timer");
 

@@ -9,7 +9,12 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+mod flow;
+
 const CHUNK_SIZE: i32 = 32;
+const WORLD_MIN_Y: i32 = -24;
+const WORLD_MAX_Y: i32 = 255;
+const BEDROCK: i32 = 65;
 const MAX_CLIENTS: usize = 64;
 const MAX_LINE: u64 = 4096;
 const MAX_COORD: i32 = 262_000;
@@ -38,6 +43,8 @@ extern "C" {
         callback: extern "C" fn(i32, i32, i32, i32, *mut c_void),
         arg: *mut c_void,
     );
+    fn world_stream(x: i32, z: i32, bottom: *mut i32, top: *mut i32) -> i32;
+    fn world_stream_direction(x: i32) -> i32;
 }
 
 extern "C" fn collect_block(x: i32, y: i32, z: i32, w: i32, arg: *mut c_void) {
@@ -103,6 +110,7 @@ struct State {
     animal_tick: u64,
     animal_cursor: usize,
     night: Option<bool>,
+    flows: HashMap<flow::Region, flow::Flow>,
 }
 
 #[derive(Clone, Debug)]
@@ -253,6 +261,14 @@ fn broadcast(state: &State, except: Option<u32>, message: &str) {
         if Some(*id) != except {
             send(player, message.as_bytes().to_vec());
         }
+    }
+}
+
+fn advance_flows(state: &mut State) {
+    let mut updates = String::new();
+    state.flows.retain(|_, flow| flow.advance(&mut updates));
+    if !updates.is_empty() {
+        broadcast(state, None, &updates);
     }
 }
 
@@ -807,6 +823,15 @@ fn chunk_response(server: &Server, id: u32, p: i32, q: i32, key: i64) -> rusqlit
             output.push_str(&format!("S,{p},{q},{x},{y},{z},{face},{text}\n"));
         }
     }
+    let region = (p & !1, q & !1);
+    let neighbor = (if p == region.0 { p - 2 } else { p + 1 }, region.1);
+    for key in [region, neighbor] {
+        if let Some(flow) = state.flows.get(&key) {
+            flow.channel.snapshot(&flow.wet, p, q, &mut output);
+        } else if let Some(channel) = flow::Channel::load(&state.db, key)? {
+            channel.snapshot(&channel.reachable(), p, q, &mut output);
+        }
+    }
     let refresh = key != -1 || !output.is_empty();
     output.push_str(&format!("K,{p},{q},{max_rowid}\n"));
     if refresh {
@@ -820,7 +845,7 @@ fn chunk_response(server: &Server, id: u32, p: i32, q: i32, key: i64) -> rusqlit
 fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusqlite::Result<()> {
     if x.unsigned_abs() > MAX_COORD as u32
         || z.unsigned_abs() > MAX_COORD as u32
-        || !(1..=255).contains(&y)
+        || !(WORLD_MIN_Y + 1..=WORLD_MAX_Y).contains(&y)
     {
         if let Some(player) = server.state.lock().unwrap().players.get(&id) {
             let (p, q) = (chunked(x), chunked(z));
@@ -855,6 +880,8 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
         )
         .optional()?;
     let previous = edited.unwrap_or(default);
+    let channel_cell = y < 0 && flow::is_channel((x, y, z));
+    let replace_liquid = channel_cell && matches!(previous, 12 | 13);
     let allowed =
         (0..=15).contains(&w) || (17..=23).contains(&w) || (32..=67).contains(&w) || w == MINA_ORE;
     let distance = ((player.position[0] - x as f64).powi(2)
@@ -862,9 +889,10 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
         + (player.position[2] - z as f64).powi(2))
     .sqrt();
     if !allowed
-        || previous == 16
+        || matches!(previous, 16 | BEDROCK)
+        || (y < 0 && w == 0 && matches!(previous, 12 | 13))
         || (w == 0 && previous == 0)
-        || (w != 0 && previous != 0)
+        || (w != 0 && previous != 0 && !replace_liquid)
         || distance > 10.0
         || (w > 0 && w < 256 && player.inventory[w as usize] == 0)
     {
@@ -878,6 +906,15 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
         }
         return Ok(());
     }
+    let region = flow::region(x, z);
+    let old_flow = if channel_cell {
+        Some(match state.flows.get(&region) {
+            Some(flow) => flow.wet.clone(),
+            None => flow::Channel::settled(&state.db, region)?,
+        })
+    } else {
+        None
+    };
     let transaction = state.db.transaction()?;
     let mut changes = Vec::new();
     for dx in -1..=1 {
@@ -984,7 +1021,15 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
             params![x, y, z],
         )?;
     }
+    let pending_flow = if let Some(wet) = old_flow {
+        flow::Channel::load(&transaction, region)?.map(|channel| flow::Flow::new(channel, wet))
+    } else {
+        None
+    };
     transaction.commit()?;
+    if let Some(flow) = pending_flow {
+        state.flows.insert(region, flow);
+    }
     if w == 0 {
         let inventory = &mut state.players.get_mut(&id).unwrap().inventory;
         if (1..256).contains(&previous) {
@@ -1020,7 +1065,7 @@ fn block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusql
 fn light_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32) -> rusqlite::Result<()> {
     if x.unsigned_abs() > MAX_COORD as u32
         || z.unsigned_abs() > MAX_COORD as u32
-        || !(1..=255).contains(&y)
+        || !(WORLD_MIN_Y + 1..=WORLD_MAX_Y).contains(&y)
         || !(0..=15).contains(&w)
     {
         return Ok(());
@@ -1072,7 +1117,7 @@ fn sign_edit(
 ) -> rusqlite::Result<()> {
     if x.unsigned_abs() > MAX_COORD as u32
         || z.unsigned_abs() > MAX_COORD as u32
-        || !(1..=255).contains(&y)
+        || !(WORLD_MIN_Y + 1..=WORLD_MAX_Y).contains(&y)
         || !(0..=7).contains(&face)
         || text.len() > 48
     {
@@ -1562,6 +1607,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             animal_tick: 0,
             animal_cursor: 0,
             night: None,
+            flows: HashMap::new(),
         }),
         terrain: Mutex::new(Terrain::default()),
         reward_categories,
@@ -1582,6 +1628,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 thread::sleep(MEMPOOL_POLL);
             });
         }
+    }
+    {
+        let server = server.clone();
+        thread::spawn(move || loop {
+            thread::sleep(Duration::from_millis(200));
+            advance_flows(&mut server.state.lock().unwrap());
+        });
     }
     {
         let server = server.clone();
@@ -1626,6 +1679,7 @@ mod tests {
                 animal_tick: 0,
                 animal_cursor: 0,
                 night: Some(false),
+                flows: HashMap::new(),
             }),
             terrain: Mutex::new(Terrain::default()),
             reward_categories: HashMap::from([(MINA_ORE, "b".repeat(64))]),
@@ -2541,6 +2595,80 @@ mod tests {
         assert!(!second_messages.contains("HP,"));
         update_animals_at(&server, 150).unwrap();
         assert!(first.try_iter().any(|m| m == b"ZN,0\n"));
+    }
+
+    #[test]
+    fn players_can_mine_below_bedrock_but_cannot_remove_the_roof() {
+        let (server, _, _) = setup();
+        server.state.lock().unwrap().players.get_mut(&1).unwrap().position =
+            [20.0, -4.0, 0.0, 0.0, 0.0];
+        block_edit(&server, 1, 20, 0, 0, 0).unwrap();
+        assert_eq!(server.state.lock().unwrap().players[&1].inventory[BEDROCK as usize], 0);
+
+        server.state.lock().unwrap().players.get_mut(&1).unwrap().position =
+            [20.0, -18.0, 0.0, 0.0, 0.0];
+        block_edit(&server, 1, 20, -20, 0, 0).unwrap();
+        assert_eq!(server.state.lock().unwrap().players[&1].inventory[6], 1);
+    }
+
+    #[test]
+    fn both_liquids_drain_behind_a_dam_and_refill_across_the_chunk_seam() {
+        let (server, first, _) = setup();
+        for (z, material) in [(12, 12), (52, 13)] {
+            let q = chunked(z);
+            {
+                let mut state = server.state.lock().unwrap();
+                let player = state.players.get_mut(&1).unwrap();
+                player.position = [29.0, -16.0, f64::from(z), 0.0, 0.0];
+                player.inventory[6] = 5;
+            }
+            for dam_z in z - 2..=z + 2 {
+                block_edit(&server, 1, 30, -17, dam_z, 6).unwrap();
+            }
+            advance_flows(&mut server.state.lock().unwrap());
+            let drain = first.try_iter().map(|m| String::from_utf8(m).unwrap()).collect::<String>();
+            assert!(drain.contains(&format!("FL,0,{q},31,-17,{z},0\n")));
+            assert!(drain.contains(&format!("FL,1,{q},32,-17,{z},0\n")));
+            assert!(!drain.contains(&format!("FL,0,{q},30,-17,{z},0\n")));
+
+            chunk_response(&server, 1, 1, q, -1).unwrap();
+            let snapshot = String::from_utf8(first.try_recv().unwrap()).unwrap();
+            assert!(snapshot.contains(&format!("FL,1,{q},32,-17,{z},0\n")));
+
+            block_edit(&server, 1, 30, -17, z, 0).unwrap();
+            advance_flows(&mut server.state.lock().unwrap());
+            let initial = first.try_iter().map(|m| String::from_utf8(m).unwrap()).collect::<String>();
+            assert!(initial.contains(&format!("FL,0,{q},30,-17,{z},{material}\n")));
+            assert!(!initial.contains(&format!("FL,1,{q},32,-17,{z},{material}\n")));
+            for _ in 0..5 {
+                advance_flows(&mut server.state.lock().unwrap());
+            }
+            let refill = first.try_iter().map(|m| String::from_utf8(m).unwrap()).collect::<String>();
+            assert!(refill.contains(&format!("FL,0,{q},31,-17,{z},{material}\n")));
+            assert!(refill.contains(&format!("FL,1,{q},32,-17,{z},{material}\n")));
+            assert!(refill.contains(&format!("FL,1,{q},33,-18,{z},{material}\n")));
+        }
+    }
+
+    #[test]
+    fn underworld_streams_drop_across_chunk_edges_and_leave_bedrock_openings() {
+        let mut terrain = Terrain::default();
+        let west = terrain.chunk(0, 0);
+        let east = terrain.chunk(1, 0);
+        let lava = terrain.chunk(1, 1);
+        assert_eq!(west[&(16, -24, 16)], BEDROCK);
+        assert!(!west.contains_key(&(16, 0, 16)));
+        assert!(!west.contains_key(&(16, 3, 16)));
+        assert_eq!(west[&(20, 0, 16)], BEDROCK);
+        for (z, material, chunk) in [(12, 12, east), (52, 13, lava)] {
+            // The stream crosses the chunk boundary and continues over a drop.
+            assert_eq!(chunk[&(31, -17, z)], -material);
+            assert_eq!(chunk[&(32, -17, z)], material);
+            assert_eq!(chunk[&(33, -17, z)], material);
+            assert_eq!(chunk[&(33, -18, z)], material);
+            assert_eq!(chunk[&(33, -19, z)], 6);
+            assert!(!chunk.contains_key(&(33, -16, z)));
+        }
     }
 
     #[test]
