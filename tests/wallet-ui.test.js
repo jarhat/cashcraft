@@ -1246,7 +1246,7 @@ test('priced metadata updates balances, token choices and allocation', async () 
 test('payment QR draws the loaded token logo and ignores a stale result', async () => {
   const nodes = new Map();
   const canvasDraws = [];
-  let handler, focused;
+  let handler, focused, popup;
   const element = (id) => {
     if (!nodes.has(id)) nodes.set(id, {
       value: '', textContent: '',
@@ -1279,6 +1279,7 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
     window: { location: { href: 'https://ctf.example/' } }, URL,
     document: { createElement: () => ({ width: 512, getContext: () => ({ fillRect() {}, drawImage() {} }) }) },
     QRCode: { toCanvas: async () => {} },
+    openTokenQr: (options) => { popup = options; },
     loadTokenLogo: () => new Promise((resolve, reject) => { resolveLogo = resolve; rejectLogo = reject; }),
     fetchCauldronSpot: async () => { if (failPrice) throw new Error('offline'); return 0.001; },
     fetchTokenMetadata: async () => ({ decimals: 2, symbol: 'PUSD' }),
@@ -1298,6 +1299,8 @@ test('payment QR draws the loaded token logo and ignores a stale result', async 
   element('receive-amount').value = '2';
   await handler();
   assert.equal(element('download-payment-qr').disabled, false);
+  assert.equal(popup.value, element('payment-url').textContent);
+  assert.match(popup.value, /amount=2/);
   resolveLogo(logo);
   await new Promise((resolve) => setImmediate(resolve));
   assert.ok(canvasDraws.some(([image]) => image === logo));

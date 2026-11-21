@@ -2806,6 +2806,8 @@ body::before { content: none; display: none; }
 .game-stage:fullscreen { width: 100%; height: 100%; border: 0; border-radius: 0; }
 .game-stage:fullscreen iframe { height: 100%; }
 .game-stage:fullscreen .game-wallet-actions { display: none; }
+#token-qr-value { overflow-wrap: anywhere; user-select: all; }
+#token-qr-image[hidden] { display: none; }
 .game-dialog.is-fullscreen #game-close, .game-dialog.is-fullscreen .game-share { display: none; }
 .game-share svg { width: 20px; height: 20px; }
 .game-controls button { position: relative; }

@@ -170,7 +170,13 @@ void client_talk(const char *text) {
         return;
     }
     char buffer[1024];
-    snprintf(buffer, 1024, "T,%s\n", text);
+    int length = snprintf(buffer, sizeof(buffer), "T,%s", text);
+    if (length < 0 || (size_t)length >= sizeof(buffer) - 1) return;
+    for (int i = 2; i < length; i++) {
+        if (buffer[i] == '\r' || buffer[i] == '\n') buffer[i] = ' ';
+    }
+    buffer[length++] = '\n';
+    buffer[length] = '\0';
     client_send(buffer);
 }
 

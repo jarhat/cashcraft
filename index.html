@@ -482,6 +482,21 @@
     </section>
 
     </div>
+    <dialog id="token-qr-dialog" class="notifications-dialog" aria-labelledby="token-qr-title">
+      <div class="notifications-heading">
+        <h2 id="token-qr-title">Token QR</h2>
+        <button id="token-qr-close" class="small-button close-notifications" type="button" aria-label="Close token QR">×</button>
+      </div>
+      <p id="token-qr-hint" class="fine"></p>
+      <div id="token-qr-image" class="qr-frame" hidden></div>
+      <div class="address-line"><code id="token-qr-value"></code></div>
+      <div class="qr-actions">
+        <button id="token-qr-copy" class="small-button" type="button">Copy</button>
+        <button id="token-qr-continue" class="small-button" type="button">Continue</button>
+      </div>
+      <p id="token-qr-status" class="fine" role="status"></p>
+    </dialog>
+
     <dialog id="connection-dialog" class="notifications-dialog connection-dialog" aria-labelledby="connection-title">
     <article id="connection-section" class="panel">
       <div class="heading">

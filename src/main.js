@@ -2115,6 +2115,7 @@ updateGameRewardAddress = setupGames($, {
   getRewardAddress: () => walletReady ? registeredRewardAddress : null,
   isWalletConnected: () => walletReady,
   hasMinaPickaxe: () => walletReady && minaPickaxe,
+  openPlayerTransfer,
 });
 const donationDependencies = async () => {
   await loadWalletDependencies();
@@ -2388,6 +2389,95 @@ function updateReceiveAddress() {
   $('copy-receive-address').disabled = false;
 }
 
+let tokenQrGeneration = 0;
+let continueTokenQr = null;
+function openTokenQr({ title, hint, value, label, action }) {
+  const version = ++tokenQrGeneration;
+  const dialog = $('token-qr-dialog');
+  const image = $('token-qr-image');
+  const status = $('token-qr-status');
+  $('token-qr-title').textContent = title;
+  $('token-qr-hint').textContent = hint;
+  $('token-qr-value').textContent = value;
+  $('token-qr-continue').textContent = label;
+  continueTokenQr = action;
+  image.replaceChildren();
+  image.hidden = true;
+  status.textContent = '';
+  if (!dialog.open) dialog.showModal();
+  const canvas = document.createElement('canvas');
+  canvas.setAttribute('aria-label', translate('Token QR code'));
+  void QRCode.toCanvas(canvas, value, { width: 248, margin: 4 }).then(() => {
+    if (!dialog.open || version !== tokenQrGeneration) return;
+    image.replaceChildren(canvas);
+    image.hidden = false;
+  }).catch((error) => {
+    if (!dialog.open || version !== tokenQrGeneration) return;
+    logger.warn('Token QR unavailable:', error);
+    status.textContent = translate('Could not display the QR code. Use Copy instead.');
+  });
+}
+
+async function openPlayerTransfer(target) {
+  try {
+    if (!target && !walletReady) {
+      openConnectionDialog();
+      return;
+    }
+    const wallet = manager;
+    await loadWalletDependencies();
+    if (!target && (!walletReady || manager !== wallet)) return;
+    const address = validateRecipient(target ? target.address : addressFor(0, 0));
+    if (walletReady) $('balance-section').scrollIntoView({ block: 'start' });
+    if (!target) setTransferTab('receive');
+    openTokenQr({
+      title: target ? `${translate('Send tokens to')} ${target.name}` : translate('Your token receive address'),
+      hint: target
+        ? translate('Game names are not verified. Confirm this address with the recipient before sending.')
+        : translate('Share this address or create a payment request with a token category and amount.'),
+      value: address,
+      label: target ? translate('Choose token and amount') : translate('Create payment request'),
+      action: () => {
+        if (target) {
+          $('crafting-note').hidden = true;
+          $('pickaxe-recovery').hidden = true;
+          fillFromUrl(new URLSearchParams());
+          for (const [id, value] of [['recipient', address], ['category', ''], ['amount', '']]) {
+            $(id).value = value;
+            $(id).dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          setTransferTab('send');
+        }
+        if (walletReady) {
+          $('transfer-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          $(target ? 'category' : 'receive-amount').focus({ preventScroll: true });
+        } else {
+          openConnectionDialog();
+        }
+      },
+    });
+  } catch (error) {
+    $('game-dialog-status').textContent = error.message;
+    report(error);
+  }
+}
+
+$('token-qr-close').addEventListener('click', () => $('token-qr-dialog').close());
+$('token-qr-continue').addEventListener('click', () => {
+  const action = continueTokenQr;
+  $('token-qr-dialog').close();
+  action?.();
+});
+$('token-qr-copy').addEventListener('click', async () => {
+  const version = tokenQrGeneration;
+  try {
+    await navigator.clipboard.writeText($('token-qr-value').textContent);
+    if (version === tokenQrGeneration) $('token-qr-status').textContent = translate('Copied');
+  } catch (error) {
+    if (version === tokenQrGeneration) $('token-qr-status').textContent = translate('Could not copy. Select the text to copy it manually.');
+  }
+});
+
 const shortLinkId = /^\/s\/([A-Za-z0-9_-]{8,32})\/?$/.exec(window.location.pathname)?.[1];
 setTransferTab('send');
 
@@ -2565,6 +2655,13 @@ $('generate-payment').addEventListener('click', async () => {
     $('share-payment-qr').disabled = false;
     $('download-payment-qr').disabled = false;
     $('payment-result').classList.remove('hidden');
+    openTokenQr({
+      title: translate('Token payment request'),
+      hint: translate('Share this QR code or link to request payment.'),
+      value: paymentUrl.toString(),
+      label: translate('Done'),
+      action: () => $('payment-result').scrollIntoView({ block: 'nearest' }),
+    });
 
     const currentPayment = () => generation === paymentGeneration &&
       !$('payment-result').classList.contains('hidden') &&

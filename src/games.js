@@ -6,7 +6,7 @@ const games = {
 };
 const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 
-export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, hasMinaPickaxe = () => false, getGuestId = getGameGuestId, autoOpen = false, autoOpenGame = 'netcraft' }) {
+export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, hasMinaPickaxe = () => false, getGuestId = getGameGuestId, openPlayerTransfer, autoOpen = false, autoOpenGame = 'netcraft' }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
@@ -286,8 +286,21 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   for (const id of ['game-guide-close', 'game-guide-done']) {
     $(id).addEventListener('click', () => guide.close());
   }
-  window.addEventListener('message', (event) => {
+  window.addEventListener('message', async (event) => {
     if (event.source !== frame.contentWindow || activeGame !== 'netcraft') return;
+    if (event.data?.type === 'netcraft-wallet-send' || event.data?.type === 'netcraft-wallet-receive') {
+      if (!openPlayerTransfer || dialog.hidden) return;
+      const send = event.data.type === 'netcraft-wallet-send';
+      const { name, address } = event.data;
+      if (send && (typeof name !== 'string' || !/^[A-Za-z0-9_]{1,24}$/.test(name) ||
+          typeof address !== 'string' || !/^[a-z0-9:]{1,120}$/.test(address))) {
+        $('game-dialog-status').textContent = translate('Invalid player receive address.');
+        return;
+      }
+      document.exitPointerLock?.();
+      if (await minimize()) await openPlayerTransfer(send ? { name, address } : null);
+      return;
+    }
     if (event.data?.type === 'netcraft-sound-state' && typeof event.data.enabled === 'boolean') {
       soundEnabled = event.data.enabled;
       sound.setAttribute('aria-pressed', String(soundEnabled));

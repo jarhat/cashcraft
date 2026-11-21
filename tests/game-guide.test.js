@@ -49,7 +49,11 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
   $('notifications-toggle').click = () => { notifications++; };
   const guestId = 'a'.repeat(64);
   $('game-frame').contentWindow = { postMessage() {} };
-  const update = setupGames($, { translate: (text) => text, isWalletConnected: () => connected, getGuestId: () => guestId });
+  const transfers = [];
+  const update = setupGames($, {
+    translate: (text) => text, isWalletConnected: () => connected, getGuestId: () => guestId,
+    openPlayerTransfer: (target) => transfers.push(target),
+  });
   await $('game-netcraft').listeners.click();
   assert.equal($('game-guide').open, false);
   assert.equal($('game-wizard-speech').hidden, false);
@@ -99,4 +103,14 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
   $('game-notifications').listeners.click();
   $('game-guide-wallet').listeners.click();
   assert.equal(notifications, 2);
+  const send = { type: 'netcraft-wallet-send', name: 'Miner', address: 'bitcoincash:ztest' };
+  await handlers.message({ source: {}, data: send });
+  await message({ ...send, address: 'https://example.org/' });
+  assert.deepEqual(transfers, []);
+  await message(send);
+  assert.deepEqual(transfers, [{ name: 'Miner', address: 'bitcoincash:ztest' }]);
+  assert.equal($('game-dialog').hidden, true);
+  $('game-restore').listeners.click();
+  await message({ type: 'netcraft-wallet-receive' });
+  assert.equal(transfers[1], null);
 });

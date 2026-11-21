@@ -99,6 +99,7 @@ struct Player {
     lives: u8,
     last_attack_tick: Option<u64>,
     last_pickaxe: Option<Instant>,
+    last_chat: Option<Instant>,
 }
 
 struct State {
@@ -1452,14 +1453,16 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
             }
         }
         "T" => {
-            let text = args.join(",");
-            if text.len() > 256 {
-                return Ok(true);
-            }
+            let input = args.join(",");
+            let text = input.trim_matches(' ');
             let mut state = server.state.lock().unwrap();
             let Some(player) = state.players.get(&id).cloned() else {
                 return Ok(true);
             };
+            if text.len() > 255 || !text.bytes().all(|byte| (32..=126).contains(&byte)) {
+                send(&player, b"T,Chat accepts up to 255 printable ASCII characters.\n".to_vec());
+                return Ok(true);
+            }
             if let Some(name) = text.strip_prefix("/nick ") {
                 if !name.is_empty()
                     && name.len() <= 24
@@ -1467,6 +1470,25 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                 {
                     state.players.get_mut(&id).unwrap().name = name.to_string();
                     broadcast(&state, None, &format!("N,{id},{name}\n"));
+                }
+            } else if text == "/send" || text.starts_with("/send ") {
+                let name = text.strip_prefix("/send ").unwrap_or("").trim();
+                if name.is_empty() || name.len() > 24 ||
+                    !name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_') {
+                    send(&player, b"T,Usage: /send NAME\n".to_vec());
+                } else {
+                    let mut matches = state.players.iter()
+                        .filter(|(_, other)| other.name.eq_ignore_ascii_case(name));
+                    match (matches.next(), matches.next()) {
+                        (_, Some(_)) => send(&player, b"T,That name is ambiguous. Ask the recipient to choose a unique /nick.\n".to_vec()),
+                        (Some((&target, _)), None) if target == id =>
+                            send(&player, b"T,Use /receive to request tokens for your wallet.\n".to_vec()),
+                        (Some((_, other)), None) => match other.reward_address.as_deref() {
+                            Some(address) => send(&player, format!("WR,{},{address}\n", other.name)),
+                            None => send(&player, b"T,That player has not connected a token wallet.\n".to_vec()),
+                        },
+                        _ => send(&player, b"T,No online player has that name.\n".to_vec()),
+                    }
                 }
             } else if text == "/list" {
                 let names = state
@@ -1480,10 +1502,21 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                 state.players.get_mut(&id).unwrap().position = [0.0; 5];
                 send(&player, format!("U,{id},0,0,0,0,0\n").into_bytes());
                 broadcast(&state, Some(id), &format!("P,{id},0,0,0,0,0\n"));
-            } else if text.starts_with('/') {
-                send(&player, b"T,Commands: /nick NAME, /list, /spawn\n".to_vec());
+            } else if text == "/chat" {
+                send(&player, b"T,Use /chat MESSAGE or type a message without a command.\n".to_vec());
+            } else if text.starts_with('/') && !text.starts_with("/chat ") {
+                send(&player, b"T,Commands: /chat MESSAGE, /send NAME, /receive, /nick NAME, /list, /spawn\n".to_vec());
             } else {
-                broadcast(&state, None, &format!("T,{}> {text}\n", player.name));
+                let message = text.strip_prefix("/chat ").unwrap_or(text).trim();
+                if !message.is_empty() {
+                    let now = Instant::now();
+                    if player.last_chat.is_some_and(|last| now.duration_since(last) < Duration::from_secs(1)) {
+                        send(&player, b"T,Please wait a second before sending another message.\n".to_vec());
+                    } else {
+                        state.players.get_mut(&id).unwrap().last_chat = Some(now);
+                        broadcast(&state, None, &format!("CH,{id},{message}\n"));
+                    }
+                }
             }
         }
         "A" => {}
@@ -1586,11 +1619,13 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
             lives: PLAYER_LIVES,
             last_attack_tick: None,
             last_pickaxe: None,
+            last_chat: None,
         };
         let now = world_time();
         send(
             &player,
-            format!("U,{id},0,0,0,0,0\nE,{now},{DAY_LENGTH}\nZN,{}\nHP,{PLAYER_LIVES}\nT,Welcome to NetCraft!\n", u8::from(is_night(now))).into_bytes(),
+            format!("U,{id},0,0,0,0,0\nN,{id},{}\nE,{now},{DAY_LENGTH}\nZN,{}\nHP,{PLAYER_LIVES}\nT,Welcome to NetCraft!\n",
+                player.name, u8::from(is_night(now))).into_bytes(),
         );
         let mut snapshot = String::new();
         for (other_id, other) in &state.players {
@@ -1814,6 +1849,7 @@ mod tests {
                     lives: PLAYER_LIVES,
                     last_attack_tick: None,
                     last_pickaxe: None,
+                    last_chat: None,
                 },
             );
             receivers.push(receiver);
@@ -1910,6 +1946,61 @@ mod tests {
             .get_mut(&1)
             .unwrap()
             .position = [x as f64, y as f64, z as f64, 0.0, 0.0];
+    }
+
+    #[test]
+    fn chat_identifies_the_sender_and_preserves_punctuation() {
+        let (server, first, second) = setup();
+        handle_command(&server, 1, "T,/nick Miner").unwrap();
+        assert_eq!(first.try_recv().unwrap(), b"N,1,Miner\n");
+        assert_eq!(second.try_recv().unwrap(), b"N,1,Miner\n");
+        handle_command(&server, 1, "T,/chat Hello, miners!").unwrap();
+        assert_eq!(first.try_recv().unwrap(), b"CH,1,Hello, miners!\n");
+        assert_eq!(second.try_recv().unwrap(), b"CH,1,Hello, miners!\n");
+        handle_command(&server, 2, "T,Hi there").unwrap();
+        assert_eq!(first.try_recv().unwrap(), b"CH,2,Hi there\n");
+        assert_eq!(second.try_recv().unwrap(), b"CH,2,Hi there\n");
+        handle_command(&server, 1, "T,Too soon").unwrap();
+        assert!(first.try_recv().unwrap().starts_with(b"T,Please wait"));
+        assert!(second.try_recv().is_err());
+    }
+
+    #[test]
+    fn send_resolves_only_a_unique_online_recipient_and_replies_privately() {
+        let (server, first, second) = setup();
+        handle_command(&server, 1, "T,/send missing").unwrap();
+        assert!(first.try_recv().unwrap().starts_with(b"T,No online player"));
+        handle_command(&server, 1, "T,/send guest2").unwrap();
+        assert!(first.try_recv().unwrap().starts_with(b"T,That player has not connected"));
+        let address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz";
+        {
+            server.state.lock().unwrap().players.get_mut(&2).unwrap().reward_address =
+                Some(address.to_owned());
+        }
+        handle_command(&server, 1, "T,/send GUEST2").unwrap();
+        assert_eq!(first.try_recv().unwrap(), format!("WR,guest2,{address}\n").into_bytes());
+        assert!(second.try_recv().is_err());
+        handle_command(&server, 1, "T,/nick Guest2").unwrap();
+        first.try_recv().unwrap();
+        second.try_recv().unwrap();
+        handle_command(&server, 1, "T,/send guest2").unwrap();
+        assert!(first.try_recv().unwrap().starts_with(b"T,That name is ambiguous"));
+        assert!(second.try_recv().is_err());
+    }
+
+    #[test]
+    fn chat_help_and_invalid_messages_are_not_broadcast() {
+        let (server, first, second) = setup();
+        handle_command(&server, 1, "T,/chat").unwrap();
+        assert!(first.try_recv().unwrap().starts_with(b"T,Use /chat"));
+        handle_command(&server, 1, "T,hello\rworld").unwrap();
+        handle_command(&server, 1, &format!("T,{}", "x".repeat(256))).unwrap();
+        for _ in 0..2 {
+            assert!(first.try_recv().unwrap().starts_with(b"T,Chat accepts"));
+        }
+        handle_command(&server, 1, "T,    ").unwrap();
+        assert!(first.try_recv().is_err());
+        assert!(second.try_recv().is_err());
     }
 
     #[test]

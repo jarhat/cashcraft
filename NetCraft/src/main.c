@@ -2640,6 +2640,96 @@ static void render_text(
     render_text_opacity(attrib, justify, x, y, n, text, 1.0f);
 }
 
+static bool printable_chat(const char *message) {
+    for (; *message; message++) {
+        unsigned char byte = (unsigned char)*message;
+        if (byte < 32 || byte > 126) return false;
+    }
+    return true;
+}
+
+static void render_chat_bubbles(Attrib *box, Attrib *text, Player *camera) {
+    enum { COLUMNS = 28 };
+    const float size = fminf(11.0f * g->scale, fminf(g->width / 34.0f, g->height / 30.0f));
+    const float pad = size * .6f;
+    const double now = glfwGetTime();
+    State *eye = &camera->state;
+    float view[16];
+    set_matrix_3d(view, g->width, g->height, eye->x, eye->y, eye->z,
+        eye->rx, eye->ry, g->fov, g->ortho, g->ortho_zoom, g->render_radius);
+
+    for (int i = 0; i < g->player_count; i++) {
+        Player *speaker = g->players + i;
+        double age = now - speaker->chat_time;
+        if (!speaker->chat[0] || age < 0 || age >= 7) continue;
+        float x = g->width * .5f, y = g->height * .32f;
+        if (speaker != camera) {
+            State *s = &speaker->state;
+            float dx = s->x - eye->x, dy = s->y + .45f - eye->y, dz = s->z - eye->z;
+            float distance = sqrtf(dx * dx + dy * dy + dz * dz);
+            if (!isfinite(distance) || distance > 24) continue;
+            float clip[4], anchor[4] = {s->x, s->y + .45f, s->z, 1};
+            mat_vec_multiply(clip, view, anchor);
+            if (clip[3] <= 0 || fabsf(clip[0]) > clip[3] ||
+                fabsf(clip[1]) > clip[3] || fabsf(clip[2]) > clip[3]) continue;
+            bool occluded = false;
+            for (float d = .25f; d < distance; d += .25f) {
+                float t = d / distance;
+                if (is_obstacle(get_block(roundf(eye->x + dx * t),
+                        roundf(eye->y + dy * t), roundf(eye->z + dz * t)))) {
+                    occluded = true;
+                    break;
+                }
+            }
+            if (occluded) continue;
+            x *= 1 + clip[0] / clip[3];
+            y = g->height * .5f * (1 + clip[1] / clip[3]);
+        }
+
+        char rows[MAX_CHAT_LENGTH / (COLUMNS / 2) + 2][COLUMNS + 1];
+        int count = 0, width = 0;
+        const char *next = speaker->chat;
+        size_t remaining = strlen(next);
+        while (remaining && count < (int)(sizeof(rows) / sizeof(*rows))) {
+            size_t n = remaining < COLUMNS ? remaining : COLUMNS;
+            if (remaining > COLUMNS && next[n] != ' ') {
+                size_t split = n;
+                while (split > COLUMNS / 2 && next[split] != ' ') split--;
+                if (next[split] == ' ') n = split;
+            }
+            memcpy(rows[count], next, n);
+            rows[count++][n] = '\0';
+            if ((int)n > width) width = n;
+            next += n;
+            remaining -= n;
+            while (remaining && *next == ' ') { next++; remaining--; }
+        }
+
+        float w = width * size + 2 * pad, h = count * size * 2 + 2 * pad;
+        float left = fmaxf(pad, fminf(x - w / 2, g->width - w - pad));
+        float bottom = fmaxf(pad, fminf(y + pad, g->height - h - pad));
+        float tail = fmaxf(pad, fminf(x - left, w - pad));
+#define CHAT_VERTEX(x, y) (x), (y), .055f, .13f, .10f
+        float vertices[] = {
+            CHAT_VERTEX(0, 0), CHAT_VERTEX(w, 0), CHAT_VERTEX(w, h),
+            CHAT_VERTEX(0, 0), CHAT_VERTEX(w, h), CHAT_VERTEX(0, h),
+            CHAT_VERTEX(tail - pad, 0), CHAT_VERTEX(tail, -pad), CHAT_VERTEX(tail + pad, 0),
+        };
+#undef CHAT_VERTEX
+        GLuint buffer = gen_buffer(sizeof(vertices), vertices);
+        begin_hud_sprites(box);
+        draw_hud_sprite(box, buffer, 9, left, bottom, 1, 0);
+        end_hud_sprites(box);
+        del_buffer(buffer);
+        glDisable(GL_DEPTH_TEST);
+        for (int row = 0; row < count; row++) {
+            render_text(text, ALIGN_LEFT, left + pad + size / 2,
+                bottom + h - pad - (2 * row + 1) * size, size, rows[row]);
+        }
+        glEnable(GL_DEPTH_TEST);
+    }
+}
+
 typedef struct {
     GLuint buffer;
     uint32_t count;
@@ -3090,6 +3180,13 @@ void parse_command(const char *buffer, bool forward) {
         g->day_length = count;
         g->time_changed = true;
     }
+    else if (strcmp(buffer, "/receive") == 0) {
+#ifdef __EMSCRIPTEN__
+        EM_ASM(parent.postMessage({type: 'netcraft-wallet-receive'}, '*'););
+#else
+        add_message("The token wallet is available in the browser game.");
+#endif
+    }
     else if (strcmp(buffer, "/list") == 0) {
         char buf[256] = {0};
 
@@ -3361,6 +3458,9 @@ void on_key(GLFWwindow *window, int key, int scancode, int action, int mods) {
                     if (hit_test_face_rotation(player, &x, &y, &z, &face, &rotation)) {
                         set_sign(x, y, z, face, rotation, g->typing_buffer + 1);
                     }
+                }
+                else if (strcmp(g->typing_buffer, "/chat") == 0 && g->mode == MODE_ONLINE) {
+                    start_typing();
                 }
                 else if (g->typing_buffer[0] == '/') {
                     parse_command(g->typing_buffer, true);
@@ -3974,6 +4074,20 @@ void parse_buffer(char *buffer, int len) {
 #endif
         }
         char mined_reward_address[121];
+        char recipient_name[25], recipient_address[121];
+        if (sscanf(line, "WR,%24[^,],%120[^\n]", recipient_name, recipient_address) == 2) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({
+                    type: 'netcraft-wallet-send',
+                    name: UTF8ToString($0),
+                    address: UTF8ToString($1)
+                }, '*');
+            }, recipient_name, recipient_address);
+#else
+            add_message("Open the browser wallet to send tokens.");
+#endif
+        }
         int guest_blocks, guest_unlocked;
         if (line[0] == 'G' && sscanf(line, "G,%d,%d", &guest_blocks, &guest_unlocked) == 2 &&
             guest_blocks >= 0 && guest_blocks < 10 && (guest_unlocked == 0 || guest_unlocked == 1)) {
@@ -4061,8 +4175,8 @@ void parse_buffer(char *buffer, int len) {
             if (!player && g->player_count < MAX_PLAYERS) {
                 player = g->players + g->player_count;
                 g->player_count++;
+                memset(player, 0, sizeof(*player));
                 player->id = pid;
-                player->buffer = 0;
                 snprintf(player->name, MAX_NAME_LENGTH, "player%d", pid);
                 update_player(player, px, py, pz, prx, pry, false);
                 update_player(player, px, py, pz, prx, pry, true);
@@ -4112,6 +4226,20 @@ void parse_buffer(char *buffer, int len) {
         if (line[0] == 'T' && line[1] == ',') {
             char *text = line + 2;
             add_message(text);
+        }
+        int chat_offset = 0;
+        if (sscanf(line, "CH,%d,%n", &pid, &chat_offset) == 1 && chat_offset > 0) {
+            Player *speaker = find_player(pid);
+            const char *message = line + chat_offset;
+            size_t length = strlen(message);
+            if (speaker && length > 0 && length <= MAX_CHAT_LENGTH &&
+                printable_chat(message)) {
+                memcpy(speaker->chat, message, length + 1);
+                speaker->chat_time = glfwGetTime();
+                char entry[MAX_NAME_LENGTH + MAX_CHAT_LENGTH + 3];
+                snprintf(entry, sizeof(entry), "%s> %s", speaker->name, message);
+                add_message(entry);
+            }
         }
         char name[MAX_NAME_LENGTH];
         if (line[0] == 'N' && sscanf(line, "N,%d,%" MAX_NAME_LENGTH_FORMAT "s", &pid, name) == 2) {
@@ -4496,6 +4624,7 @@ void client_connection_failed(void) {
     while (g->player_count > 1) {
         del_buffer(g->players[--g->player_count].buffer);
     }
+    g->players[0].chat[0] = '\0';
     g->observe1 = g->observe2 = 0;
     reconnect_at = emscripten_get_now() + reconnect_delay * 1000.0;
     reconnect_delay = MIN(reconnect_delay * 2, 30);
@@ -4911,6 +5040,7 @@ void render_scene() {
         ty -= ts * 2;
     }
     if (SHOW_CHAT_TEXT && g->show_ui) {
+        if (g->initialized) render_chat_bubbles(&pickaxe_attrib, &text_attrib, player);
         for (int i = 0; i < MAX_VISIBLE_MESSAGES; i++) {
             int index = (g->message_view_index + i) % MAX_MESSAGES;
             if (strlen(g->messages[index])) {
