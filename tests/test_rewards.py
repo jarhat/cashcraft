@@ -49,6 +49,28 @@ class RewardTests(unittest.TestCase):
             rpc.return_value = ["invalid"]
             self.assertEqual(client.get(path, headers=headers).status_code, 503)
 
+    def test_netcraft_tip_returns_only_synced_chain_tip_to_authenticated_server(self):
+        client = TestClient(backend.app)
+        path = "/api/internal/netcraft-tip"
+        headers = {"Authorization": "Bearer test-secret"}
+
+        def get_tip(method, params):
+            self.assertEqual(method, "getblockchaininfo")
+            self.assertEqual(params, [])
+            return info
+
+        info = {"bestblockhash": "A" * 64, "initialblockdownload": False}
+        with patch.object(backend, "NETCRAFT_REWARD_WAKE_SECRET", "test-secret"), \
+             patch.object(backend, "bch_rpc", side_effect=get_tip) as rpc:
+            self.assertEqual(client.get(path).status_code, 403)
+            rpc.assert_not_called()
+            response = client.get(path, headers=headers)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.text, "a" * 64 + "\n")
+            self.assertEqual(response.headers["cache-control"], "no-store")
+            info["initialblockdownload"] = True
+            self.assertEqual(client.get(path, headers=headers).status_code, 503)
+
     def test_check_balance_reads_only_the_payout_wallet(self):
         with patch.object(backend, "bch_rpc", return_value="1.00001234") as rpc:
             self.assertEqual(backend.check_balance(), 100001234)

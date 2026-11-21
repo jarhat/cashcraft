@@ -1201,7 +1201,7 @@ def netcraft_mempool(request: Request) -> Response:
 def netcraft_tip(request: Request) -> Response:
     require_netcraft_auth(request)
     try:
-        info = bch_rpc("getblockchaininfo")
+        info = bch_rpc("getblockchaininfo", [])
         tip = info.get("bestblockhash") if isinstance(info, dict) else None
         if not isinstance(tip, str) or not TXID_RE.fullmatch(tip) or info.get("initialblockdownload") is not False:
             raise RuntimeError("BCHN tip unavailable or syncing")
