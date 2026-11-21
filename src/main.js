@@ -400,24 +400,11 @@ function report(error, { log = true } = {}) {
   $('log').textContent = `Action failed: ${error?.message || String(error)}\nCheck the status above, your inputs and wallet connection before retrying.`;
 }
 
-const savedTheme = localStorage.getItem('ctf-theme');
-function setTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  localStorage.setItem('ctf-theme', theme);
-  document.querySelector('meta[name="theme-color"]').content = '#080a10';
-  document.querySelectorAll('[data-theme-option]').forEach((button) => {
-    button.setAttribute('aria-pressed', String(button.dataset.themeOption === theme));
-  });
-}
-const migratedTheme = { dark: 'frost', blue: 'frost' }[savedTheme] || savedTheme;
-setTheme(migratedTheme === 'frost' ? 'frost' : 'voxel');
-
 document.querySelector('.topbar-tools-left').append(
   $('games-toggle').parentElement,
   $('language-toggle').parentElement,
-  $('theme-toggle').parentElement,
 );
-for (const name of ['theme', 'language', 'games']) {
+for (const name of ['language', 'games']) {
   const toggle = $(`${name}-toggle`);
   const menu = $(`${name}-menu`);
   const close = () => {
@@ -434,8 +421,7 @@ for (const name of ['theme', 'language', 'games']) {
   menu.addEventListener('click', (event) => {
     const button = event.target.closest('button');
     if (!button) return;
-    if (name === 'theme') setTheme(button.dataset.themeOption);
-    else if (name === 'language') {
+    if (name === 'language') {
       setLanguage(button.dataset.languageOption);
       if (paymentPriceSnapshot) {
         $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;

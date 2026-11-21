@@ -15,7 +15,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   const guide = $('game-guide');
   const prompt = $('mining-prompt');
   const toolbar = document.querySelector('.game-toolbar');
-  const rankingParent = $('game-ranking').parentNode;
   const setPlayingUi = () => {
     const playing = dialog.open && !dialog.hidden;
     document.body.classList.toggle('cashcraft-playing', playing);
@@ -26,6 +25,13 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   let generation = 0;
   let activeGame = null;
   let guideShown = false;
+  let reopenGuide = false;
+  let reopenPrompt = false;
+  const reopenOverlays = () => {
+    if (reopenGuide && !guide.open) guide.show();
+    if (reopenPrompt && !prompt.open) prompt.show();
+    reopenGuide = reopenPrompt = false;
+  };
   let guestId = null;
   let guestUnlocked = null;
   let firstBlockShown = false;
@@ -75,8 +81,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         generation++;
         $('game-dialog-status').textContent = '';
         dialog.hidden = false;
-        stage.appendChild(guide);
-        stage.appendChild(prompt);
+        reopenOverlays();
         setPlayingUi();
         return;
       }
@@ -143,12 +148,10 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         return false;
       }
     }
-    const guideOpen = guide.open;
-    const promptOpen = prompt.open;
-    toolbar.after(guide);
-    toolbar.after(prompt);
-    if (guideOpen && !guide.open) guide.show();
-    if (promptOpen && !prompt.open) prompt.show();
+    reopenGuide = guide.open;
+    reopenPrompt = prompt.open;
+    guide.close();
+    prompt.close();
     dialog.hidden = true;
     setPlayingUi();
     restore.focus({ preventScroll: true });
@@ -157,21 +160,15 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   $('game-close').addEventListener('click', minimize);
   dialog.addEventListener('cancel', (event) => { event.preventDefault(); void minimize(); });
   restore.addEventListener('click', () => {
-    const guideOpen = guide.open;
-    const promptOpen = prompt.open;
-    stage.appendChild(guide);
-    stage.appendChild(prompt);
-    if (guideOpen && !guide.open) guide.show();
-    if (promptOpen && !prompt.open) prompt.show();
     dialog.hidden = false;
+    reopenOverlays();
     setPlayingUi();
     frame.focus({ preventScroll: true });
   });
   $('game-minimized-fullscreen').addEventListener('click', async () => {
     if (!activeGame) return;
-    stage.appendChild(guide);
-    stage.appendChild(prompt);
     dialog.hidden = false;
+    reopenOverlays();
     setPlayingUi();
     try {
       await stage.requestFullscreen();
@@ -284,8 +281,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   $('ranking-close').addEventListener('click', () => $('ranking-dialog').close());
   document.addEventListener('fullscreenchange', () => {
     const active = document.fullscreenElement === stage;
-    if (active) $('game-controls-right').prepend($('game-ranking'));
-    else rankingParent.insertBefore($('game-ranking'), $('game-close'));
     stage.classList.toggle('is-fullscreen', active);
     dialog.classList.toggle('is-fullscreen', active);
     setPlayingUi();

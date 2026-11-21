@@ -71,7 +71,6 @@
         </svg>
       </div>
       <div class="topbar-tools topbar-tools-left">
-        <img class="topbar-bch" src="/bitcoin-cash-official.svg" alt="Bitcoin Cash">
         <button id="wiki-open" class="theme-toggle" type="button" aria-label="CashTokens wiki" aria-haspopup="dialog" aria-controls="wiki-dialog">
           <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-2-2-5-2-9-1v13c4-1 7-1 9 1m0-13c2-2 5-2 9-1v13c-4-1-7-1-9 1m0-13v13"/></svg>
         </button>
@@ -127,15 +126,6 @@
           <button type="button" data-language-option="de" lang="de">Deutsch</button>
         </div>
       </div>
-      <div class="tool-menu">
-        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Choose theme" aria-expanded="false" aria-controls="theme-menu">
-          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.7 1.7 0 0 1 1.3-2.7H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><circle cx="7.5" cy="11" r=".7"/><circle cx="10" cy="7.5" r=".7"/><circle cx="14" cy="7.5" r=".7"/><circle cx="17" cy="11" r=".7"/></svg>
-        </button>
-        <div id="theme-menu" class="tool-dropdown" hidden>
-          <button type="button" data-theme-option="frost">Frost</button>
-          <button type="button" data-theme-option="voxel">CashCraft</button>
-        </div>
-      </div>
       <div id="game-minimized-controls" class="game-minimized-controls" hidden>
         <nav id="minimized-wallet-actions" class="minimized-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
         <div class="game-minimized-buttons">
@@ -167,7 +157,7 @@
           <details class="wizard-game-help">
             <summary>Game controls, rewards and crafting</summary>
             <ul>
-              <li><strong>Dice button</strong>: choose a game. Language and theme menus sit beside it.</li>
+              <li><strong>Dice button</strong>: choose a game. The language menu sits beside it.</li>
               <li><strong>Joystick (touch)</strong>: move; the four-way arrow shows the direction pad.</li>
               <li><strong>Mine</strong> (hold): break blocks. <strong>Build</strong>: place the selected block. <strong>Jump</strong>: jump.</li>
               <li><strong>Block selection</strong>: scroll the mouse wheel, or drag up or down on the right edge of the screen on touch devices.</li>
@@ -204,6 +194,7 @@
             <p class="eyebrow">NATIVE BALANCE</p>
             <h2>Bitcoin Cash</h2>
           </div>
+          <img class="balance-bch-logo" src="/bitcoin-cash-official.svg" alt="Bitcoin Cash">
         </div>
 
         <p id="bch" class="balance">— <small>BCH</small></p>
@@ -600,9 +591,6 @@
 
   <dialog id="game-dialog" class="notifications-dialog game-dialog" aria-label="CashCraft game">
     <div class="notifications-heading">
-      <button id="game-ranking" class="small-button game-ranking-button" type="button" aria-haspopup="dialog" aria-controls="ranking-dialog" hidden>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v3a4 4 0 0 1-8 0zm0 1H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4M12 11v5m-4 4h8m-7-4h6v4"/></svg> Ranking
-      </button>
       <button id="game-close" class="small-button close-notifications" type="button" aria-label="Minimize CashCraft" title="Minimize CashCraft">−</button>
     </div>
     <nav class="game-switcher" aria-label="Choose a game" hidden>
@@ -622,6 +610,9 @@
         <button id="game-guide-open" type="button" aria-label="Open wizard guide" title="Open wizard guide" aria-controls="game-guide">
           <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true"><path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/><path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/><path fill="#f0c7ae" d="M13 18h10v8H13z"/><path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/><path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/><path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/><path fill="#ffe887" d="M3 21h4v3H3z"/></svg>
         </button>
+        <button id="game-ranking" class="game-ranking-button" type="button" aria-label="Ranking" title="Ranking" aria-haspopup="dialog" aria-controls="ranking-dialog" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v3a4 4 0 0 1-8 0zm0 1H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4M12 11v5m-4 4h8m-7-4h6v4"/></svg>
+        </button>
         <button id="game-invite" type="button" aria-label="Invite to CashCraft" title="Invite to CashCraft" aria-haspopup="dialog" aria-controls="invite-dialog">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>
         </button>
@@ -634,6 +625,7 @@
         </button>
       </div>
       <dialog id="game-guide" class="game-guide" aria-labelledby="game-guide-title">
+        <div class="game-guide-body">
         <div class="notifications-heading">
           <strong id="game-guide-title"><img class="game-wizard-art" src="/wizard.svg" alt=""> Wizard's CashCraft guide</strong>
           <button id="game-guide-close" class="small-button" type="button" aria-label="Close guide">×</button>
@@ -645,6 +637,7 @@
         <p id="game-guide-progress" role="status" aria-live="polite"></p>
         <p>The wizard reopens this guide. The gem opens your wallet and notifications. Invite shares the game; Ranking shows mining rewards; fullscreen expands the game; sound toggles audio. Craft prepares a transfer of 10 MINA.</p>
         <p>Use WASD to move, space to jump, left click to mine and right click to build. On mobile, use the joystick and the jump, mine and build buttons. Scroll to choose blocks.</p>
+        </div>
       </dialog>
       <dialog id="mining-prompt" class="game-guide mining-prompt" aria-labelledby="mining-prompt-title">
         <div class="notifications-heading"><strong id="mining-prompt-title">Your next step</strong><button id="mining-prompt-close" class="small-button" type="button" aria-label="Close">×</button></div>
@@ -700,7 +693,7 @@
 
   <dialog id="wiki-dialog" class="notifications-dialog wiki-dialog" aria-labelledby="wiki-title">
     <div class="notifications-heading">
-      <h2 id="wiki-title">CashTokens wiki</h2>
+      <div class="wiki-heading"><h2 id="wiki-title">CashTokens wiki</h2><img class="wiki-bch-logo" src="/bitcoin-cash-official.svg" alt="Bitcoin Cash"></div>
       <button id="wiki-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
     </div>
     <div class="wiki-language">

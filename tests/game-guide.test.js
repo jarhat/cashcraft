@@ -46,10 +46,9 @@ test('CashCraft guide can be dismissed, reopened and used to access the wallet',
   assert.equal($('game-guide').open, true);
   assert.equal($('game-notifications')['aria-controls'], 'connection-dialog');
   await $('game-close').listeners.click();
-  assert.equal($('game-guide').open, true);
-  assert.equal($('game-guide').parentNode, toolbar);
+  assert.equal($('game-guide').open, false);
   $('game-restore').listeners.click();
-  assert.equal($('game-guide').parentNode, $('game-stage'));
+  assert.equal($('game-guide').open, true);
   $('game-guide-done').listeners.click();
   assert.equal($('game-guide').open, false);
   handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-block-mined' } });

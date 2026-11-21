@@ -99,30 +99,11 @@ test('payment defaults to PUSD only on mainnet and preserves an existing categor
   assert.match(html, /href="https:\/\/cauldron\.quest\/"/);
 });
 
-test('theme preferences migrate and select the correct palette', () => {
-  for (const [saved, expected] of [[null, 'voxel'], ['bch', 'voxel'], ['green', 'voxel'], ['blue', 'frost'], ['dark', 'frost'], ['aurora', 'voxel'], ['frost', 'frost'], ['miami', 'voxel'], ['unknown', 'voxel']]) {
-    const buttons = ['frost', 'voxel'].map((themeOption) => ({
-      dataset: { themeOption },
-      setAttribute(name, value) { this[name] = value; },
-    }));
-    const document = {
-      documentElement: { dataset: {} },
-      querySelector() { return this.meta; },
-      querySelectorAll() { return buttons; },
-      meta: {},
-    };
-    const localStorage = {
-      getItem() { return saved; },
-      setItem(key, value) { this[key] = value; },
-    };
-    const start = source.indexOf('const savedTheme =');
-    const end = source.indexOf("\ndocument.querySelector('.topbar-tools-left').append(", start);
-    runInNewContext(source.slice(start, end), { document, localStorage });
-    assert.equal(document.documentElement.dataset.theme, expected);
-    assert.equal(localStorage['ctf-theme'], expected);
-    assert.equal(document.meta.content, '#080a10');
-    assert.equal(buttons.find((button) => button.dataset.themeOption === expected)['aria-pressed'], 'true');
-  }
+test('theme selection is removed and the page uses the CashCraft palette', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /setTheme|ctf-theme/);
+  assert.doesNotMatch(html, /id="theme-toggle"|data-theme-option/);
+  assert.match(html, /<html lang="en" data-theme="voxel">/);
 });
 
 test('wizard highlights and scrolls to each tutorial panel without moving the navigation', () => {

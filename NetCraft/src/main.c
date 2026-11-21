@@ -2481,9 +2481,13 @@ static void sync_inventory_items(void) {
     }
 }
 
+// Block HUD column: first slot centre (CSS px from top) and bottom space kept clear of touch buttons.
+#define HUD_ITEM_TOP 192.0f
+#define HUD_BOTTOM_RESERVE 392.0f
+
 static int visible_items(void) {
     float spacing = 42.0f * g->scale;
-    int visible = 1 + (int)((g->height - 270.0f * g->scale) / spacing);
+    int visible = 1 + (int)((g->height - HUD_BOTTOM_RESERVE * g->scale) / spacing);
     if (visible < 1) visible = 1;
     if (visible > NUM_INVENTORY_VISIBLE) visible = NUM_INVENTORY_VISIBLE;
     if (visible > inventory_item_count) visible = inventory_item_count;
@@ -2517,7 +2521,7 @@ void render_item(Attrib *attrib) {
             for (int j = 0; j < 12; j++) matrix[j] *= 1.2f;
         }
         matrix[12] = 1.0f - 80.0f * g->scale / g->width;
-        matrix[13] = 1.0f - 2.0f * (150.0f * g->scale + i * spacing) / g->height;
+        matrix[13] = 1.0f - 2.0f * (HUD_ITEM_TOP * g->scale + i * spacing) / g->height;
         glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
         if (is_plant(w)) draw_plant(attrib, item_buffers[w]);
         else draw_cube(attrib, item_buffers[w]);
@@ -2575,7 +2579,7 @@ static void render_item_counts(Attrib *attrib) {
             cached->length = strlen(text);
             float size = 10.0f * g->scale;
             float x = g->width - 72.0f * g->scale - size * (cached->length - 1);
-            float y = g->height - (132.0f + i * 42.0f) * g->scale;
+            float y = g->height - (HUD_ITEM_TOP - 18.0f + i * 42.0f) * g->scale;
             cached->buffer = gen_text_buffer(x, y, size, text);
             cached->count = count;
             cached->item = w;
