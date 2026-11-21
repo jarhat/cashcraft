@@ -398,28 +398,23 @@ function report(error, { log = true } = {}) {
   $('log').textContent = `Action failed: ${error?.message || String(error)}\nCheck the status above, your inputs and wallet connection before retrying.`;
 }
 
-for (const name of ['language', 'games']) {
-  const toggle = $(`${name}-toggle`);
-  const menu = $(`${name}-menu`);
+{
+  const toggle = $('language-toggle');
+  const menu = $('language-menu');
   const close = () => {
     menu.hidden = true;
     toggle.setAttribute('aria-expanded', 'false');
   };
   toggle.addEventListener('click', () => {
-    const opening = menu.hidden;
-    document.querySelectorAll('.tool-dropdown').forEach((other) => { other.hidden = true; });
-    document.querySelectorAll('.tool-menu > button').forEach((other) => other.setAttribute('aria-expanded', 'false'));
-    menu.hidden = !opening;
-    toggle.setAttribute('aria-expanded', String(opening));
+    menu.hidden = !menu.hidden;
+    toggle.setAttribute('aria-expanded', String(!menu.hidden));
   });
   menu.addEventListener('click', (event) => {
     const button = event.target.closest('button');
     if (!button) return;
-    if (name === 'language') {
-      setLanguage(button.dataset.languageOption);
-      if (paymentPriceSnapshot) {
-        $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;
-      }
+    setLanguage(button.dataset.languageOption);
+    if (paymentPriceSnapshot) {
+      $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;
     }
     close();
     toggle.focus();

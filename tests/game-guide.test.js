@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import { setupGames } from '../src/games.js';
 
 test('the combined wizard and wallet button leaves the other toolbar actions intact', () => {
@@ -11,8 +12,35 @@ test('the combined wizard and wallet button leaves the other toolbar actions int
   for (const action of ['close', 'verify-wallet', 'crafting', 'ranking', 'invite', 'sound', 'send', 'receive', 'fullscreen']) {
     assert.ok(toolbar.includes(`id="game-${action}"`), action);
   }
-  assert.match(html, /id="game-netcraft"[^>]*>[\s\S]*?<img[^>]*>CashCraft\s*<\/button>/);
+  assert.match(html, /id="wiki-open"[^>]*>[\s\S]*?<\/button>\s*<button id="game-netcraft"[^>]*>\s*<img[^>]*>CashCraft\s*<\/button>/);
   assert.doesNotMatch(html, /id="games-menu"/);
+});
+
+test('toolbar initialization works without the removed game menu', () => {
+  const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const handlers = {};
+  const element = (id) => html.includes(`id="${id}"`) ? {
+    hidden: true,
+    addEventListener(type, handler) { handlers[`${id}:${type}`] = handler; },
+    setAttribute(name, value) { this[name] = value; },
+    focus() {},
+  } : null;
+  const elements = Object.fromEntries(['language-toggle', 'language-menu'].map(id => [id, element(id)]));
+  const start = source.indexOf('\n}', source.indexOf('function report(')) + 2;
+  const end = source.indexOf('\nlet updateGameRewardAddress', start);
+  let language;
+  runInNewContext(source.slice(start, end), {
+    $: id => elements[id] ?? null,
+    document: { addEventListener() {} },
+    setLanguage: value => { language = value; },
+    paymentPriceSnapshot: null,
+  });
+  handlers['language-toggle:click']();
+  assert.equal(elements['language-menu'].hidden, false);
+  handlers['language-menu:click']({ target: { closest: () => ({ dataset: { languageOption: 'es' } }) } });
+  assert.equal(language, 'es');
+  assert.equal(elements['language-menu'].hidden, true);
 });
 
 test('wizard tips fade without blocking play and crafting appears after two rewards', async (t) => {
@@ -180,4 +208,9 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
   assert.equal(connections, 3);
   assert.equal(pairings, 1);
   assert.equal($('game-wizard-speech').hidden, true);
+  $('game-dialog').close();
+  await $('game-netcraft').listeners.click({ isTrusted: true });
+  assert.equal(document.fullscreenElement, $('game-stage'));
+  assert.equal($('game-frame').src, '/games/netcraft/craftw.html#-+4080');
+  assert.equal($('game-dialog').open, true);
 });
