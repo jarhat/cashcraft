@@ -170,7 +170,7 @@ test('NetCraft starts online without a wallet and accepts a registered address l
   assert.equal($('game-frame').src, '/games/netcraft/craftw.html#-+4080');
   address = 'bitcoincash:ztest';
   update(address);
-  assert.deepEqual(messages.at(-1), { type: 'netcraft-reward-address', address, pickaxe: false, connected: true, guestId });
+  assert.deepEqual(messages.at(-1), { type: 'netcraft-reward-address', address, pickaxe: false, connected: true, guestId, embeddedSound: true });
   pickaxe = true;
   update(address);
   assert.equal(messages.at(-1).pickaxe, true);
@@ -236,9 +236,9 @@ test('NetCraft receives the connected token address when launched', async (t) =>
   $('game-frame').listeners.load();
   assert.equal($('game-notifications')['aria-label'], 'Connect wallet');
   assert.deepEqual(messages, [
-    { message: { type: 'netcraft-reward-address', address: browserAddress, pickaxe: false, connected: true, guestId }, origin: '*' },
-    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false, connected: false, guestId }, origin: '*' },
-    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false, connected: false, guestId }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: browserAddress, pickaxe: false, connected: true, guestId, embeddedSound: true }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false, connected: false, guestId, embeddedSound: true }, origin: '*' },
+    { message: { type: 'netcraft-reward-address', address: '', pickaxe: false, connected: false, guestId, embeddedSound: true }, origin: '*' },
   ]);
   update('bitcoincash:zother');
   assert.equal(messages[3].message.address, 'bitcoincash:zother');

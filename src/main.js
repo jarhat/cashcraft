@@ -3,7 +3,6 @@ import { setLanguage, translate } from './i18n.js';
 import { createPaymentQrImage } from './payment-qr-image.js';
 import { setupScrollEffects } from './scroll-effects.js';
 import { setupSnow } from './snow.js';
-import { setupMesh } from './mesh.js';
 import { setupPairingReminder } from './pairing-reminder.js';
 import { fetchTokenMetadata, fetchCauldronSpot } from './portfolio-data.js';
 import { loadTokenLogo } from './token-logo.js';
@@ -33,7 +32,6 @@ const logger = createLogger(
 );
 setupScrollEffects();
 setupSnow(document.getElementById('snow-canvas'));
-setupMesh(document.querySelector('.mesh-terrain'));
 
 for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
   document.querySelector(selector).content = new URL('/api/craft-preview.png?v=5', window.location.origin).href;
@@ -400,10 +398,6 @@ function report(error, { log = true } = {}) {
   $('log').textContent = `Action failed: ${error?.message || String(error)}\nCheck the status above, your inputs and wallet connection before retrying.`;
 }
 
-document.querySelector('.topbar-tools-left').append(
-  $('games-toggle').parentElement,
-  $('language-toggle').parentElement,
-);
 for (const name of ['language', 'games']) {
   const toggle = $(`${name}-toggle`);
   const menu = $(`${name}-menu`);

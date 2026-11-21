@@ -214,10 +214,10 @@ reviewable transfer of 10 MINA. Mining 100 eligible MINA ore blocks requests
 10 MINA in rewards; delivery and crafting returns depend on their respective
 services. Players must connect a wallet and approve the transfer themselves.
 
-The loading screen shows the voxel artwork from the CashCraft link preview
-alongside available download progress, and fades after the first frame is
-rendered. Both the shared-link loader and the NetCraft client use
-`/craft-loading.webp`. The frontend also serves the touch-button icons
+The fullscreen loading artwork and ring fade after the first frame is rendered.
+Both the shared-link loader and the NetCraft client use `/craft-loader.css` and
+`/craft-loading.webp`; the NetCraft loader also shows available download progress.
+The frontend also serves the touch-button icons
 `/pickaxe.svg` and `/grass-block.svg`; deploy it alongside the rebuilt client.
 Graphics and runtime errors are reported separately from the server connection, which can
 remain connected even if rendering fails. Check the browser console for the

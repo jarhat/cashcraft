@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <title>CashCraft</title>
+    <link rel="stylesheet" href="/craft-loader.css">
     <style>
       body {
         font-family: arial;
@@ -13,13 +14,10 @@
         overflow: hidden;
       }
       body > a, #spinner, #status, #progress, #output { display: none !important; }
-      #loading-screen { display: grid !important; position: fixed; inset: 0; z-index: 40; place-content: center; justify-items: center; gap: 18px; background: #0a1910; color: #b7ffca; font: 700 16px system-ui, sans-serif; text-align: center; letter-spacing: .08em; transition: opacity .3s ease, visibility 0s linear .3s; }
-      #loading-screen.is-ready { opacity: 0; visibility: hidden; pointer-events: none; }
+      #loading-screen { z-index: 40; }
       #loading-screen[hidden] { display: none !important; }
-      #loading-screen::before { content: ""; width: min(640px, 85vw, 105vh); aspect-ratio: 16 / 9; background: url("/craft-loading.webp") center / contain no-repeat; }
       #loading-progress { width: min(240px, 70vw); height: 6px; accent-color: #8ce2a8; }
       #loading-progress[hidden] { display: none; }
-      @media (prefers-reduced-motion: reduce) { #loading-screen { transition: none; } }
 
       .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
       div.emscripten { text-align: center; }      
@@ -131,15 +129,17 @@
       .mobile-controls svg, #sound-toggle svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
       #mobile-mine img, #mobile-build img { width: 44px; height: 44px; image-rendering: pixelated; pointer-events: none; }
       #mobile-mine img { width: 60px; height: 60px; filter: drop-shadow(0 2px 2px #0008); }
-      #sound-toggle { display: grid !important; place-items: center; position: fixed; right: 220px; top: 12px; z-index: 25; width: 44px; height: 44px; padding: 10px; border: 1px solid #667887; border-radius: 50%; background: linear-gradient(145deg, #263340, #101923); color: #d3dce5; cursor: pointer; }
+      #sound-toggle { display: grid; place-items: center; position: fixed; left: 50%; top: 12px; translate: -50% 0; z-index: 25; width: 48px; height: 48px; padding: 0; border: 1px solid #667887; border-radius: 50%; background: linear-gradient(145deg, #263340, #101923); color: #d3dce5; cursor: pointer; }
+      #sound-toggle[hidden] { display: none; }
+      #sound-toggle svg { width: 24px; height: 24px; }
       #sound-toggle:hover { border-color: #0087ff; color: #fff; }
-      #sound-toggle[aria-pressed="true"] .sound-muted { display: none; }
+      #sound-toggle[aria-pressed="true"] .sound-muted,
+      #sound-toggle[aria-pressed="false"] .sound-waves { display: none; }
       #connection-status { display: block !important; position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 26; max-width: 90%; padding: 8px 12px; background: rgba(0,0,0,.8); color: white; text-align: center; }
       #connection-status[hidden] { display: none !important; }
       #game-error { display: block !important; position: fixed; top: 110px; left: 50%; transform: translateX(-50%); z-index: 41; width: min(90%, 600px); padding: 14px; background: #351c1c; color: white; font: 14px system-ui, sans-serif; text-align: center; overflow-wrap: anywhere; }
       #game-error[hidden] { display: none !important; }
       @media (any-pointer: coarse) { .mobile-controls { display: block !important; } }
-      @media (max-width: 520px) { #sound-toggle { right: 198px; } }
       @media (max-width: 420px) {
         .mobile-stick { left: max(12px, env(safe-area-inset-left)); width: 108px; height: 108px; }
         .mobile-controls button { width: 72px; height: 72px; }
@@ -1270,14 +1270,17 @@
     </div>
     <textarea id="output" rows="8"></textarea>
 
-    <div id="loading-screen" role="status" aria-live="polite">
-      <span id="loading-message">Preparing your world...</span>
-      <progress id="loading-progress" aria-label="Game download progress" hidden></progress>
+    <div id="loading-screen" class="craft-loader" role="status" aria-live="polite">
+      <div class="craft-loader-controls">
+        <span class="craft-loading-ring" aria-hidden="true"></span>
+        <span id="loading-message">Preparing your world...</span>
+        <progress id="loading-progress" aria-label="Game download progress" hidden></progress>
+      </div>
     </div>
     <div id="connection-status" role="status" hidden></div>
     <div id="game-error" role="alert" hidden></div>
     <button id="sound-toggle" type="button" aria-pressed="true" aria-label="Sound enabled" title="Sound enabled">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3zM16 8a6 6 0 0 1 0 8"/><path class="sound-muted" d="M17 3 3 21"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="sound-waves" d="M16 9a5 5 0 0 1 0 6m2-8a7.25 7.25 0 0 1 0 10"/><path class="sound-muted" d="m16 10 4 4m0-4-4 4"/></svg>
     </button>
     <div id="block-hud" class="block-hud" aria-hidden="true">
       <svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg>
@@ -1430,8 +1433,13 @@
           }
         };
         window.addEventListener('message', function(event) {
-          if (event.source !== window.parent || !event.data ||
-              event.data.type !== 'netcraft-reward-address' || typeof event.data.address !== 'string') return;
+          if (event.source !== window.parent || !event.data) return;
+          if (event.data.type === 'netcraft-set-sound' && typeof event.data.enabled === 'boolean') {
+            Module.setEmbeddedSound(event.data.enabled);
+            return;
+          }
+          if (event.data.type !== 'netcraft-reward-address' || typeof event.data.address !== 'string') return;
+          if (event.data.embeddedSound === true) Module.enableEmbeddedSound();
           pending = event.data.address;
           pendingPickaxe = event.data.pickaxe === true;
           pendingConnected = event.data.connected === true;
@@ -1497,21 +1505,33 @@
           }
           document.addEventListener('pointerdown', unlockOnGesture, true);
           document.addEventListener('keydown', unlockOnGesture, true);
-          button.addEventListener('click', function() {
-            enabled = !enabled;
+          function setSound(next, attemptUnlock) {
+            enabled = next;
             if (!enabled && music) music.pause();
             button.setAttribute('aria-pressed', String(enabled));
             var label = enabled ? 'Sound enabled; interact with the game to hear it' : 'Enable sound';
             button.setAttribute('aria-label', label);
             button.title = label;
-            if (enabled) {
+            if (enabled && attemptUnlock) {
               unlock().catch(function(error) {
                 console.error('Game audio could not start:', error);
                 button.setAttribute('aria-label', 'Sound unavailable; tap to retry');
                 button.title = 'Sound unavailable; tap to retry';
               });
             }
-          });
+          }
+          button.addEventListener('click', function() { setSound(!enabled, true); });
+          Module.enableEmbeddedSound = function() {
+            if (button.hidden) return;
+            button.hidden = true;
+            window.parent.postMessage({ type: 'netcraft-sound-state', enabled: enabled }, '*');
+          };
+          Module.setEmbeddedSound = function(next) {
+            if (!button.hidden) return;
+            // Before the first in-frame gesture, let the existing gesture handler unlock audio.
+            setSound(next, context && context.state === 'running');
+            window.parent.postMessage({ type: 'netcraft-sound-state', enabled: enabled }, '*');
+          };
           Module.playGameSound = function(name) {
             if (!enabled || !context || context.state !== 'running') return;
             if (!buffers[name]) {

@@ -48,10 +48,10 @@ test('the slideshow stays paused while the gallery is collapsed', () => {
   } finally { restore(); }
 });
 
-test('gallery starts collapsed and keeps the swap information visible outside it', async () => {
+test('the landing page shows the gallery above the footer without a wallet', async () => {
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /<details id="media-gallery-disclosure">/);
-  assert.match(html, /<\/details>\s*<p class="swap-note">Have BTC\?/);
+  assert.match(html, /<aside id="media-gallery" class="media-gallery" aria-label="Bitcoin Cash media">\s*<details id="media-gallery-disclosure" open>[\s\S]*?<\/aside>\s*<footer>/);
+  assert.match(html, /<\/details>\s*<p class="swap-note" data-wallet-panel hidden>Have BTC\?/);
 });
 
 test('slideshow shows multiple uncropped sources and cycles through all artwork', () => {

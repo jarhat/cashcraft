@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { meshPath, setupMesh } from '../src/mesh.js';
 
-test('perspective mesh converges at the horizon and shares intersections through the bulge', async () => {
+test('perspective mesh converges at the horizon and shares intersections through the bulge', () => {
   const width = 800;
   const height = 400;
   const lines = meshPath(width, height).split(' M').map((line, index) =>
@@ -20,15 +20,18 @@ test('perspective mesh converges at the horizon and shares intersections through
   }
   assert.ok(horizontal[4][50][1] < horizontal[4][0][1]);
   assert.ok(vertical[0][0][0] > vertical[0].at(-1)[0]);
+});
+
+test('the landing chrome keeps language in the header and puts network status in the chain ticker', async () => {
   const css = await readFile(new URL('../src/style.css', import.meta.url), 'utf8');
   assert.match(css, /body::before\s*\{\s*content:\s*none;/);
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-  assert.ok(html.indexOf('class="mesh-landscape"') > html.indexOf('<header class="topbar">'));
-  assert.ok(html.indexOf('class="mesh-landscape"') < html.indexOf('</header>'));
-  assert.doesNotMatch(html, /data-theme-option/);
-  assert.match(css, /\.mesh-start\s*\{\s*stop-color:\s*var\(--mesh-color\)/);
-  assert.match(css, /\.mesh-end\s*\{\s*stop-color:\s*var\(--mesh-highlight\)/);
-  assert.doesNotMatch(html, /id="mesh-rgb"/);
+  const header = html.match(/<header class="topbar">([\s\S]*?)<\/header>/)[1];
+  assert.match(header, /class="crystal-scene"/);
+  assert.match(header, /class="topbar-tools topbar-tools-left">\s*<div class="tool-menu">\s*<button id="language-toggle"/);
+  assert.doesNotMatch(header, /id="(?:wiki-open|games-toggle|network)"/);
+  assert.match(html, /BCH \/ CHAIN<\/span>\s*<span class="network">.*id="network"/);
+  assert.match(html, /class="market-strip market-strip-bottom"[^>]*>\s*<div class="crystal-scene"/);
 });
 
 test('mesh regenerates once per resize frame with the current dimensions', (t) => {

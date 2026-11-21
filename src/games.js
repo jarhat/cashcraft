@@ -13,6 +13,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   const dock = $('game-minimized-controls');
   const restore = $('game-restore');
   const guide = $('game-guide');
+  const sound = $('game-sound');
   const prompt = $('mining-prompt');
   const toolbar = document.querySelector('.game-toolbar');
   const setPlayingUi = () => {
@@ -35,6 +36,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   let guestId = null;
   let guestUnlocked = null;
   let firstBlockShown = false;
+  let soundEnabled = true;
   const updateRewardAddress = (address) => {
     const connected = isWalletConnected ? isWalletConnected() : Boolean(address);
     const gemLabel = connected ? 'Wallet and notifications' : 'Connect wallet';
@@ -51,7 +53,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       $('game-minimized-fullscreen').setAttribute('title', `Resume ${title} in fullscreen`);
     }
     if (activeGame === 'netcraft') {
-      frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '', pickaxe: connected && hasMinaPickaxe(), connected, guestId }, '*');
+      frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '', pickaxe: connected && hasMinaPickaxe(), connected, guestId, embeddedSound: true }, '*');
     }
   };
   const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'ranking-dialog', 'game-guide', 'mining-prompt'];
@@ -99,6 +101,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         }
         if (request !== generation) return;
         if (guide.open) guide.close();
+        sound.hidden = true;
         status.textContent = '';
         frame.title = game.title;
         frame.classList.remove('game-shift-in');
@@ -189,6 +192,12 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     $(connected ? 'notifications-toggle' : 'connection-open').click();
   };
   $('game-notifications').addEventListener('click', openWallet);
+  sound.addEventListener('click', () => {
+    if (activeGame !== 'netcraft' || sound.hidden) return;
+    soundEnabled = !soundEnabled;
+    sound.setAttribute('aria-pressed', String(soundEnabled));
+    frame.contentWindow?.postMessage({ type: 'netcraft-set-sound', enabled: soundEnabled }, '*');
+  });
   $('game-guide-open').addEventListener('click', () => { if (!guide.open) guide.show(); });
   $('game-guide-wallet').addEventListener('click', () => {
     openWallet();
@@ -205,6 +214,12 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   }
   window.addEventListener('message', (event) => {
     if (event.source !== frame.contentWindow || activeGame !== 'netcraft') return;
+    if (event.data?.type === 'netcraft-sound-state' && typeof event.data.enabled === 'boolean') {
+      soundEnabled = event.data.enabled;
+      sound.setAttribute('aria-pressed', String(soundEnabled));
+      sound.hidden = false;
+      return;
+    }
     const connected = isWalletConnected ? isWalletConnected() : Boolean(getRewardAddress());
     if (event.data?.type === 'netcraft-block-mined' && !firstBlockShown) {
       firstBlockShown = true;

@@ -150,7 +150,10 @@ test('game audio starts ambience from a gesture and mutes both ambience and effe
     getElementById: $, querySelector: () => $('controls'),
     addEventListener(name, callback) { listeners[name] = callback; }
   };
-  const window = { webkitAudioContext: AudioContext, addEventListener() {} };
+  const soundStates = [];
+  const parent = { postMessage(message) { soundStates.push(message.enabled); } };
+  const windowListeners = {};
+  const window = { parent, webkitAudioContext: AudioContext, addEventListener(name, callback) { windowListeners[name] = callback; } };
   const music = { paused: true, async play() { this.paused = false; }, pause() { this.paused = true; } };
   const context = {
     document, window, console, Date, Math,
@@ -179,6 +182,16 @@ test('game audio starts ambience from a gesture and mutes both ambience and effe
   assert.equal(music.paused, false);
   context.Module.playBlockSound(1);
   assert.equal(nodes.filter((node) => node === 'effect').length, 2);
+  windowListeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: '', embeddedSound: true } });
+  assert.equal($('sound-toggle').hidden, true);
+  windowListeners.message({ source: {}, data: { type: 'netcraft-set-sound', enabled: false } });
+  assert.equal(music.paused, false);
+  windowListeners.message({ source: parent, data: { type: 'netcraft-set-sound', enabled: false } });
+  assert.equal(music.paused, true);
+  windowListeners.message({ source: parent, data: { type: 'netcraft-set-sound', enabled: true } });
+  await new Promise(setImmediate);
+  assert.equal(music.paused, false);
+  assert.deepEqual(soundStates, [true, false, true]);
   assert.equal(timers.size, 0);
 });
 
