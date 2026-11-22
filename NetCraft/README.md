@@ -587,7 +587,9 @@ Teleport to the specified chunk.
 
     /spawn
 
-Teleport back to the spawn point.
+Teleport back to the spawn point. On the Rust server, players join and
+respawn on the dragon's back when the sky park's dragon is present.
+Worlds without a usable landing spot there keep the ground spawn.
 
 ### Screenshot
 

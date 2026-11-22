@@ -461,22 +461,45 @@ fn spawn_position() -> [f64; 5] {
     [f64::from(unsafe { world_spawn_x() }), 0.0, 0.0, 0.0, 0.0]
 }
 
-fn damage_player(state: &mut State, id: u32, amount: u8, death: &[u8]) {
-    let Some(player) = state.players.get_mut(&id) else { return };
+fn world_spawn_position(db: &Connection) -> rusqlite::Result<[f64; 5]> {
+    // This column crosses the dragon's back in both the old and new park layouts.
+    let (x, z) = (-19, -3);
+    let surface = db.query_row(
+        "SELECT y,w FROM block WHERE p=?1 AND q=?2 AND x=?3 AND z=?4 AND y>=?5 AND w>0 ORDER BY y DESC LIMIT 1",
+        params![chunked(x), chunked(z), x, z, PARK_FLOOR + 16],
+        |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?)),
+    ).optional()?;
+    match surface {
+        Some((y, 41 | 43 | 45)) if y <= WORLD_MAX_Y - 2 => {
+            Ok([f64::from(x), f64::from(y + 2), f64::from(z), 0.0, 0.0])
+        }
+        _ => Ok(spawn_position()),
+    }
+}
+
+fn damage_player(state: &mut State, id: u32, amount: u8, death: &[u8]) -> rusqlite::Result<()> {
+    let Some(player) = state.players.get_mut(&id) else { return Ok(()) };
+    let spawn = if player.lives <= amount {
+        Some(world_spawn_position(&state.db)?)
+    } else {
+        None
+    };
     player.lives = player.lives.saturating_sub(amount);
-    let respawn = player.lives == 0;
-    if respawn {
-        player.position = spawn_position();
+    if let Some([x, y, z, rx, ry]) = spawn {
+        player.position = [x, y, z, rx, ry];
         player.lives = PLAYER_LIVES;
         player.inventory.fill(0);
         send(player, death.to_vec());
+        if y != 0.0 {
+            send(player, format!("U,{id},{x},{y},{z},{rx},{ry}\n"));
+        }
     }
     send(player, format!("HP,{}\n", player.lives));
-    if respawn {
+    if let Some([x, y, z, rx, ry]) = spawn {
         state.challenges.eliminated(id);
-        let x = spawn_position()[0];
-        broadcast(state, Some(id), &format!("P,{id},{x},0,0,0,0\n"));
+        broadcast(state, Some(id), &format!("P,{id},{x},{y},{z},{rx},{ry}\n"));
     }
+    Ok(())
 }
 
 fn damage_from_lava(server: &Server) -> rusqlite::Result<()> {
@@ -523,7 +546,7 @@ fn damage_from_lava(server: &Server) -> rusqlite::Result<()> {
         }
     }
     for (id, damage) in hit {
-        damage_player(&mut state, id, damage, b"ZD\nT,Lava burned you. You respawned without your mined blocks.\n");
+        damage_player(&mut state, id, damage, b"ZD\nT,Lava burned you. You respawned without your mined blocks.\n")?;
     }
     Ok(())
 }
@@ -737,7 +760,7 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
                 player.last_attack_tick = Some(tick);
             }
             damage_player(&mut state, id, 1,
-                b"ZD\nT,You lost all your lives and respawned without your mined blocks.\n");
+                b"ZD\nT,You lost all your lives and respawned without your mined blocks.\n")?;
         }
     }
 
@@ -1690,7 +1713,7 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                         }
                         if clear {
                             state.players.get_mut(&id).unwrap().last_pickaxe = Some(now);
-                            damage_player(&mut state, target, 1, b"ZD\nT,You were eliminated by a challenger.\n");
+                            damage_player(&mut state, target, 1, b"ZD\nT,You were eliminated by a challenger.\n")?;
                         }
                     }
                 }
@@ -1885,11 +1908,11 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                     .join(", ");
                 send(&player, format!("T,Players: {names}\n").into_bytes());
             } else if text == "/spawn" {
-                let position = spawn_position();
-                let x = position[0];
+                let position = world_spawn_position(&state.db)?;
+                let [x, y, z, rx, ry] = position;
                 state.players.get_mut(&id).unwrap().position = position;
-                send(&player, format!("U,{id},{x},0,0,0,0\n").into_bytes());
-                broadcast(&state, Some(id), &format!("P,{id},{x},0,0,0,0\n"));
+                send(&player, format!("U,{id},{x},{y},{z},{rx},{ry}\n").into_bytes());
+                broadcast(&state, Some(id), &format!("P,{id},{x},{y},{z},{rx},{ry}\n"));
             } else if text == "/chat" {
                 send(&player, b"T,Use /chat MESSAGE or type a message without a command.\n".to_vec());
             } else if text.starts_with('/') && !text.starts_with("/chat ") {
@@ -2006,8 +2029,8 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
             .next_id
             .checked_add(1)
             .ok_or_else(|| io::Error::other("player IDs exhausted"))?;
-        let position = spawn_position();
-        let x = position[0];
+        let position = world_spawn_position(&state.db).map_err(io::Error::other)?;
+        let [x, y, z, rx, ry] = position;
         let player = Player {
             sender,
             socket,
@@ -2027,7 +2050,7 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
         let now = world_time();
         send(
             &player,
-            format!("U,{id},{x},0,0,0,0\nN,{id},{}\nE,{now},{DAY_LENGTH}\nZN,{}\nHP,{PLAYER_LIVES}\nT,Welcome to NetCraft!\n",
+            format!("U,{id},{x},{y},{z},{rx},{ry}\nN,{id},{}\nE,{now},{DAY_LENGTH}\nZN,{}\nHP,{PLAYER_LIVES}\nT,Welcome to NetCraft!\n",
                 player.name, u8::from(is_night(now))).into_bytes(),
         );
         let mut snapshot = String::new();
@@ -2048,7 +2071,7 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
             &state,
             None,
             &format!(
-                "P,{id},{x},0,0,0,0\nN,{id},{}\nT,{} joined the game.\n",
+                "P,{id},{x},{y},{z},{rx},{ry}\nN,{id},{}\nT,{} joined the game.\n",
                 player.name, player.name
             ),
         );
@@ -2633,6 +2656,29 @@ mod tests {
         let chunk = terrain.chunk(chunked(x), 0);
         assert!(!(32..=WORLD_MAX_Y).any(|y| chunk.get(&(x, y, 0)) == Some(&12)));
         assert!((32..=WORLD_MAX_Y).any(|y| chunk.get(&(x, y, 0)) == Some(&2)));
+    }
+
+    #[test]
+    fn spawn_and_respawn_use_the_dragons_back_when_available() {
+        let (server, first, second) = setup();
+        {
+            let state = server.state.lock().unwrap();
+            assert_eq!(world_spawn_position(&state.db).unwrap(), spawn_position());
+            state.db.execute("INSERT INTO block VALUES (-1,-1,-19,240,-3,41)", []).unwrap();
+        }
+        handle_command(&server, 1, "T,/spawn").unwrap();
+        assert!(first.try_iter().any(|packet| packet == b"U,1,-19,242,-3,0,0\n"));
+        assert!(second.try_iter().any(|packet| packet == b"P,1,-19,242,-3,0,0\n"));
+        {
+            let mut state = server.state.lock().unwrap();
+            damage_player(&mut state, 1, PLAYER_LIVES, b"ZD\n").unwrap();
+            assert_eq!(state.players[&1].position, [-19.0, 242.0, -3.0, 0.0, 0.0]);
+            state.db.execute("INSERT INTO block VALUES (-1,-1,-19,241,-3,12)", []).unwrap();
+            assert_eq!(world_spawn_position(&state.db).unwrap(), spawn_position());
+        }
+        let packets: Vec<_> = first.try_iter().collect();
+        assert_eq!(packets[0], b"ZD\n");
+        assert_eq!(packets[1], b"U,1,-19,242,-3,0,0\n");
     }
 
     #[test]
