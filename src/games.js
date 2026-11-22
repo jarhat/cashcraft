@@ -18,15 +18,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   const toolbar = document.querySelector('.game-toolbar');
   const controls = $('game-controls-right');
   const controlsHome = controls.parentNode || toolbar;
-  const controlsToggle = $('game-controls-toggle');
-  const extraControls = $('game-extra-controls');
-  controlsToggle.addEventListener('click', () => {
-    extraControls.hidden = !extraControls.hidden;
-    controlsToggle.setAttribute('aria-expanded', String(!extraControls.hidden));
-    const label = translate(extraControls.hidden ? 'Expand game controls' : 'Collapse game controls');
-    controlsToggle.setAttribute('aria-label', label);
-    controlsToggle.setAttribute('title', label);
-  });
   const showStageDialog = (popup, show) => {
     if (popup.parentNode !== stage) {
       const home = popup.parentNode;

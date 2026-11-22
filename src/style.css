@@ -2815,13 +2815,15 @@ body.cashcraft-playing .market-strip-bottom { display: none; }
 .game-stage:fullscreen iframe, .game-auto-open .game-stage iframe { flex: 1; height: 0; min-height: 0; }
 .game-fullscreen-toolbar { display: none; }
 .game-stage:fullscreen .game-fullscreen-toolbar {
+  position: absolute; z-index: 2; inset: var(--game-ticker-height) 0 auto 0;
   display: flex; justify-content: flex-end; padding: var(--game-controls-inset);
-  background: #101813;
+  background: transparent; pointer-events: none;
 }
+.game-fullscreen-toolbar > * { pointer-events: auto; }
 .game-chain-ticker {
-  flex: none; box-sizing: border-box; height: var(--game-ticker-height);
-  border-top: 1px solid #285345; background: #0b1a15;
-  color: #c0e2d2; line-height: 1rem;
+  position: absolute; z-index: 2; inset: 0 0 auto 0; box-sizing: border-box; height: var(--game-ticker-height);
+  border: 0; background: transparent; pointer-events: none;
+  color: #e4fff1; line-height: 1rem; text-shadow: 0 1px 3px #000, 0 0 6px #000a;
 }
 .game-stage:fullscreen .game-payment-bubble {
   inset: calc(var(--game-control-size) + 38px + var(--game-ticker-height)) auto auto 1rem;
@@ -3237,6 +3239,15 @@ html[data-theme="voxel"] .game-panel > .game-dialog {
 html[data-theme="voxel"] .game-panel > .game-auto-open {
   border-radius: 0;
 }
+.game-panel:has(> .game-auto-open[open]:not([hidden])) > .game-toolbar {
+  --game-ticker-height: 2rem;
+  position: absolute; z-index: 101; inset: var(--game-ticker-height) 0 auto 0; margin: 0;
+  border: 0; background: transparent; box-shadow: none; backdrop-filter: none;
+  pointer-events: none;
+}
+.game-panel:has(> .game-auto-open[open]:not([hidden])) > .game-toolbar > * { pointer-events: auto; }
+.game-panel:has(> .game-auto-open[open]:not([hidden])) .game-toolbar > .game-controls-right { background: transparent; border-color: transparent; box-shadow: none; }
+.game-panel:has(> .game-auto-open[open]:not([hidden])) .game-toolbar > .game-controls-right button { background: #080e0bb0; }
 .game-panel > .game-auto-open,
 .game-auto-open .game-stage { min-height: 0; flex: 1; }
 .game-auto-open[open]:not([hidden]) { display: flex; flex-direction: column; }
@@ -3255,12 +3266,15 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
   margin-inline-start: auto;
 }
 .game-panel:not(:has(> .game-dialog[open]:not([hidden]))) .game-toolbar > .game-controls-right,
-.game-stage:fullscreen :is(#game-close, #game-controls-toggle, #game-extra-controls),
-#game-extra-controls[hidden],
+.game-stage:fullscreen :is(#game-close, #game-extra-controls > :not(#game-notifications)),
+
 #game-fullscreen[aria-pressed="false"] .fullscreen-minimize,
 #game-fullscreen[aria-pressed="true"] .fullscreen-expand,
 .game-stage:fullscreen .game-wizard-speech:not(.is-crafting) { display: none; }
 .game-extra-controls { display: flex; gap: inherit; }
+.game-stage:fullscreen .game-extra-controls { display: contents; }
+.game-stage:fullscreen .game-controls-right { background: transparent; border-color: transparent; box-shadow: none; }
+.game-stage:fullscreen .game-controls-right button { background: #080e0bb0; }
 .game-controls-right button {
   flex: 0 0 var(--game-control-size);
   width: var(--game-control-size);
