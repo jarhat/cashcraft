@@ -105,7 +105,7 @@ void client_login(const char *username, const char *identity_token) {
     client_send(buffer);
 }
 
-void client_position(float x, float y, float z, float rx, float ry) {
+void client_position(float x, float y, float z, float rx, float ry, bool flying) {
     if (!client_enabled) {
         return;
     }
@@ -122,7 +122,7 @@ void client_position(float x, float y, float z, float rx, float ry) {
     position_sent = true;
     px = x; py = y; pz = z; prx = rx; pry = ry;
     char buffer[1024];
-    snprintf(buffer, 1024, "P,%.2f,%.2f,%.2f,%.2f,%.2f\n", x, y, z, rx, ry);
+    snprintf(buffer, 1024, "%s,%.2f,%.2f,%.2f,%.2f,%.2f\n", flying ? "FP" : "P", x, y, z, rx, ry);
     client_send(buffer);
 }
 

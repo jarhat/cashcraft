@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include "item.h"
-#include "util.h"
 #include "gamemode.h"
 
 int hotbar_items[256] = {0};
@@ -27,7 +27,7 @@ bool is_plant(int w) {
 }
 
 bool is_obstacle(int w) {
-    w = ABS(w);
+    w = abs(w);
     if (is_plant(w)) {
         return false;
     }
@@ -38,7 +38,7 @@ bool is_transparent(int w) {
     if (!w) {
         return true;
     }
-    w = ABS(w);
+    w = abs(w);
     if (is_plant(w)) {
         return true;
     }

@@ -31,6 +31,7 @@ services:
       dockerfile: Dockerfile.server
     environment:
       NETCRAFT_DB: /data/netcraft.db
+      CASHADDR_DB_PATH: /data/cash-addresses.sqlite3
       NETCRAFT_MINING_REWARDS_ENABLED: ${NETCRAFT_MINING_REWARDS_ENABLED:-true}
       BCH_NETWORK: ${BCH_NETWORK:-mainnet}
       BCH_REWARD_CATEGORY: ${BCH_REWARD_CATEGORY:?Set BCH_REWARD_CATEGORY in .env}
@@ -40,6 +41,7 @@ services:
       NETCRAFT_REWARD_API: auth:3000
       NETCRAFT_REWARD_WAKE_SECRET: ${NETCRAFT_REWARD_WAKE_SECRET:?Set NETCRAFT_REWARD_WAKE_SECRET in .env}
     volumes:
+      # Both SQLite writers need the same path to the attached-DB recovery journal.
       - ./data:/data
     depends_on:
       data-permissions:
@@ -111,9 +113,9 @@ services:
 
       PORT: "3000"
       BCH_NETWORK: ${BCH_NETWORK:-mainnet}
+      NETCRAFT_ADMIN_BCH_ADDRESS: ${NETCRAFT_ADMIN_BCH_ADDRESS:-}
       UNLOCK_TIME: "${UNLOCK_TIME:-1893456000}"
       CASHADDR_DB_PATH: /data/cash-addresses.sqlite3
-      NETCRAFT_DB_PATH: /data/netcraft.db
       NETCRAFT_MINING_REWARDS_ENABLED: ${NETCRAFT_MINING_REWARDS_ENABLED:-true}
       NETCRAFT_REWARD_WAKE_SECRET: ${NETCRAFT_REWARD_WAKE_SECRET:?Set NETCRAFT_REWARD_WAKE_SECRET in .env}
       CRAFT_PREVIEW_IMAGE: /app/craft-preview.png

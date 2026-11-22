@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -12,6 +13,7 @@ spec = importlib.util.spec_from_file_location(
 )
 builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
+TOWER_GROUND = {(0, 40, builder.TOWER_Z): builder.GRASS}
 
 
 class PreviewWorldTests(unittest.TestCase):
@@ -19,7 +21,7 @@ class PreviewWorldTests(unittest.TestCase):
         import segno
         address = "bitcoincash:zqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqweyg7usz"
         with patch.object(builder, "DONATION_ADDRESS", address):
-            edits = builder.make_park({(0, 40, 0): builder.GRASS})
+            edits = builder.make_park(TOWER_GROUND)
         self.assertEqual(edits[0, 100, builder.TOWER_Z], builder.CEMENT)
         self.assertNotIn((1, 100, builder.TOWER_Z), edits)
         for x, z in builder.SPHERE_POSITIONS:
@@ -33,13 +35,24 @@ class PreviewWorldTests(unittest.TestCase):
                 )
 
     def test_expanded_islands_have_bridges_and_fit_world_bounds(self):
-        edits = builder.make_park({(0, 40, 0): builder.GRASS})
+        edits = builder.make_park(TOWER_GROUND)
         floor = builder.SKY_Y
         for x, z in ((53, 0), (-53, 0), (0, 53), (0, -53)):
             self.assertEqual(edits[x, floor, z], builder.GRASS)
             self.assertEqual(edits[x, floor + 8, z], builder.COLOR_GOLD)
         for x, z in ((35, 0), (-35, 0), (0, 35), (0, -35)):
             self.assertEqual(edits[x, floor, z], builder.PLANK)
+        for dx, dz in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            for distance in range(64, 99):
+                self.assertEqual(edits[dx * distance, floor, dz * distance], builder.PLANK)
+                self.assertEqual(edits[dx * distance, floor + 1, dz * distance], builder.EMPTY)
+            self.assertIn((dx * 108, floor - 8, dz * 108), edits)
+        self.assertEqual(edits[0, floor + 16, -108], builder.COLOR_GOLD)
+        self.assertEqual(edits[0, floor - 24, 123], builder.WATER)
+        self.assertIn(builder.GLASS, [block for (x, y, z), block in edits.items() if y > floor and z < -100])
+        self.assertTrue(any(z <= -30 and block == builder.COLOR_GOLD for (_, _, z), block in edits.items()))
+        self.assertEqual(edits[-27, floor + 27, 5], builder.COLOR_BLACK)
+        self.assertTrue(any(x == 44 and block == builder.COLOR_GOLD for (x, _, _), block in edits.items()))
         self.assertTrue(all(1 <= y <= 255 for _, y, _ in edits))
 
     def test_default_command_creates_compose_world(self):
@@ -112,6 +125,51 @@ class ExistingWorldParkTests(unittest.TestCase):
         with self.assertRaises(sqlite3.OperationalError):
             builder.add_park(missing)
         self.assertFalse(missing.exists())
+
+    def write_terrain(self, name, edits, origin=None):
+        path = self.path.parent / name
+        module = {"version": 1, "edits": edits}
+        if origin is not None:
+            module["origin"] = origin
+        path.write_text(json.dumps(module), encoding="utf-8")
+        return path
+
+    def test_terrain_only_layers_modules_and_preserves_saved_border_rows(self):
+        floor = self.write_terrain("floor.json", [
+            {"from": [1, 0, 0], "to": [-1, 0, 0], "block": 8},
+        ], [-32, 160, 0])
+        trim = self.write_terrain("trim.json", [
+            {"at": [-33, 160, 0], "block": 36},
+            {"at": [-31, 160, 0], "block": 0},
+        ])
+        with sqlite3.connect(self.path) as db:
+            # Only the neighboring chunk has a saved edit at this position.
+            db.execute("INSERT INTO block VALUES (-2,0,-32,160,0,-4)")
+        with patch.object(sys, "argv", ["builder.py", "--apply-terrain", str(self.path),
+                                       "--terrain", str(floor), "--terrain", str(trim)]):
+            builder.main()
+        builder.terrain_in_park.assert_not_called()
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute("SELECT p,q,w FROM block WHERE x=-32").fetchall(), [(-2, 0, -4)])
+            self.assertEqual(sorted(db.execute("SELECT p,q,w FROM block WHERE x=-33")), [(-2, -1, -36), (-2, 0, 36), (-1, -1, -36), (-1, 0, -36)])
+            self.assertEqual(sorted(db.execute("SELECT p,q,w FROM block WHERE x=-31")), [(-1, -1, 0), (-1, 0, 0)])
+
+    def test_bad_module_cannot_partially_apply_valid_modules(self):
+        valid = self.write_terrain("valid.json", [{"at": [0, 155, 0], "block": 8}])
+        for edit, error in (
+            ({"at": [0, 256, 0], "block": 8}, "outside the world"),
+            ({"at": [0, 155, 0], "block": True}, "recognized NetCraft block ID"),
+            ({"from": [0, 1, 0], "to": [999, 255, 99], "block": 8}, "250,000 block edits"),
+        ):
+            with self.subTest(edit=edit):
+                invalid = self.write_terrain("invalid.json", [edit])
+                with patch.object(sys, "argv", ["builder.py", "--apply-terrain", str(self.path),
+                                               "--terrain", str(valid), "--terrain", str(invalid)]), \
+                     patch.object(sys, "stderr") as stderr, self.assertRaises(SystemExit):
+                    builder.main()
+                self.assertIn(error, stderr.write.call_args.args[0])
+                with sqlite3.connect(self.path) as db:
+                    self.assertEqual(db.execute("SELECT COUNT(*) FROM block").fetchone()[0], 1)
 
 
 if __name__ == "__main__":

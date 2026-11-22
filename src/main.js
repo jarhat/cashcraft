@@ -2115,6 +2115,11 @@ updateGameRewardAddress = setupGames($, {
   getRewardAddress: () => walletReady ? registeredRewardAddress : null,
   isWalletConnected: () => walletReady,
   hasMinaPickaxe: () => walletReady && minaPickaxe,
+  signGameWalletChallenge: (nonce, address) => {
+    if (walletReady && manager?.isBrowserWallet && registeredRewardAddress === address && addressFor(0, 0) === address) {
+      return manager.signNetcraftWalletChallenge(nonce);
+    }
+  },
   openPlayerTransfer,
   openGamePaymentRequest,
 });

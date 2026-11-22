@@ -6,7 +6,7 @@ const games = {
 };
 const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 
-export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, hasMinaPickaxe = () => false, getGuestId = getGameGuestId, openPlayerTransfer, openGamePaymentRequest, autoOpen = false, autoOpenGame = 'netcraft' }) {
+export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, hasMinaPickaxe = () => false, getGuestId = getGameGuestId, openPlayerTransfer, openGamePaymentRequest, signGameWalletChallenge, autoOpen = false, autoOpenGame = 'netcraft' }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
@@ -36,6 +36,14 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   stage.addEventListener('contextmenu', (event) => event.preventDefault());
   let generation = 0;
   let activeGame = null;
+  const verifyWallet = $('game-verify-wallet');
+  let walletProof = null;
+  verifyWallet?.addEventListener('click', () => {
+    const address = getRewardAddress();
+    if (!address || activeGame !== 'netcraft' || dialog.hidden) return;
+    walletProof = { address, generation, requestedAt: Date.now() };
+    frame.contentWindow?.postMessage({ type: 'netcraft-wallet-proof', signature: '' }, '*');
+  });
   let paymentRequest = null;
   const dismissPayment = () => {
     paymentRequest = null;
@@ -170,6 +178,8 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     $('game-notifications').setAttribute('aria-controls', connected ? 'notifications-dialog' : 'connection-dialog');
     $('game-guide-wallet').textContent = translate(connected ? 'Wallet and notifications' : 'Connect wallet');
     $('game-ranking').hidden = activeGame !== 'netcraft';
+    if (verifyWallet) verifyWallet.hidden = activeGame !== 'netcraft' || !connected || !address;
+    if (walletProof && (!connected || walletProof.address !== address)) walletProof = null;
     $('game-send').hidden = $('game-receive').hidden = activeGame !== 'netcraft';
     if (activeGame) {
       const title = games[activeGame].title;
@@ -186,6 +196,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   const canFocusGame = () => dialog.open && !dialog.hidden && activeGame &&
     !overlayDialogs.some((id) => $(id).open);
   frame.addEventListener('load', () => {
+    walletProof = null;
     if (activeGame) document.documentElement.classList.remove('game-link-loading');
     updateRewardAddress(getRewardAddress());
     if (canFocusGame() && [document.body, $('game-close'), $('game-fullscreen'),
@@ -381,6 +392,33 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   }
   window.addEventListener('message', async (event) => {
     if (event.source !== frame.contentWindow || activeGame !== 'netcraft') return;
+    if (event.data?.type === 'netcraft-challenge') {
+      if (event.origin === window.location.origin) receiveChallenge(event.data.packet);
+      return;
+    }
+    if (event.data?.type === 'netcraft-wallet-challenge') {
+      const { nonce } = event.data;
+      const proof = walletProof;
+      if (!proof || proof.generation !== generation || getRewardAddress() !== proof.address ||
+          Date.now() - proof.requestedAt > 15_000 || dialog.hidden ||
+          typeof nonce !== 'string' || !/^[0-9a-f]{64}$/.test(nonce)) return;
+      walletProof = null;
+      try {
+        document.exitPointerLock?.();
+        const signed = signGameWalletChallenge?.(nonce, proof.address);
+        const signature = signed ?? window.prompt(
+          `Sign the message below using your CashCraft BCH wallet, then replace it with the signature:\n${proof.address}`,
+          `CashCraft wallet login v1: ${nonce}`,
+        )?.trim();
+        if (typeof signature === 'string' && /^[A-Za-z0-9+/]{87}=$/.test(signature) &&
+            generation === proof.generation && getRewardAddress() === proof.address) {
+          frame.contentWindow?.postMessage({ type: 'netcraft-wallet-proof', signature }, '*');
+        }
+      } catch {
+        $('game-dialog-status').textContent = translate('Could not sign the CashCraft wallet verification message.');
+      }
+      return;
+    }
     if (event.data?.type === 'netcraft-payment-request') {
       const { id, name } = event.data;
       if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{8,32}$/.test(id) ||
@@ -460,7 +498,105 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       overlay.addEventListener('close', () => parent.insertBefore(overlay, next), { once: true });
     }
   });
-  $('game-ranking').addEventListener('click', async () => {
+  const challengePlayers = new Map();
+  const challengeInvitations = new Map();
+  const challengeKey = /^[a-f0-9]+-[a-f0-9]+$/;
+  const pendingChallenge = new URLSearchParams(window.location?.search).get('challenge');
+  const sendChallenge = (command) => frame.contentWindow?.postMessage(
+    { type: 'netcraft-challenge-command', command }, window.location.origin);
+  function renderChallengePlayers(connected, self) {
+    const fieldset = $('challenge-invitees');
+    const selected = new Set([...fieldset.querySelectorAll('input:checked')].map(input => input.value));
+    for (const label of fieldset.querySelectorAll('label')) label.remove();
+    for (const [id, player] of challengePlayers) {
+      if (id === self) continue;
+      const label = document.createElement('label');
+      label.style.display = 'block';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = id;
+      input.checked = selected.has(id);
+      label.append(input, ` ${player.name}`);
+      fieldset.append(label);
+    }
+    $('challenge-create').disabled = !connected || !fieldset.querySelector('input');
+  }
+  function renderChallengeRanks() {
+    const category = $('ranking-category').value;
+    const players = [...challengePlayers.values()].sort((a, b) =>
+      b[category] - a[category] || a.name.localeCompare(b.name));
+    const list = $('ranking-list');
+    list.replaceChildren();
+    for (const player of players) {
+      const row = document.createElement('li');
+      const score = document.createElement('strong');
+      score.textContent = player[category].toLocaleString();
+      row.append(player.name, score);
+      list.append(row);
+    }
+    $('ranking-status').textContent = players.length ? '' : 'No wallet-connected players in this world.';
+  }
+  function addChallengeInvitation(key, host) {
+    if (!challengeKey.test(key) || challengeInvitations.has(key)) return;
+    const row = document.createElement('p');
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.textContent = host ? 'Accept invitation' : 'Start challenge';
+    action.addEventListener('click', () => sendChallenge(`${host ? 'join' : 'start'},${key}`));
+    if (!host) {
+      const url = new URL('/?game=cashcraft', window.location.origin);
+      url.searchParams.set('challenge', key);
+      const link = document.createElement('a');
+      link.href = url.href;
+      link.textContent = 'Shareable invite link';
+      row.append(link, ' ');
+    } else {
+      row.append(`${host}: `);
+    }
+    row.append(action);
+    $('challenge-invitations').append(row);
+    challengeInvitations.set(key, row);
+  }
+  let challengeSelf = '';
+  function receiveChallenge(packet) {
+    if (typeof packet !== 'string' || packet.length > 512) return;
+    const [type, ...args] = packet.split(',');
+    if (type === 'clear') {
+      challengeSelf = args[0];
+      challengePlayers.clear();
+    } else if (type === 'player') {
+      const [id, name, ...scores] = args;
+      if (!/^\d+$/.test(id) || !/^[A-Za-z0-9_]{1,24}$/.test(name) || scores.length !== 4 ||
+          !scores.every(value => /^\d+$/.test(value) && Number.isSafeInteger(Number(value)))) return;
+      const [green, blue, red, mined] = scores.map(Number);
+      challengePlayers.set(id, { name, green, blue, red, mined, total: green + blue + red });
+    } else if (type === 'listed') {
+      renderChallengePlayers(args[0] === '1', challengeSelf);
+      renderChallengeRanks();
+    } else if (type === 'created' || type === 'invite') {
+      addChallengeInvitation(args[0], type === 'invite' ? args[1] : null);
+      $('challenge-status').textContent = type === 'created' ? 'Invitation created.' : `Challenge invitation from ${args[1]}.`;
+    } else if (type === 'started' || type === 'closed') {
+      challengeInvitations.get(args[0])?.remove();
+      challengeInvitations.delete(args[0]);
+    } else if (type === 'status') {
+      $('challenge-status').textContent = args.join(',');
+    }
+  }
+  $('ranking-category').addEventListener('change', renderChallengeRanks);
+  $('challenge-refresh').addEventListener('click', () => sendChallenge('list'));
+  let challengeRefresh;
+  $('ranking-dialog').addEventListener('close', () => clearInterval(challengeRefresh));
+  $('challenge-create').addEventListener('click', () => {
+    const ids = [...$('challenge-invitees').querySelectorAll('input:checked')].map(input => input.value);
+    if (ids.length < 1 || ids.length > 8) {
+      $('challenge-status').textContent = 'Select one to eight connected players.';
+      return;
+    }
+    sendChallenge(`invite,${$('challenge-mode').value},${ids.join(',')}`);
+  });
+  if (pendingChallenge && challengeKey.test(pendingChallenge)) addChallengeInvitation(pendingChallenge, 'Shared invitation');
+  $('game-ranking').addEventListener('click', () => {
     if (activeGame !== 'netcraft') return;
     const overlay = $('ranking-dialog');
     if (document.fullscreenElement === stage && !overlay.open) {
@@ -469,39 +605,13 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       stage.appendChild(overlay);
       overlay.addEventListener('close', () => parent.insertBefore(overlay, next), { once: true });
     }
-    if (!overlay.open) overlay.showModal();
-    const status = $('ranking-status');
-    const list = $('ranking-list');
-    list.replaceChildren();
-    status.textContent = translate('Loading ranking…');
-    try {
-      const response = await fetch('/api/ore-ranking', { cache: 'no-store' });
-      if (!response.ok) throw new Error(translate('Ranking is unavailable. Please try again.'));
-      const data = await response.json();
-      if (!Array.isArray(data?.players) || data.players.some((player) =>
-        typeof player?.name !== 'string' ||
-        !ores.every(([color]) => Number.isSafeInteger(player[color]) && player[color] >= 0) ||
-        !Number.isSafeInteger(player.total) || player.total < 1 ||
-        player.total !== player.green + player.blue + player.red)) {
-        throw new Error(translate('Ranking data is invalid.'));
-      }
-      const max = data.players[0]?.total || 1;
-      for (const player of data.players) {
-        const row = document.createElement('li');
-        const label = document.createElement('span');
-        const value = document.createElement('strong');
-        const bars = document.createElement('div');
-        label.textContent = player.name;
-        value.textContent = `${translate('Total')}: ${player.total}`;
-        bars.className = 'ore-stats';
-        renderOreBars(bars, ores.map(([color]) => player[color]), max, false);
-        row.append(label, value, bars);
-        list.append(row);
-      }
-      status.textContent = data.players.length ? '' : translate('No natural ore has been recorded yet.');
-    } catch (error) {
-      status.textContent = error.message || translate('Ranking is unavailable. Please try again.');
+    if (!overlay.open) {
+      overlay.showModal();
+      challengeRefresh = setInterval(() => sendChallenge('list'), 5000);
     }
+    $('ranking-status').textContent = 'Waiting for the game server. Refresh after connecting.';
+    $('ranking-list').replaceChildren();
+    sendChallenge('list');
   });
   $('ranking-close').addEventListener('click', () => $('ranking-dialog').close());
   document.addEventListener('fullscreenchange', () => {

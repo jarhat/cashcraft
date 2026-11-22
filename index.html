@@ -136,10 +136,13 @@
       </div>
       <div id="game-controls-right" class="game-controls game-controls-right" role="group" aria-label="CashCraft controls">
         <button id="game-close" type="button" aria-label="Minimize CashCraft" title="Minimize CashCraft">−</button>
+        <button id="game-verify-wallet" type="button" aria-label="Verify wallet" title="Verify ownership of your CashCraft wallet" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 4-3 7-7 10-4-3-7-6-7-10V6z"/><path d="m9 12 2 2 4-4"/></svg>
+        </button>
         <button id="game-crafting" type="button" aria-label="Craft a MINA pickaxe with 2 MINA" title="Craft a MINA pickaxe with 2 MINA" hidden>
           <img src="/mining-table.svg" alt="">
         </button>
-        <button id="game-ranking" class="game-ranking-button" type="button" aria-label="Ranking" title="Ranking" aria-haspopup="dialog" aria-controls="ranking-dialog" hidden>
+        <button id="game-ranking" class="game-ranking-button" type="button" aria-label="Challenges and rankings" title="Challenges and rankings" aria-haspopup="dialog" aria-controls="ranking-dialog" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v3a4 4 0 0 1-8 0zm0 1H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4M12 11v5m-4 4h8m-7-4h6v4"/></svg>
         </button>
         <button id="game-invite" type="button" aria-label="Invite to CashCraft" title="Invite to CashCraft" aria-haspopup="dialog" aria-controls="invite-dialog">
@@ -709,10 +712,31 @@
   </dialog>
   <dialog id="ranking-dialog" class="notifications-dialog ranking-dialog" aria-labelledby="ranking-title">
     <div class="notifications-heading">
-      <h2 id="ranking-title"><img class="mina-gem" src="/mina-gem.svg" alt=""> Ore ranking</h2>
-      <button id="ranking-close" class="small-button close-notifications" type="button" aria-label="Close ranking">×</button>
+      <h2 id="ranking-title">Challenges and rankings</h2>
+      <button id="ranking-close" class="small-button close-notifications" type="button" aria-label="Close challenges and rankings">×</button>
     </div>
-    <p class="fine">Ranked by total natural ore mined. Placed blocks and token payouts do not count. Counts start when ore tracking is enabled.</p>
+    <p class="fine">Practice rounds only. Do not send BCH for these challenges.</p>
+    <label>Challenge <select id="challenge-mode">
+      <option value="ctf">Capture the Flag</option>
+      <option value="pvp">Survival (PvP)</option>
+      <option value="pve">Survival (PvE)</option>
+      <option value="mining">Most mined before the next BCH block</option>
+    </select></label>
+    <details>
+      <summary>Invite connected players</summary>
+      <fieldset id="challenge-invitees"><legend>Select up to eight players</legend></fieldset>
+    </details>
+    <button id="challenge-create" type="button" disabled>Create invitation</button>
+    <button id="challenge-refresh" type="button">Refresh connected players</button>
+    <div id="challenge-invitations"></div>
+    <p id="challenge-status" role="status"></p>
+    <label>Connected-player rankings <select id="ranking-category">
+      <option value="mined">Most natural blocks mined</option>
+      <option value="total">Most natural ore mined</option>
+      <option value="green">MINA ore</option>
+      <option value="blue">Lapis ore</option>
+      <option value="red">Redstone ore</option>
+    </select></label>
     <p id="ranking-status" role="status"></p>
     <ol id="ranking-list" class="ranking-list" aria-label="Natural ore blocks mined by player"></ol>
   </dialog>

@@ -38,13 +38,19 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
     addEventListener(type, fn) { this.listeners[type] = fn; },
     getElementById: $,
     querySelector(selector) { return selector === '.mobile-controls' ? $('controls') : null; },
+    createElement() {
+      return { getContext: () => ({ fillRect() {} }), toDataURL: () => 'data:image/png;base64,test' };
+    },
   };
   const parent = {};
   const window = { parent, listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; } };
   const context = { document, window, console, Date, Math };
   runInNewContext(script, context);
   const updates = [];
-  context.Module.ccall = (name, result, types, args) => updates.push([name, args[0]]);
+  context.Module.ccall = (name, result, types, args) => {
+    if (name === 'netcraft_world_map_tile') return 8 * 43 + 1;
+    updates.push([name, args[0]]);
+  };
   window.listeners.message({ source: {}, data: { type: 'netcraft-reward-address', address: 'spoofed' } });
   window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: 'first', pickaxe: true } });
   window.listeners.message({ source: parent, data: { type: 'netcraft-reward-address', address: '', pickaxe: false } });
@@ -87,6 +93,15 @@ test('NetCraft initializes socket settings, touch controls and loading state bef
   assert.equal($('loading-screen')['aria-hidden'], 'true');
   context.Module.setConnectionStatus('');
   assert.equal($('connection-status').hidden, true);
+  context.Module.updateChallengeWorldView('map,-72,-72,0,-100,0,-44,0,0,-100');
+  assert.equal($('challenge-world-view').hidden, false);
+  assert.equal($('challenge-west-marker').x, 44);
+  assert.equal($('challenge-east-marker').x, 156);
+  context.Module.updateChallengeWorldView('map,-72,-72,0,-100,0,-68,4,0,-100');
+  assert.equal($('challenge-east-marker').x, 108);
+  assert.equal($('challenge-east-marker').y, 72);
+  context.Module.updateChallengeWorldView('map-off');
+  assert.equal($('challenge-world-view').hidden, true);
 });
 
 test('NetCraft reports renderer errors separately from server connection state', () => {

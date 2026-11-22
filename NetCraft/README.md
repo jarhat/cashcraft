@@ -178,7 +178,11 @@ In the web-based version, you can pass command-line arguments after `#` in the U
 
 Run `cargo run --release --manifest-path server/Cargo.toml` to listen on TCP
 port 4080. `NETCRAFT_LISTEN` and `NETCRAFT_DB` override the listen address and
-SQLite database. The server compiles the same terrain generator as the client.
+world SQLite database. `CASHADDR_DB_PATH` points to the separate CashAddr SQLite
+database (defaults to `cash-addresses.sqlite3` alongside the world file).
+See [backend persistence](../backend/README.md) before upgrading an existing
+world with mining rewards or stats. The server compiles the same terrain
+generator as the client.
 Clients generate baseline terrain locally and request persisted edits, so both
 must use matching builds. Python-server worlds created with a custom seed
 cannot be migrated by copying the database alone.
@@ -195,6 +199,27 @@ connections with backoff and refreshes loaded chunks after reconnecting.
 Block edits are paused while disconnected; they are not queued.
 Disconnecting a wallet does not close the game; its reward address is cleared
 and can be connected again while playing.
+
+Open the trophy to start a **practice challenge**. Verify your wallet, select
+other verified players, and wait for at least one to accept before starting.
+Shareable links open NetCraft, but only the selected wallets can accept.
+For Capture the Flag, the in-game **World view: Top perspective** shows both
+flags and follows the carriers; the bases are 28 blocks either side of spawn.
+Survival rounds end when one challenger remains. The mining race counts
+natural block removals until NetCraft observes a new BCHN tip. Rankings show
+currently connected, verified wallets only. Practice rounds restart with the
+server and do not accept stakes or pay prizes.
+
+To enable admin tools, set `NETCRAFT_ADMIN_BCH_ADDRESS` to the wallet's
+prefixed, non-token-aware P2PKH CashAddr in `.env`. Connect that wallet in
+CashCraft, register its reward address, and choose **Verify wallet**. The
+built-in wallet signs the challenge directly; external wallets can paste a
+standard BCH signed-message proof. Only a verified admin can double-tap
+Space to toggle flight or use the green MINA axe to break mineable blocks
+with one press. Reconnecting or changing wallets requires verification again.
+Deploy matching Rust server and game client builds: normal mining now starts
+with a timing message before the block edit.
+
 Players can mine MINA ore without a wallet. Their browser stores a random bearer
 identity used to retain server-side progress and unclaimed rewards; clearing
 browser storage loses access to them, so keep that identity private. Connecting
@@ -262,9 +287,11 @@ python3 NetCraft/builder.py
 ```
 
 This requires Python 3 and a C compiler and creates `data/netcraft.db` for
-Compose. It adds a central sky park, dragon, green coin, four floating gardens,
-bridges, seven gold spheres and static water cascades above the normal generated terrain.
-The pillar is one block wide; double-tap jump to fly to the platform. To add
+Compose. It adds a central park, a dragon with larger ribbed wings and a
+curved tail, a green coin, and eight bridge-linked islands. The four outer
+islands, 108 blocks from the park center, feature a glass observatory, a
+lagoon and waterfall, ruined arches, and a grove. The park is at `y=180`;
+only verified admins can fly up using double-tap Space. To add
 the donation QR, set `DONATION_ADDRESS` in `builder.py` to the desired address
 and install Python's `segno` package before building. The QR is omitted when
 the address is blank. Check it with a phone in the actual game before use;
@@ -277,7 +304,31 @@ To add the park to a world that already exists, stop the server, back up its
 database, and run `python3 NetCraft/builder.py --add-park data/netcraft.db`.
 Existing block, light and sign edits are preserved; park blocks at those
 positions are skipped, so existing edits may leave gaps or obstruct paths.
-Restart the server to load the changes; do not run the builder while it runs.
+On an older park this adds the new islands and unoccupied dragon details
+without repainting or removing the original sculpture. Restart the server
+to load changes; do not run the builder while it runs.
+
+#### Terrain modules
+
+Use `--terrain` repeatedly to layer reusable JSON modules on top of
+`--init-park` or `--add-park`. To apply only the modules to an existing world
+without generating the park or compiling C, run:
+
+```sh
+python3 NetCraft/builder.py --apply-terrain data/netcraft.db \
+  --terrain NetCraft/terrain/lookout.json
+```
+
+A module contains `"version": 1`, an optional `"origin": [x, y, z]` offset
+(default `[0, 0, 0]`), and an `"edits"` array. Use `{"at": [x,y,z], "block": 8}`
+for one block or `{"from": [x1,y1,z1], "to": [x2,y2,z2], "block": 8}` for an
+inclusive box. Use numeric IDs from `src/item.h`; `0` places air over generated
+terrain. Within a single command, later edits and files win at the same
+coordinate. Existing saved blocks (including saved air), lights, and signs
+always win, even when a module requests air. For an existing world, back it
+up and stop the server before running the builder. Modules support coordinates
+from `-262000` to `262000` on X/Z and `-26` to `255` on Y. A command accepts up
+to 250,000 expanded module edits, and each file may be at most 8 MiB.
 
 Compose enables mining rewards by default. Each ten naturally generated,
 previously unedited blocks of green MINA, blue lapis, or red redstone ore mined

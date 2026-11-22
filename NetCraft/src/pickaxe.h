@@ -12,6 +12,7 @@ typedef struct {
 } PickaxePose;
 
 int pickaxe_vertices(float *vertices, bool mina);
+int admin_axe_vertices(float *vertices);
 PickaxePose pickaxe_pose(int width, int height, bool mining, double elapsed);
 
 #endif

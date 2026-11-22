@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createECDH, createHmac, pbkdf2Sync } from 'node:crypto';
 import {
   binToHex, cashAddressToLockingBytecode, createVirtualMachineBch, decodeTransaction,
-  encodeCashAddress, hexToBin,
+  encodeCashAddress, hash256, hexToBin, secp256k1,
 } from '@bitauth/libauth';
 import { hash160 } from '@cashscript/utils';
 import { TransactionBuilder } from 'cashscript';
@@ -13,6 +13,18 @@ import {
 
 const mnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const password = 'test password 12345';
+
+test('CashCraft wallet proof recovers the first receive key using BCH signed-message encoding', () => {
+  const wallet = new BrowserWallet(mnemonic);
+  const nonce = 'ba'.repeat(32);
+  const magic = Buffer.from('Bitcoin Signed Message:\n');
+  const message = Buffer.from(`CashCraft wallet login v1: ${nonce}`);
+  const digest = hash256(Buffer.concat([Buffer.of(magic.length), magic, Buffer.of(message.length), message]));
+  const proof = Buffer.from(wallet.signNetcraftWalletChallenge(nonce), 'base64');
+  assert.equal(proof.length, 65);
+  assert.deepEqual(secp256k1.recoverPublicKeyCompressed(proof.subarray(1), proof[0] - 31, digest), wallet.getPubkey(0, 0));
+  assert.throws(() => wallet.signNetcraftWalletChallenge('arbitrary text'), /Invalid CashCraft wallet challenge/);
+});
 
 function independentPublicKey(path) {
   const hmac = (key, message) => createHmac('sha512', key).update(message).digest();

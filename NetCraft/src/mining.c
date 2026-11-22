@@ -15,6 +15,7 @@ static double next_swing_sound = 0;
 static bool has_pickaxe = false;
 static bool wallet_pickaxe = false;
 static bool wallet_connected = false;
+static bool admin_axe = false;
 static bool holding_mine_button = false;
 static bool attacking_animal = false;
 static int building_progress = 0;
@@ -23,6 +24,7 @@ static bool holding_build_button = false;
 static int mining_x = 0;
 static int mining_y = 0;
 static int mining_z = 0;
+static int mining_w = 0;
 int mining_stage = 0;
 
 int target_x = 0;
@@ -35,6 +37,7 @@ extern void on_mine(void);
 extern void on_build(void);
 extern void on_mining_swing(void);
 extern bool on_pickaxe_attack(void);
+extern void on_mining_target(int x, int y, int z);
 extern int get_targeted_block(int *x, int *y, int *z, int *face);
 
 static void update_pickaxe(void) {
@@ -60,6 +63,12 @@ EMSCRIPTEN_KEEPALIVE
 void mining_set_wallet_connected(int enabled) {
     wallet_connected = enabled != 0;
     update_pickaxe();
+}
+
+void mining_set_admin(bool enabled) {
+    if (admin_axe == enabled) return;
+    admin_axe = enabled;
+    mining_stop();
 }
 
 bool is_mining() {
@@ -91,16 +100,21 @@ void mining_tick() {
     target_w = get_targeted_block(&target_x, &target_y, &target_z, &target_face);
 
     if (holding_mine_button) {
+        if (admin_axe) return; // One instant break per press.
+        bool was_attacking = attacking_animal;
         attacking_animal = on_pickaxe_attack();
         if (attacking_animal) {
             mining_started = glfwGetTime();
             mining_stage = 0;
             return;
         }
-        if (target_x != mining_x || target_y != mining_y || target_z != mining_z) {
+        if (was_attacking || target_w != mining_w ||
+            target_x != mining_x || target_y != mining_y || target_z != mining_z) {
             mining_x = target_x;
             mining_y = target_y;
             mining_z = target_z;
+            mining_w = target_w;
+            if (target_w) on_mining_target(mining_x, mining_y, mining_z);
 
             mining_started = glfwGetTime();
             mining_stage = 0;
@@ -142,7 +156,15 @@ void mining_start() {
     next_swing_sound = mining_started;
     attacking_animal = on_pickaxe_attack();
 
-    (void) get_targeted_block(&mining_x, &mining_y, &mining_z, &target_face);
+    mining_w = get_targeted_block(&mining_x, &mining_y, &mining_z, &target_face);
+    if (!attacking_animal && mining_w && isfinite(is_hardness(mining_w))) {
+        if (admin_axe) {
+            on_mining_swing();
+            on_mine();
+        } else {
+            on_mining_target(mining_x, mining_y, mining_z);
+        }
+    }
 }
 
 

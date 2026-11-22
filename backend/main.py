@@ -67,7 +67,6 @@ if CRAFTING_RETURN_CATEGORY and not CATEGORY_RE.fullmatch(CRAFTING_RETURN_CATEGO
 
 
 DB_PATH = Path(os.getenv("CASHADDR_DB_PATH", "/data/cash-addresses.sqlite3"))
-NETCRAFT_DB_PATH = os.getenv("NETCRAFT_DB_PATH", "").strip()
 NETCRAFT_MINING_REWARDS_ENABLED = os.getenv("NETCRAFT_MINING_REWARDS_ENABLED", "false")
 NETCRAFT_REWARD_WAKE_SECRET = os.getenv("NETCRAFT_REWARD_WAKE_SECRET", "")
 if NETCRAFT_MINING_REWARDS_ENABLED not in ("true", "false"):
@@ -157,6 +156,21 @@ def init_db() -> None:
                 )
             """)
             db.execute("""
+                CREATE TABLE IF NOT EXISTS mining_rewards (
+                    id INTEGER PRIMARY KEY,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    z INTEGER NOT NULL,
+                    cash_address TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    signed_tx TEXT,
+                    txid TEXT,
+                    sent_at TEXT,
+                    player_name TEXT,
+                    UNIQUE(x, y, z)
+                )
+            """)
+            db.execute("""
                 CREATE TABLE IF NOT EXISTS short_links (
                     id TEXT PRIMARY KEY,
                     address TEXT NOT NULL,
@@ -222,28 +236,6 @@ def open_db(timeout: int) -> Iterator[sqlite3.Connection]:
             yield db
     finally:
         db.close()
-
-
-def open_netcraft_db(timeout: int) -> sqlite3.Connection:
-    if not NETCRAFT_DB_PATH:
-        raise RuntimeError("Mining payouts are disabled.")
-    path = Path(NETCRAFT_DB_PATH)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(path.resolve().as_uri() + "?mode=rwc", uri=True, timeout=timeout)
-    db.execute("""CREATE TABLE IF NOT EXISTS mining_rewards (
-        id INTEGER PRIMARY KEY,
-        x INTEGER NOT NULL,
-        y INTEGER NOT NULL,
-        z INTEGER NOT NULL,
-        cash_address TEXT NOT NULL,
-        category TEXT NOT NULL,
-        signed_tx TEXT,
-        txid TEXT,
-        sent_at TEXT,
-        player_name TEXT,
-        UNIQUE(x, y, z)
-    )""")
-    return db
 
 
 @app.on_event("startup")
@@ -821,18 +813,14 @@ def verify_pickaxe_payment(txid: str, locking_script: str) -> bool:
 def pickaxe_order(request: CashAddressRequest) -> dict:
     try:
         address, _, _ = validate_token_aware_cashaddr(request.cash_address)
-        if not NETCRAFT_DB_PATH:
-            raise RuntimeError("Mining progress unavailable.")
-        uri = Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro"
-        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+        with open_db(timeout=30) as db:
+            db.execute("BEGIN IMMEDIATE")
             earned = db.execute(
                 "SELECT COUNT(*) FROM mining_rewards WHERE cash_address=? AND category=?",
                 (address, BCH_REWARD_CATEGORY),
             ).fetchone()[0]
-        if earned < 2:
-            raise HTTPException(status_code=403, detail="Mine 20 natural MINA ore blocks first.")
-        with open_db(timeout=30) as db:
-            db.execute("BEGIN IMMEDIATE")
+            if earned < 2:
+                raise HTTPException(status_code=403, detail="Mine 20 natural MINA ore blocks first.")
             row = db.execute(
                 "SELECT deposit_address, unlocked, txid FROM pickaxe_orders WHERE cash_address=?", (address,)
             ).fetchone()
@@ -947,8 +935,8 @@ def ensure_no_pending_signed_payout() -> None:
             "SELECT 1 FROM token_rewards WHERE signed_tx IS NOT NULL AND sent_at IS NULL LIMIT 1"
         ).fetchone():
             raise RuntimeError("A signed wallet payout requires recovery.")
-    if NETCRAFT_MINING_REWARDS_ENABLED == "true" and NETCRAFT_DB_PATH:
-        with open_netcraft_db(timeout=10) as db:
+    if NETCRAFT_MINING_REWARDS_ENABLED == "true":
+        with open_db(timeout=10) as db:
             if db.execute(
                 "SELECT 1 FROM mining_rewards WHERE signed_tx IS NOT NULL AND sent_at IS NULL LIMIT 1"
             ).fetchone():
@@ -1076,9 +1064,9 @@ def process_one_reward() -> bool:
 
 
 def process_one_mining_reward(reward_id: int | None = None) -> bool:
-    if NETCRAFT_MINING_REWARDS_ENABLED != "true" or not NETCRAFT_DB_PATH:
+    if NETCRAFT_MINING_REWARDS_ENABLED != "true":
         return False
-    with open_netcraft_db(timeout=10) as db:
+    with open_db(timeout=10) as db:
         requested_reward_id = reward_id
         if requested_reward_id is not None:
             existing = db.execute(
@@ -1093,17 +1081,16 @@ def process_one_mining_reward(reward_id: int | None = None) -> bool:
                 (requested_reward_id,),
             ).fetchone()
         else:
-            with open_db(timeout=10) as address_db:
-                pending_welcome = {
-                    item[0] for item in address_db.execute(
-                        "SELECT cash_address FROM token_rewards WHERE sent_at IS NULL"
-                    )
-                }
             rows = db.execute(
-                """SELECT id, cash_address, category, signed_tx, txid FROM mining_rewards
-                   WHERE sent_at IS NULL ORDER BY signed_tx IS NULL, id"""
+                """SELECT m.id, m.cash_address, m.category, m.signed_tx, m.txid
+                   FROM mining_rewards AS m WHERE m.sent_at IS NULL
+                   AND (COALESCE(m.signed_tx, '') <> '' OR NOT EXISTS (
+                       SELECT 1 FROM token_rewards AS w
+                       WHERE w.cash_address = m.cash_address AND w.sent_at IS NULL
+                   ))
+                   ORDER BY m.signed_tx IS NULL, m.id LIMIT 1"""
             )
-            row = next((item for item in rows if item[3] or item[1] not in pending_welcome), None)
+            row = rows.fetchone()
         if not row:
             return False
         reward_id, address, category, signed_tx, txid = row
@@ -1111,12 +1098,11 @@ def process_one_mining_reward(reward_id: int | None = None) -> bool:
         if not CATEGORY_RE.fullmatch(category):
             raise RuntimeError("Invalid mining reward category.")
         if not signed_tx:
-            with open_db(timeout=10) as address_db:
-                if address_db.execute(
-                    "SELECT 1 FROM token_rewards WHERE cash_address = ? AND sent_at IS NULL",
-                    (address,),
-                ).fetchone():
-                    raise RuntimeError("The welcome reward must be sent before mining rewards.")
+            if db.execute(
+                "SELECT 1 FROM token_rewards WHERE cash_address = ? AND sent_at IS NULL",
+                (address,),
+            ).fetchone():
+                raise RuntimeError("The welcome reward must be sent before mining rewards.")
             ensure_no_pending_signed_payout()
             signed_tx, txid = build_reward_transaction(address, category, mining=True)
             db.execute(
@@ -1159,6 +1145,39 @@ def require_netcraft_auth(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
+class NetcraftAdminProof(BaseModel):
+    address: str = Field(min_length=1, max_length=120)
+    nonce: str = Field(pattern=r"^[0-9a-f]{64}$", min_length=64, max_length=64)
+    signature: str = Field(pattern=r"^[A-Za-z0-9+/]{87}=$", min_length=88, max_length=88)
+
+
+@app.post("/api/internal/netcraft-admin-proof", status_code=204)
+def netcraft_admin_proof(proof: NetcraftAdminProof, request: Request) -> Response:
+    require_netcraft_auth(request)
+    try:
+        claimed, prefix, claimed_type = validate_token_aware_cashaddr(proof.address)
+        claimed_payload = claimed.split(":")[1][:-8]
+        if claimed_type != 2 or len(claimed_payload) != 34:
+            raise ValueError("Not a 20-byte P2PKH wallet")
+        # Convert token-aware P2PKH to ordinary P2PKH for BCHN message verification.
+        payload = "q" + claimed_payload[1:]
+        checksum = _polymod(_prefix_expand(prefix) + [_CHARSET_MAP[c] for c in payload] + [0] * 8)
+        address = prefix + ":" + payload + "".join(_CHARSET[(checksum >> shift) & 31]
+                                                  for shift in range(35, -1, -5))
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Admin wallet verification failed") from exc
+    try:
+        verified = bch_rpc("verifymessage", [
+            address, proof.signature, f"CashCraft wallet login v1: {proof.nonce}",
+        ])
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Wallet verification unavailable") from exc
+    if verified is not True:
+        raise HTTPException(status_code=403, detail="Admin wallet verification failed")
+    configured = os.getenv("NETCRAFT_ADMIN_BCH_ADDRESS", "").strip().lower()
+    return Response(status_code=204 if address == configured else 202)
+
+
 @app.get("/api/internal/netcraft-mempool")
 def netcraft_mempool(request: Request) -> Response:
     require_netcraft_auth(request)
@@ -1178,6 +1197,19 @@ def netcraft_mempool(request: Request) -> Response:
     )
 
 
+@app.get("/api/internal/netcraft-tip")
+def netcraft_tip(request: Request) -> Response:
+    require_netcraft_auth(request)
+    try:
+        info = bch_rpc("getblockchaininfo")
+        tip = info.get("bestblockhash") if isinstance(info, dict) else None
+        if not isinstance(tip, str) or not TXID_RE.fullmatch(tip) or info.get("initialblockdownload") is not False:
+            raise RuntimeError("BCHN tip unavailable or syncing")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="BCH tip unavailable") from exc
+    return Response(f"{tip.lower()}\n", media_type="text/plain", headers={"Cache-Control": "no-store"})
+
+
 @app.post("/api/internal/netcraft-reward-wake", status_code=204)
 def wake_mining_rewards(request: Request) -> Response:
     require_netcraft_auth(request)
@@ -1190,7 +1222,7 @@ def pay_mining_reward(reward_id: int, request: Request) -> Response:
     require_netcraft_auth(request)
     if reward_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid reward ID.")
-    if NETCRAFT_MINING_REWARDS_ENABLED != "true" or not NETCRAFT_DB_PATH:
+    if NETCRAFT_MINING_REWARDS_ENABLED != "true":
         raise HTTPException(status_code=503, detail="Mining payouts are disabled.")
     try:
         with reward_payout_lock:
@@ -1213,12 +1245,10 @@ def mina_rewards_sent() -> dict:
                 "SELECT COUNT(*) FROM token_rewards WHERE category = ? AND sent_at IS NOT NULL",
                 (BCH_REWARD_CATEGORY,),
             ).fetchone()[0]
-        if NETCRAFT_DB_PATH:
-            with open_netcraft_db(timeout=5) as db:
-                total += db.execute(
-                    "SELECT COUNT(*) FROM mining_rewards WHERE category = ? AND sent_at IS NOT NULL",
-                    (BCH_REWARD_CATEGORY,),
-                ).fetchone()[0]
+            total += db.execute(
+                "SELECT COUNT(*) FROM mining_rewards WHERE category = ? AND sent_at IS NOT NULL",
+                (BCH_REWARD_CATEGORY,),
+            ).fetchone()[0]
     except (RewardDatabaseError, sqlite3.Error) as exc:
         logger.error("Could not read MINA payout total: %s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Payout total unavailable") from exc
@@ -1227,11 +1257,8 @@ def mina_rewards_sent() -> dict:
 
 @app.get("/api/mina-ranking")
 def mina_ranking() -> dict:
-    if not NETCRAFT_DB_PATH:
-        raise HTTPException(status_code=503, detail="Ranking database unavailable.")
     try:
-        uri = Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro"
-        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+        with open_db(timeout=5) as db:
             columns = {row[1] for row in db.execute("PRAGMA table_info(mining_rewards)")}
             if not {"category", "sent_at"} <= columns:
                 raise sqlite3.DatabaseError("Mining rewards table unavailable")
@@ -1242,7 +1269,7 @@ def mina_ranking() -> dict:
                 "ORDER BY rewards DESC, player COLLATE NOCASE LIMIT 20",
                 (BCH_REWARD_CATEGORY,),
             ).fetchall()
-    except sqlite3.Error as exc:
+    except (RewardDatabaseError, sqlite3.Error) as exc:
         logger.error("Could not read MINA ranking: %s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Ranking unavailable.") from exc
     return {"players": [{"name": name, "rewards": count} for name, count in rows]}
@@ -1250,11 +1277,8 @@ def mina_ranking() -> dict:
 
 @app.get("/api/ore-ranking")
 def ore_ranking() -> dict:
-    if not NETCRAFT_DB_PATH:
-        raise HTTPException(status_code=503, detail="Ranking database unavailable.")
     try:
-        uri = Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro"
-        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+        with open_db(timeout=5) as db:
             rows = db.execute(
                 """SELECT MAX(player_name) AS player,
                           SUM(CASE WHEN ore = 83 THEN blocks ELSE 0 END),
@@ -1264,7 +1288,7 @@ def ore_ranking() -> dict:
                    FROM ore_scores GROUP BY miner
                    ORDER BY total DESC, player COLLATE NOCASE, miner LIMIT 20"""
             ).fetchall()
-    except sqlite3.Error as exc:
+    except (RewardDatabaseError, sqlite3.Error) as exc:
         logger.error("Could not read ore ranking: %s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Ranking unavailable.") from exc
     return {"players": [
@@ -1275,17 +1299,14 @@ def ore_ranking() -> dict:
 
 @app.get("/api/mina-ore-mined")
 def mina_ore_mined() -> dict:
-    if not NETCRAFT_DB_PATH:
-        raise HTTPException(status_code=503, detail="Mining total unavailable.")
     try:
-        uri = Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro"
-        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+        with open_db(timeout=5) as db:
             row = db.execute(
                 "SELECT total FROM mining_totals WHERE name = 'mina_ore'"
             ).fetchone()
             if row is None:
                 raise sqlite3.DatabaseError("Mining total unavailable")
-    except sqlite3.Error as exc:
+    except (RewardDatabaseError, sqlite3.Error) as exc:
         logger.error("Could not read MINA ore total: %s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Mining total unavailable.") from exc
     return {"mined": str(row[0])}
@@ -1297,17 +1318,14 @@ def mina_mined(address: str) -> dict:
         address, _, _ = validate_token_aware_cashaddr(address)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if not NETCRAFT_DB_PATH:
-        raise HTTPException(status_code=503, detail="Mining rewards unavailable.")
     try:
-        uri = Path(NETCRAFT_DB_PATH).resolve().as_uri() + "?mode=ro"
-        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+        with open_db(timeout=5) as db:
             count = db.execute(
                 "SELECT COUNT(*) FROM mining_rewards WHERE cash_address = ? "
                 "AND category = ? AND sent_at IS NOT NULL",
                 (address, BCH_REWARD_CATEGORY),
             ).fetchone()[0]
-    except sqlite3.Error as exc:
+    except (RewardDatabaseError, sqlite3.Error) as exc:
         logger.error("Could not read mining rewards: %s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Mining rewards unavailable.") from exc
     return {"mined": count}

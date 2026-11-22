@@ -1,0 +1,60 @@
+pragma cashscript ^0.14.0;
+
+// The last constructor argument is serialized as the first opcode (OP_0/OP_1).
+contract ChallengeVault(
+    bytes32 challengeId,
+    bytes20 playerA,
+    bytes20 playerB,
+    bytes20 referee,
+    int stake,
+    int refundAfter,
+    bool isB
+) {
+    function settle() {
+        require(challengeId != 0x0000000000000000000000000000000000000000000000000000000000000000);
+        require(tx.inputs.length == 3);
+        require(tx.outputs.length == 2);
+        int ownIndex = 0;
+        bytes1 peerFlag = 0x51;
+        if (isB) {
+            ownIndex = 1;
+            peerFlag = 0x00;
+        }
+        require(this.activeInputIndex == ownIndex);
+        bytes redeem = this.activeBytecode;
+        bytes peerRedeem = peerFlag + redeem.split(1)[1];
+        require(tx.inputs[1 - ownIndex].lockingBytecode == 0xaa20 + hash256(peerRedeem) + 0x87);
+        require(tx.inputs[0].value == stake);
+        require(tx.inputs[1].value == stake);
+        bytes refereeScript = 0x76a914 + referee + 0x88ac;
+        require(tx.inputs[2].lockingBytecode == refereeScript);
+        require(tx.outputs[1].lockingBytecode == refereeScript);
+        require(tx.inputs[2].value == tx.outputs[1].value + 2000);
+        require(tx.outputs[1].value >= 546);
+        bytes winnerScript = tx.outputs[0].lockingBytecode;
+        require(winnerScript == 0x76a914 + playerA + 0x88ac
+             || winnerScript == 0x76a914 + playerB + 0x88ac);
+        require(tx.outputs[0].value == stake * 2);
+        require(tx.inputs[0].tokenCategory == 0x);
+        require(tx.inputs[1].tokenCategory == 0x);
+        require(tx.inputs[2].tokenCategory == 0x);
+        require(tx.outputs[0].tokenCategory == 0x);
+        require(tx.outputs[1].tokenCategory == 0x);
+    }
+
+    // Anyone can submit this transaction, but all recovered BCH goes to this owner.
+    function refund() {
+        require(tx.time >= refundAfter);
+        require(tx.inputs.length == 1);
+        require(tx.outputs.length == 1);
+        bytes20 owner = playerA;
+        if (isB) {
+            owner = playerB;
+        }
+        require(tx.outputs[0].lockingBytecode == 0x76a914 + owner + 0x88ac);
+        require(tx.inputs[0].value == tx.outputs[0].value + 1000);
+        require(tx.outputs[0].value >= 546);
+        require(tx.inputs[0].tokenCategory == 0x);
+        require(tx.outputs[0].tokenCategory == 0x);
+    }
+}
