@@ -2642,10 +2642,21 @@ mod tests {
         let ores = ore_positions(&server);
         for &(x, y, z) in &ores[..10] {
             move_to(&server, (x, y, z));
-            block_edit(&server, 1, x, y, z, 0).unwrap();
+            handle_command(&server, 1, &format!("MB,{x},{y},{z}")).unwrap();
+            {
+                let mut state = server.state.lock().unwrap();
+                let player = state.players.get_mut(&1).unwrap();
+                assert!(player.reward_address.is_none());
+                let (target, started_at) = player.mining_target.as_mut().unwrap();
+                assert_eq!(*target, [x, y, z]);
+                *started_at -= Duration::from_secs_f32(block_hardness(MINA_ORE));
+            }
+            handle_command(&server, 1, &format!("B,{x},{y},{z},0")).unwrap();
         }
 
         let messages = String::from_utf8(first.try_iter().flatten().collect()).unwrap();
+        assert_eq!(messages.lines().filter(|line| line.starts_with("MB,")).count(), 10);
+        assert_eq!(messages.lines().filter(|line| *line == format!("I,{MINA_ORE}")).count(), 10);
         assert!(messages.contains("G,9,0\n"));
         assert!(messages.contains("G,0,1\n"));
         assert!(wakes.try_recv().is_err());

@@ -22,12 +22,20 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   const extraControls = $('game-extra-controls');
   const topbarDock = $('game-controls-dock');
   const topbar = topbarDock.closest?.('.topbar');
-  const setControlsExpanded = (expanded) => {
+  let windowedControlsExpanded = false;
+  const syncControlsExpanded = () => {
+    const fullscreen = document.fullscreenElement === stage;
+    const expanded = fullscreen || windowedControlsExpanded;
+    controlsToggle.hidden = fullscreen;
     extraControls.hidden = !expanded;
     controlsToggle.setAttribute('aria-expanded', String(expanded));
     const label = translate(expanded ? 'Collapse game controls' : 'Expand game controls');
     controlsToggle.setAttribute('aria-label', label);
     controlsToggle.setAttribute('title', label);
+  };
+  const setControlsExpanded = (expanded) => {
+    windowedControlsExpanded = expanded;
+    syncControlsExpanded();
   };
   setControlsExpanded(false);
   controlsToggle.addEventListener('click', () => setControlsExpanded(extraControls.hidden));
@@ -41,7 +49,8 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     const restoreFocus = controls.contains?.(focused);
     if (pinned) setControlsExpanded(false);
     host.appendChild(controls);
-    if (restoreFocus) (pinned ? controlsToggle : focused).focus({ preventScroll: true });
+    if (restoreFocus) (fullscreen && focused === controlsToggle ? $('game-fullscreen')
+      : pinned ? controlsToggle : focused).focus({ preventScroll: true });
   };
   window.addEventListener('scroll', positionControls, { passive: true });
   window.addEventListener('resize', positionControls);
@@ -317,7 +326,13 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       const fullscreenRequest = fullscreen ? enterFullscreen() : null;
       if (fullscreen) setPlayingUi();
       try {
-        if (id === 'netcraft' && !guestId) guestId = getGuestId();
+        if (id === 'netcraft' && !guestId) {
+          try {
+            guestId = getGuestId();
+          } catch (error) {
+            console.warn('Guest mining rewards cannot be saved on this browser:', error);
+          }
+        }
         const response = await fetch(game.url, { cache: 'no-cache' });
         if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) {
           throw new Error(translate('Game build unavailable. Check the server mount.'));
@@ -751,6 +766,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     stage.classList.toggle('is-fullscreen', active);
     dialog.classList.toggle('is-fullscreen', active);
     setPlayingUi();
+    syncControlsExpanded();
     const label = translate(active ? 'Minimize CashCraft' : 'Enter fullscreen');
     $('game-fullscreen').setAttribute('aria-pressed', String(active));
     $('game-fullscreen').setAttribute('aria-label', label);

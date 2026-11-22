@@ -21,6 +21,7 @@ static bool attacking_animal = false;
 static bool server_timed = false;
 static bool waiting_for_start = false;
 static bool waiting_for_edit = false;
+static const double mining_start_retry_seconds = 1.0;
 static int building_progress = 0;
 static bool holding_build_button = false;
 
@@ -147,7 +148,11 @@ void mining_tick() {
             return;
         }
 
-        if (waiting_for_start || waiting_for_edit) return;
+        if (waiting_for_start) {
+            if (glfwGetTime() - mining_started >= mining_start_retry_seconds) start_target();
+            return;
+        }
+        if (waiting_for_edit) return;
 
         if (!target_w || !isfinite(is_hardness(target_w))) {
             mining_started = glfwGetTime();

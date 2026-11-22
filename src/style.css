@@ -3255,7 +3255,7 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
   margin-inline-start: auto;
 }
 .game-panel:not(:has(> .game-dialog[open]:not([hidden]))) .game-toolbar > .game-controls-right,
-.game-stage:fullscreen :is(#game-close, #game-controls-toggle, #game-extra-controls),
+.game-stage:fullscreen #game-close,
 #game-extra-controls[hidden],
 #game-fullscreen[aria-pressed="false"] .fullscreen-minimize,
 #game-fullscreen[aria-pressed="true"] .fullscreen-expand,

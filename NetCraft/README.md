@@ -224,7 +224,9 @@ slower blocks; the cracks show progress until the server confirms the break.
 
 Players can mine MINA ore without a wallet. Their browser stores a random bearer
 identity used to retain server-side progress and unclaimed rewards; clearing
-browser storage loses access to them, so keep that identity private. Connecting
+browser storage loses access to them, so keep that identity private. If browser
+storage is unavailable, guests can still break blocks, but unclaimed rewards
+are not saved. Connecting
 a registered token-aware wallet claims pending rewards and merges incomplete
 MINA progress into that address. Other ore rewards still require a connected
 wallet. On the first mined block without a wallet, a brief reminder appears in

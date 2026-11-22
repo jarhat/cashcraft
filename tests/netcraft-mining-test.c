@@ -11,6 +11,7 @@ static int swings;
 static int builds;
 static bool attacking;
 static bool server_timed;
+static int target_requests;
 
 double glfwGetTime(void) { return now; }
 float is_hardness(int block) { return block == 2 ? INFINITY : 2.0f; }
@@ -20,7 +21,7 @@ int get_targeted_block(int *x, int *y, int *z, int *face) {
     return target;
 }
 void on_mine(void) { mined++; }
-bool on_mining_target(int x, int y, int z) { (void)x; (void)y; (void)z; return server_timed; }
+bool on_mining_target(int x, int y, int z) { (void)x; (void)y; (void)z; target_requests++; return server_timed; }
 void on_build(void) { builds++; }
 void on_mining_swing(void) { swings++; }
 bool on_pickaxe_attack(void) { return attacking; }
@@ -180,12 +181,14 @@ int main(void) {
     target_x_value = 3;
     before = mined;
     int before_swings = swings;
+    int before_requests = target_requests;
     mining_start();
     now = 5010;
     mining_target_confirmed(4, 0, 0);
     mining_tick();
     assert(mined == before);
     assert(swings == before_swings);
+    assert(target_requests == before_requests + 2);
     mining_target_confirmed(3, 0, 0);
     mining_tick();
     assert(swings == before_swings + 1);

@@ -6,6 +6,7 @@ import { setupGames } from '../src/games.js';
 
 test('the combined wizard and wallet button leaves the other toolbar actions intact', () => {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
   const toolbar = html.slice(html.indexOf('id="game-controls-right"'), html.indexOf('id="wizard-dialog"'));
   assert.match(toolbar, /id="game-notifications"[^>]*aria-controls="game-guide"[\s\S]*?src="\/wizard\.svg"[\s\S]*?src="\/mina-gem\.svg"/);
   assert.doesNotMatch(toolbar, /id="game-guide-open"/);
@@ -14,6 +15,7 @@ test('the combined wizard and wallet button leaves the other toolbar actions int
   }
   assert.match(html, /id="wiki-open"[^>]*>[\s\S]*?<\/button>\s*<button id="game-netcraft"[^>]*>\s*<img[^>]*>CashCraft\s*<\/button>/);
   assert.doesNotMatch(html, /id="games-menu"/);
+  assert.doesNotMatch(css, /:fullscreen\s+(?:#game-extra-controls|:is\([^)]*#game-extra-controls)/);
 });
 
 test('toolbar initialization works without the removed game menu', () => {
@@ -108,10 +110,16 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   $('connection-open').click = () => { connections++; };
   $('notifications-toggle').click = () => { notifications++; };
   const guestId = 'a'.repeat(64);
-  $('game-frame').contentWindow = { postMessage() {} };
+  let guestStorageAvailable = false;
+  const posted = [];
+  $('game-frame').contentWindow = { postMessage(message) { posted.push(message); } };
+  const warnings = t.mock.method(console, 'warn', () => {});
   const transfers = [];
   const update = setupGames($, {
-    translate: (text) => text, isWalletConnected: () => connected, getGuestId: () => guestId,
+    translate: (text) => text, isWalletConnected: () => connected, getGuestId: () => {
+      if (!guestStorageAvailable) throw new DOMException('Storage blocked', 'SecurityError');
+      return guestId;
+    },
     getMinaBalance: () => minaBalance, hasMinaPickaxe: () => pickaxeUnlocked,
     openPlayerTransfer: (target) => transfers.push(target),
   });
@@ -135,6 +143,11 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   assert.equal($('game-guide').open, false);
   assert.equal($('game-wizard-message').textContent, undefined);
   $('game-frame').listeners.load();
+  assert.equal(warnings.mock.callCount(), 2);
+  assert.equal(posted.at(-1).type, 'netcraft-reward-address');
+  assert.equal(posted.at(-1).guestId, null);
+  assert.equal(posted.at(-1).connected, false);
+  guestStorageAvailable = true;
   assert.equal($('game-wizard-speech').hidden, false);
   assert.match($('game-wizard-message').textContent, /bottom left to walk.*game view to look around/);
   $('game-wizard-next').listeners.click();
@@ -161,6 +174,8 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   await $('game-netcraft').listeners.click({ isTrusted: true });
   assert.equal(document.fullscreenElement, $('game-stage'));
   assert.equal($('game-controls-right').parentNode, $('game-fullscreen-toolbar'));
+  assert.equal($('game-controls-toggle').hidden, true);
+  assert.equal($('game-extra-controls').hidden, false);
   assert.equal($('game-fullscreen')['aria-label'], 'Minimize CashCraft');
   const gameUrl = $('game-frame').src;
   await $('game-fullscreen').listeners.click();
@@ -169,6 +184,7 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   assert.equal($('game-frame').src, gameUrl);
   $('game-restore').listeners.click();
   assert.equal($('game-extra-controls').hidden, true);
+  assert.equal($('game-controls-toggle').hidden, false);
   $('game-controls-toggle').listeners.click();
   assert.equal($('game-extra-controls').hidden, false);
   assert.equal($('game-guide').open, false);
