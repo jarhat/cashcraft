@@ -40,7 +40,7 @@ test('crafting prefills a reviewable 2 MINA pickaxe payment', async () => {
   assert.equal(context.pendingPickaxeOrder.wallet, 'wallet-address');
 });
 
-test('MINA pickaxe follows verified wallet entitlement, not wallet balance', async () => {
+test('MINA pickaxe follows the paid entitlement or a balance of 2 MINA', async () => {
   const start = source.indexOf('async function refreshBalances(');
   const end = source.indexOf('\nfunction validateRecipient', start);
   const elements = new Map();
@@ -62,7 +62,8 @@ test('MINA pickaxe follows verified wallet entitlement, not wallet balance', asy
   const token = (category, amount, pathIndex = 0, addressIndex = 0) =>
     ({ satoshis: 1, pathIndex, addressIndex, token: { category, amount } });
   for (const [utxos, unlocked, expected] of [
-    [[token('mina', 50)], false, false],
+    [[token('mina', 1)], false, false],
+    [[token('mina', 2)], false, true],
     [[], true, true],
     [[token('mina', 1)], true, true],
   ]) {

@@ -151,7 +151,7 @@ test('game buttons minimize and restore without unloading the active game', asyn
   const rows = $('game-wizard-ores').children;
   assert.deepEqual(rows.map((row) => row.textContent), ['MINA ore: 4/10', 'Lapis ore: 2/10', 'Redstone ore: 1/10']);
   assert.ok(rows.every((row) => row.children[0].className === 'wizard-ore-texture'));
-  for (let step = 0; step < 4; step++) {
+  for (let step = 0; step < 5; step++) {
     t.mock.timers.tick(Number.parseInt($('game-wizard-speech').style['--wizard-tip-duration']));
   }
   assert.equal(wizard.classList.contains('tutorial-active'), false);

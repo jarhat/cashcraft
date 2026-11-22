@@ -14,7 +14,6 @@ pub struct Session {
 impl Session {
     pub fn revoke(&mut self) {
         self.granted = false;
-        self.flying = false;
         self.challenge = None;
     }
 

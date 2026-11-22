@@ -3507,7 +3507,7 @@ void on_key(GLFWwindow *window, int key, int scancode, int action, int mods) {
             g->crouching = true;
         }
     }
-    if (key == CRAFT_KEY_JUMP && !g->typing && g->admin_tools) {
+    if (key == CRAFT_KEY_JUMP && !g->typing && g->mode == MODE_ONLINE) {
         double now = glfwGetTime();
         if (g->admin_jump_at >= 0 && now - g->admin_jump_at < JUMP_FLY_THRESHOLD) {
             client_send("AF\n");
@@ -4166,10 +4166,12 @@ void parse_buffer(char *buffer, int len) {
             animals_remove(animal_id);
         }
         if (!strcmp(line, "WA,0") || !strcmp(line, "WA,1")) {
+            bool was_flying = g->flying;
             set_admin_tools(line[3] == '1');
+            g->flying = was_flying;
         }
         if (!strcmp(line, "AF,0") || !strcmp(line, "AF,1")) {
-            g->flying = g->admin_tools && line[3] == '1';
+            g->flying = line[3] == '1';
         }
 #ifdef __EMSCRIPTEN__
         if (!strncmp(line, "WC,", 3) && strlen(line + 3) == 64 &&
@@ -5214,7 +5216,8 @@ void render_scene() {
     }
     if (SHOW_CHAT_TEXT && g->show_ui) {
         if (g->initialized) render_chat_bubbles(&pickaxe_attrib, &text_attrib, player);
-        for (int i = 0; i < MAX_VISIBLE_MESSAGES; i++) {
+        // The console is hidden unless the player opens it with '/' or chat.
+        for (int i = 0; g->typing && i < MAX_VISIBLE_MESSAGES; i++) {
             int index = (g->message_view_index + i) % MAX_MESSAGES;
             if (strlen(g->messages[index])) {
                 double age = glfwGetTime() - g->message_times[index];

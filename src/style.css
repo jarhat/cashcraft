@@ -3045,36 +3045,36 @@ img[src="/bitcoin-cash-official.svg"] { filter: hue-rotate(95deg); }
 .topbar-tools-left .tool-dropdown { left: 0; right: auto; z-index: 20; }
 .game-wizard-art { width: 34px; height: 42px; vertical-align: middle; image-rendering: pixelated; }
 .game-wizard-speech {
-  position: absolute; z-index: 6; top: calc(var(--game-ticker-height) + 14px); left: 50%; transform: translateX(-50%);
-  display: flex; align-items: flex-start; gap: 12px; width: min(420px, calc(100% - 24px));
+  position: absolute; z-index: 6; top: calc(var(--game-bar-bottom, var(--game-ticker-height)) + 14px); left: 50%; transform: translateX(-50%);
+  display: flex; align-items: flex-start; gap: 14px; width: min(560px, calc(100% - 24px));
   color: #f0fff6;
-  font: 14px/1.35 system-ui, sans-serif; pointer-events: none;
+  font: 18px/1.4 system-ui, sans-serif; pointer-events: none;
   animation: game-wizard-fade var(--wizard-tip-duration, 7s) ease both;
 }
-.game-stage:fullscreen .game-wizard-speech { top: calc(var(--game-control-size) + 38px + var(--game-ticker-height)); }
 .game-wizard-speech[hidden] { display: none; }
-.game-wizard-avatar { flex: none; width: 34px; height: 42px; image-rendering: pixelated; }
+.game-wizard-avatar { flex: none; width: 56px; height: 70px; image-rendering: pixelated; }
 .game-wizard-card {
-  position: relative; flex: 1; min-width: 0; padding: 10px 12px;
+  position: relative; flex: 1; min-width: 0; padding: 14px 16px;
   border: 2px solid #44de90; border-radius: 12px; background: #10251e;
   box-shadow: 0 5px 18px #0008;
 }
 .game-wizard-card::before {
-  content: ""; position: absolute; top: 12px; left: -8px; width: 12px; height: 12px;
+  content: ""; position: absolute; top: 20px; left: -8px; width: 12px; height: 12px;
   transform: rotate(45deg); background: #10251e; border-left: 2px solid #44de90; border-bottom: 2px solid #44de90;
 }
 .game-wizard-step { display: block; margin-bottom: 4px; color: #9ef3c6; }
 .game-wizard-step[hidden], #game-wizard-table[hidden], .game-wizard-actions[hidden] { display: none; }
-#game-wizard-table { display: block; margin-top: 6px; image-rendering: pixelated; }
+#game-wizard-table { display: block; width: 96px; height: 96px; margin-top: 8px; image-rendering: pixelated; }
 .game-wizard-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; pointer-events: auto; }
 .game-wizard-speech:is(:hover, :focus-within) { animation: none; }
-.game-wizard-actions button { min-height: 32px; }
+.game-wizard-actions button { min-height: 40px; font-size: 1rem; }
 #game-wizard-wallet, #game-wizard-craft { border-color: #44de90; }
 .game-wizard-speech p { margin: 0; }
-.game-wizard-speech .ore-stats label { grid-template-columns: 16px minmax(0, 1fr) minmax(3rem, 1fr); }
+.game-wizard-speech .ore-stats label { grid-template-columns: 32px minmax(0, 1fr) minmax(3rem, 1fr); gap: 10px; }
+.game-wizard-speech .ore-bar { height: 14px; }
 .wizard-ore-texture {
-  width: 16px; height: 16px;
-  background: url('../NetCraft/textures/texture.png') no-repeat;
+  width: 32px; height: 32px;
+  background: url('../NetCraft/textures/texture.png') no-repeat; background-size: 1024px auto;
   image-rendering: pixelated;
 }
 @keyframes game-wizard-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
@@ -3322,7 +3322,7 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
   align-items: flex-start;
   pointer-events: none;
 }
-.game-stage:fullscreen #game-guide[open] { --guide-top: calc(var(--game-control-size) + 32px + var(--game-ticker-height)); }
+.game-stage:fullscreen #game-guide[open] { --guide-top: calc(var(--game-bar-bottom, var(--game-ticker-height)) + 12px); }
 #game-guide[open]::before {
   content: ""; position: absolute; z-index: 1; top: -7px; right: calc(var(--game-control-size) / 2 - 3px); width: 14px; height: 14px;
   transform: rotate(45deg); border-top: 2px solid #44de90; border-left: 2px solid #44de90; background: #10251e;
