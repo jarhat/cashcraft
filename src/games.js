@@ -108,7 +108,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     'Mine 10 natural green MINA ore blocks to earn 1 MINA. Blue lapis and redstone have separate counters and may earn their own tokens. Placed blocks do not count.',
     'You can mine before connecting. Pair a WizardConnect wallet to claim your rewards: open the wallet on this device or scan the QR on another device, then approve the connection. The gem shows your wallet and rewards.',
     'Use the jump, mine and build buttons on touchscreens. With a keyboard and mouse, press Space to jump, left-click to mine and right-click to place a block. Scroll the block slots to choose what to build with.',
-    'Earn 2 MINA by mining 20 natural MINA ore blocks. Then open the crafting table and review the 2 MINA payment in your wallet. Once confirmed, you unlock the faster green pickaxe permanently.',
+    'Mine 10 natural MINA ore blocks to earn 1 MINA. With your 1 welcome MINA, that makes the 2 MINA gems for the recipe. Gather 7 wood, open the crafting table and review the payment in your wallet to unlock the faster green pickaxe permanently.',
   ];
   const tutorialTitles = ['Move and look', 'Mine ore', 'Claim rewards', 'Build with blocks', 'Craft a MINA pickaxe'];
   function renderOreBars(container, counts, max, showGoal) {
@@ -193,16 +193,18 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     }, duration);
   }
   let soundEnabled = true;
+  let craftingNoteShown = false;
   const updateRewardAddress = (address) => {
     const connected = isWalletConnected ? isWalletConnected() : Boolean(address);
     const crafting = activeGame === 'netcraft' && connected && Boolean(address) &&
       !hasMinaPickaxe() && getMinaBalance() >= 2n;
     const craftingButton = $('game-crafting');
-    const newlyAvailable = crafting && craftingButton.hidden !== false;
     craftingButton.hidden = !crafting;
+    if (!crafting) craftingNoteShown = false;
     if (craftingTip) $('game-wizard-craft').hidden = !crafting;
-    if (newlyAvailable && !dialog.hidden) {
-      showWizard('You have 2 MINA! Use the crafting table to review a payment for your pickaxe.', false, null, -1, true);
+    if (crafting && !craftingNoteShown && !dialog.hidden) {
+      craftingNoteShown = true;
+      showWizard('You have 2 MINA gems! Craft the green MINA pickaxe with 7 wood and 2 MINA gems at the crafting table.', false, null, -1, true);
     }
     const gemLabel = connected ? 'Wallet and notifications' : 'Connect wallet';
     $('game-guide-wallet').textContent = translate(gemLabel);
@@ -221,7 +223,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '', pickaxe: connected && hasMinaPickaxe(), connected, guestId, embeddedSound: true }, '*');
     }
   };
-  const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'ranking-dialog', 'game-guide', 'mining-prompt', 'game-receive-dialog', 'token-qr-dialog'];
+  const overlayDialogs = ['connection-dialog', 'notifications-dialog', 'funding-dialog', 'wiki-dialog', 'invite-dialog', 'ranking-dialog', 'game-guide', 'mining-prompt', 'game-receive-dialog', 'token-qr-dialog', 'craft-recipe'];
   const canFocusGame = () => dialog.open && !dialog.hidden && activeGame &&
     !overlayDialogs.some((id) => $(id).open);
   frame.addEventListener('load', () => {
@@ -473,9 +475,15 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       connect.click();
     }
   });
+  const recipe = $('craft-recipe');
+  $('game-crafting').addEventListener('click', () => {
+    document.exitPointerLock?.();
+    if (!recipe.open) recipe.show();
+  });
   $('game-wizard-craft').addEventListener('click', () => {
     if (!$('game-crafting').hidden) $('game-crafting').click();
   });
+  for (const id of ['craft-recipe-close', 'craft-recipe-later']) $(id).addEventListener('click', () => recipe.close());
   $('game-guide-wallet').addEventListener('click', () => {
     if (guide.open) guide.close();
     openWallet();
@@ -736,6 +744,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     }
     generation++;
     activeGame = null;
+    craftingNoteShown = false;
     sharedTutorialPending = false;
     stopTutorial();
     setPlayingUi();

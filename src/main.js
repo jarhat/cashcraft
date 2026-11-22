@@ -345,6 +345,7 @@ function rememberSentTransaction(txid) {
 function notifyTokenReceipts(scannedUtxos) {
   const state = readReceiptState();
   const wallet = receiptStorageKey();
+  const firstScanThisConnection = receiptWallet !== wallet;
   const previouslyNotified = !state.receiptTracking && state.messages.length > 0;
   state.messages = state.messages
     .filter((entry) => entry === miningPayoutFailure);
@@ -389,7 +390,8 @@ function notifyTokenReceipts(scannedUtxos) {
   if (state.pendingMiningRewards) void refreshMinedRewardReceipts();
   if (received.length && !previouslyNotified) {
     $('notification-indicator').hidden = false;
-    showMinaCelebration(received.length);
+    // Receipts found by the first scan after connecting are not new, and one chime is enough.
+    if (!firstScanThisConnection) showMinaCelebration(1);
   }
 }
 
@@ -2674,7 +2676,8 @@ $('pickaxe-retry').addEventListener('click', async () => {
     report(error);
   }
 });
-$('game-crafting').addEventListener('click', async () => {
+$('craft-recipe-open').addEventListener('click', async () => {
+  $('craft-recipe').close();
   try {
     if (!walletReady || !registeredRewardAddress) {
       if (!walletReady) $('game-guide-wallet').click();

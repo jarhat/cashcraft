@@ -147,7 +147,7 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   $('game-wizard-next').listeners.click();
   assert.equal($('game-wizard-table').hidden, false);
   assert.equal($('game-wizard-craft').hidden, true);
-  assert.match($('game-wizard-message').textContent, /20 natural MINA ore blocks.*review/);
+  assert.match($('game-wizard-message').textContent, /10 natural MINA ore blocks.*7 wood.*review/);
   dismiss();
   assert.equal($('game-wizard-speech').hidden, true);
   assert.equal($('game-guide-wallet').textContent, 'Connect wallet');
