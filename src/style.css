@@ -2777,7 +2777,6 @@ body.cashcraft-playing .market-strip-bottom { display: none; }
 .game-minimized-icon:hover { border-color: var(--ice); transform: translateY(-1px); }
 .game-minimized-icon svg, .game-minimized-icon img { width: 100%; height: 100%; }
 #game-restore { width: 54px; height: 54px; padding: 4px; }
-#game-minimized-fullscreen svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 #game-invite svg { width: 20px; height: 20px; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .game-switcher { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .game-switcher[hidden], #game-pk2[hidden] { display: none; }
@@ -2810,26 +2809,19 @@ body.cashcraft-playing .market-strip-bottom { display: none; }
 .game-guide[open] { position: absolute; inset: auto 12px 12px auto; z-index: 5; width: min(390px, calc(100% - 24px)); max-height: min(60%, 440px); overflow: auto; margin: 0; padding: 14px; border: 1px solid #44de90; border-radius: 12px; background: #10251e; color: #f0fff6; box-shadow: 0 8px 24px #0009; font: 14px/1.4 system-ui, sans-serif; }
 .game-guide .notifications-heading { position: static; display: flex; justify-content: space-between; align-items: center; }
 .game-guide p { margin: 8px 0; }
-.game-stage { display: flex; flex-direction: column; --game-ticker-height: 2rem; }
+.game-stage { display: flex; flex-direction: column; }
 .game-stage:fullscreen { width: 100%; height: 100%; border: 0; border-radius: 0; }
 .game-stage:fullscreen iframe, .game-auto-open .game-stage iframe { flex: 1; height: 0; min-height: 0; }
 .game-fullscreen-toolbar { display: none; }
 .game-stage:fullscreen .game-fullscreen-toolbar {
-  position: absolute; z-index: 2; inset: var(--game-ticker-height) 0 auto 0;
+  position: absolute; z-index: 2; inset: 0 0 auto 0;
   display: flex; justify-content: flex-end; padding: var(--game-controls-inset);
   background: transparent; pointer-events: none;
 }
 .game-fullscreen-toolbar > * { pointer-events: auto; }
-.game-chain-ticker {
-  position: absolute; z-index: 2; inset: 0 0 auto 0; box-sizing: border-box; height: var(--game-ticker-height);
-  border: 0; background: transparent; pointer-events: none;
-  color: #e4fff1; line-height: 1rem; text-shadow: 0 1px 3px #000, 0 0 6px #000a;
-}
 .game-stage:fullscreen .game-payment-bubble {
-  inset: calc(var(--game-control-size) + 38px + var(--game-ticker-height)) auto auto 1rem;
+  inset: calc(var(--game-bar-bottom, 0px) + 14px) auto auto 1rem;
 }
-.game-chain-ticker .market-ticker-item strong { color: #92f4b8; }
-.game-chain-ticker:focus-within { overflow-x: auto; }
 .game-stage:fullscreen .game-wallet-actions { display: none; }
 #token-qr-value { overflow-wrap: anywhere; user-select: all; }
 #token-qr-image[hidden] { display: none; }
@@ -2840,7 +2832,7 @@ body.cashcraft-playing .market-strip-bottom { display: none; }
 .receive-ore-gem.green { --ore-color: #36ca81; }
 .receive-ore-gem.red { --ore-color: #ee5665; }
 .receive-ore-gem.blue { --ore-color: #429bfa; }
-.game-dialog.is-fullscreen #game-close, .game-dialog.is-fullscreen .game-share { display: none; }
+.game-dialog.is-fullscreen .game-share { display: none; }
 .game-share svg { width: 20px; height: 20px; }
 .game-controls button { position: relative; }
 #game-notifications { position: relative; }
@@ -2921,6 +2913,8 @@ body:not(.wallet-connected) .dashboard { padding-bottom: 0; }
 .ore-red { accent-color: #e04752; }
 .mina-gem { display: inline-block; width: 1.2em; height: 1.2em; vertical-align: -.2em; }
 .mina-label::before { content: ""; display: inline-block; width: 1.2em; height: 1.2em; vertical-align: -.25em; margin-right: 4px; background: url('/mina-gem.svg') center / contain no-repeat; }
+.ore-gem-blue::before { filter: hue-rotate(90deg); }
+.ore-gem-red::before { filter: hue-rotate(220deg); }
 #mina-receipt-count::before, #mining-reward-queue-notice strong::before {
   content: ""; display: inline-block; width: 1.2em; height: 1.2em; vertical-align: -.25em;
   margin-right: 4px; background: url('/mina-gem.svg') center / contain no-repeat;
@@ -3045,7 +3039,7 @@ img[src="/bitcoin-cash-official.svg"] { filter: hue-rotate(95deg); }
 .topbar-tools-left .tool-dropdown { left: 0; right: auto; z-index: 20; }
 .game-wizard-art { width: 34px; height: 42px; vertical-align: middle; image-rendering: pixelated; }
 .game-wizard-speech {
-  position: absolute; z-index: 6; top: calc(var(--game-bar-bottom, var(--game-ticker-height)) + 14px); left: 50%; transform: translateX(-50%);
+  position: absolute; z-index: 6; top: calc(var(--game-bar-bottom, 0px) + 14px); left: 50%; transform: translateX(-50%);
   display: flex; align-items: flex-start; gap: 14px; width: min(560px, calc(100% - 24px));
   color: #f0fff6;
   font: 18px/1.4 system-ui, sans-serif; pointer-events: none;
@@ -3240,8 +3234,7 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
   border-radius: 0;
 }
 .game-panel:has(> .game-auto-open[open]:not([hidden])) > .game-toolbar {
-  --game-ticker-height: 2rem;
-  position: absolute; z-index: 101; inset: var(--game-ticker-height) 0 auto 0; margin: 0;
+  position: absolute; z-index: 101; inset: 0 0 auto 0; margin: 0;
   border: 0; background: transparent; box-shadow: none; backdrop-filter: none;
   pointer-events: none;
 }
@@ -3270,11 +3263,9 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
   margin-inline-start: auto;
 }
 .game-panel:not(:has(> .game-dialog[open]:not([hidden]))) .game-toolbar > .game-controls-right,
-.game-stage:fullscreen :is(#game-close, #game-extra-controls),
-#game-fullscreen[aria-pressed="false"] .fullscreen-minimize,
+#game-fullscreen[aria-pressed="false"] .fullscreen-collapse,
 #game-fullscreen[aria-pressed="true"] .fullscreen-expand { display: none; }
 .game-extra-controls { display: flex; gap: inherit; }
-.game-stage:fullscreen .game-extra-controls { display: contents; }
 .game-stage:fullscreen .game-controls-right { background: transparent; border-color: transparent; box-shadow: none; }
 .game-stage:fullscreen .game-controls-right button { background: #080e0bb0; }
 .game-controls-right button {
@@ -3322,7 +3313,7 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
   align-items: flex-start;
   pointer-events: none;
 }
-.game-stage:fullscreen #game-guide[open] { --guide-top: calc(var(--game-bar-bottom, var(--game-ticker-height)) + 12px); }
+.game-stage:fullscreen #game-guide[open] { --guide-top: calc(var(--game-bar-bottom, 0px) + 12px); }
 #game-guide[open]::before {
   content: ""; position: absolute; z-index: 1; top: -7px; right: calc(var(--game-control-size) / 2 - 3px); width: 14px; height: 14px;
   transform: rotate(45deg); border-top: 2px solid #44de90; border-left: 2px solid #44de90; background: #10251e;
@@ -3347,4 +3338,4 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
 #craft-recipe-close { min-width: 48px; min-height: 48px; padding: 0; border-radius: 50%; font-size: 1.8rem; line-height: 1; }
 
 /* Challenges and wallet verification are hidden for now. */
-#game-ranking, #game-verify-wallet { display: none !important; }
+#game-ranking { display: none !important; }

@@ -9,9 +9,11 @@ test('the combined wizard and wallet button leaves the other toolbar actions int
   const toolbar = html.slice(html.indexOf('id="game-controls-right"'), html.indexOf('id="wizard-dialog"'));
   assert.match(toolbar, /id="game-notifications"[^>]*aria-controls="game-guide"[\s\S]*?src="\/wizard\.svg"[\s\S]*?src="\/mina-gem\.svg"/);
   assert.doesNotMatch(toolbar, /id="game-guide-open"/);
-  for (const action of ['close', 'verify-wallet', 'crafting', 'ranking', 'invite', 'sound', 'send', 'receive', 'fullscreen']) {
+  for (const action of ['close', 'crafting', 'ranking', 'invite', 'sound', 'send', 'receive', 'fullscreen']) {
     assert.ok(toolbar.includes(`id="game-${action}"`), action);
   }
+  assert.match(html, /id="game-guide"[\s\S]*?id="game-verify-wallet"/);
+  assert.doesNotMatch(html, /id="game-chain-ticker"|id="game-minimized-fullscreen"/);
   assert.match(html, /id="wiki-open"[^>]*>[\s\S]*?<\/button>\s*<button id="game-netcraft"[^>]*>\s*<img[^>]*>CashCraft\s*<\/button>/);
   assert.doesNotMatch(html, /id="games-menu"/);
 });
@@ -146,10 +148,10 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   $('game-wizard-next').listeners.click();
   $('game-wizard-next').listeners.click();
   assert.equal($('game-wizard-table').hidden, false);
-  assert.equal($('game-wizard-craft').hidden, true);
-  assert.match($('game-wizard-message').textContent, /10 natural MINA ore blocks.*7 wood.*review/);
+  assert.equal($('game-wizard-craft').hidden, false);
+  assert.match($('game-wizard-message').textContent, /10 natural MINA ore blocks.*7 wood/);
   $('game-wizard-next').listeners.click();
-  assert.match($('game-wizard-message').textContent, /mushrooms.*night/);
+  assert.match($('game-wizard-message').textContent, /mushrooms.*sunset/);
   dismiss();
   assert.equal($('game-wizard-speech').hidden, true);
   assert.equal($('game-guide-wallet').textContent, 'Connect wallet');
@@ -162,11 +164,11 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   await $('game-netcraft').listeners.click({ isTrusted: true });
   assert.equal(document.fullscreenElement, $('game-stage'));
   assert.equal($('game-controls-right').parentNode, $('game-fullscreen-toolbar'));
-  assert.equal($('game-fullscreen')['aria-label'], 'Minimize CashCraft');
+  assert.equal($('game-fullscreen')['aria-label'], 'Exit fullscreen');
   const gameUrl = $('game-frame').src;
   await $('game-fullscreen').listeners.click();
   assert.equal(document.fullscreenElement, null);
-  assert.equal($('game-dialog').hidden, true);
+  assert.equal($('game-dialog').hidden, false);
   assert.equal($('game-frame').src, gameUrl);
   $('game-restore').listeners.click();
   assert.equal($('game-guide').open, false);
@@ -202,6 +204,9 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   update(rewardAddress);
   assert.equal($('game-crafting').hidden, false);
   assert.equal($('game-wizard-craft').hidden, false);
+  $('game-wizard-craft').listeners.click();
+  assert.equal($('craft-recipe').open, true);
+  $('craft-recipe').close();
   pickaxeUnlocked = true;
   update(rewardAddress);
   assert.equal($('game-crafting').hidden, true);

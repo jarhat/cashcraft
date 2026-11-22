@@ -46,6 +46,7 @@ const REDSTONE_ORE: i32 = 49;
 const GOLD_ORE: i32 = 70;
 const LAPIS_LAZULI_ORE: i32 = 73;
 const TRACKED_ORES: [i32; 3] = [MINA_ORE, LAPIS_LAZULI_ORE, REDSTONE_ORE];
+const MUSHROOM_BLOCKS: [i32; 2] = [21, 22];
 const ANIMAL_TICK: Duration = Duration::from_secs(1);
 const DAY_LENGTH: u64 = 600;
 const PLAYER_LIVES: u8 = 10;
@@ -861,7 +862,10 @@ fn open_database(path: &str, cashaddr: &str) -> Result<Connection, Box<dyn std::
            miner TEXT NOT NULL, ore INTEGER NOT NULL, player_name TEXT NOT NULL,
            blocks INTEGER NOT NULL CHECK(blocks > 0), PRIMARY KEY(miner, ore)
          );
-         INSERT OR IGNORE INTO cashaddr.mining_totals (name, total) VALUES ('mina_ore', 0);",
+         INSERT OR IGNORE INTO cashaddr.mining_totals (name, total) VALUES
+            ('mina_ore', 0),
+            ('lapis_ore', (SELECT COALESCE(SUM(blocks), 0) FROM cashaddr.ore_scores WHERE ore = 73)),
+            ('redstone_ore', (SELECT COALESCE(SUM(blocks), 0) FROM cashaddr.ore_scores WHERE ore = 49));",
     )?;
     let columns = {
         let mut statement = db.prepare("PRAGMA cashaddr.table_info(mining_rewards)")?;
@@ -1236,10 +1240,15 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
     let mut guest_progress = None;
     let mut tracked_progress = None;
     if w == 0 {
-        if previous == MINA_ORE {
+        if let Some(ore) = match previous {
+            MINA_ORE => Some("mina_ore"),
+            LAPIS_LAZULI_ORE => Some("lapis_ore"),
+            REDSTONE_ORE => Some("redstone_ore"),
+            _ => None,
+        } {
             transaction.execute(
-                "UPDATE mining_totals SET total=total+1 WHERE name='mina_ore'",
-                [],
+                "UPDATE mining_totals SET total=total+1 WHERE name=?1",
+                [ore],
             )?;
         }
         transaction.execute(
@@ -1361,7 +1370,12 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
         state.flows.remove(&region);
     }
     if w == 0 {
-        let inventory = &mut state.players.get_mut(&id).unwrap().inventory;
+        let collector = state.players.get_mut(&id).unwrap();
+        if edited.is_none() && MUSHROOM_BLOCKS.contains(&previous) && collector.lives < PLAYER_LIVES {
+            collector.lives += 1;
+            send(collector, format!("HP,{}\n", collector.lives));
+        }
+        let inventory = &mut collector.inventory;
         if (1..256).contains(&previous) {
             inventory[previous as usize] = inventory[previous as usize].saturating_add(1);
         }
@@ -2458,6 +2472,24 @@ mod tests {
     }
 
     #[test]
+    fn collecting_a_wild_mushroom_restores_one_heart_but_replanting_does_not() {
+        let (server, first, _) = setup();
+        let ((x, y, z), mushroom) = (-3..=3).flat_map(|p| (-3..=3).map(move |q| (p, q)))
+            .find_map(|(p, q)| {
+                server.terrain.lock().unwrap().chunk(p, q).iter().find_map(|(&pos, &w)| {
+                    MUSHROOM_BLOCKS.contains(&w).then_some((pos, w))
+                })
+            }).expect("world generates wild mushrooms");
+        move_to(&server, (x, y, z));
+        server.state.lock().unwrap().players.get_mut(&1).unwrap().lives = PLAYER_LIVES - 2;
+        block_edit(&server, 1, x, y, z, 0).unwrap();
+        assert!(first.try_iter().any(|packet| packet == b"HP,9\n"));
+        block_edit(&server, 1, x, y, z, mushroom).unwrap();
+        block_edit(&server, 1, x, y, z, 0).unwrap();
+        assert_eq!(server.state.lock().unwrap().players[&1].lives, PLAYER_LIVES - 1);
+    }
+
+    #[test]
     fn deep_ores_are_rare_and_earn_separate_batches() {
         let (mut server, first, _) = setup();
         let (wake, wakes) = mpsc::sync_channel(4);
@@ -2503,6 +2535,11 @@ mod tests {
         handle_command(&server, 1, &format!("W,{address}")).unwrap();
         assert_eq!(wakes.try_iter().count(), 2);
         let state = server.state.lock().unwrap();
+        for (name, total) in [("lapis_ore", 10), ("redstone_ore", 11)] {
+            assert_eq!(state.db.query_row(
+                "SELECT total FROM mining_totals WHERE name=?1", [name], |r| r.get::<_, i64>(0),
+            ).unwrap(), total);
+        }
         for (category, ore, score) in [(blue_category, LAPIS_LAZULI_ORE, 10), (red_category, REDSTONE_ORE, 11)] {
             assert_eq!(state.db.query_row(
                 "SELECT count(*) FROM mining_rewards WHERE category=? AND cash_address=?",

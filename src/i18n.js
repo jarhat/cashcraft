@@ -1,6 +1,17 @@
 import { wikiTranslations } from './wiki-translations.js';
 
 const spanish = {
+  'Swipe here to look': 'Desliza aquí para mirar',
+  'Drag to walk': 'Arrastra para caminar',
+  'MINA ore': 'Mineral MINA',
+  'Lapis ore': 'Mineral de lapislázuli',
+  'Redstone ore': 'Mineral de redstone',
+  'Verify wallet': 'Verificar cartera',
+  'Mushrooms and the night': 'Setas y la noche',
+  'Collect wild red or brown mushrooms to restore one lost heart each. After sunset, strange groans rise from the dark. Stay close to shelter.': 'Recoge setas silvestres rojas o marrones para recuperar un corazón perdido por cada seta. Tras la puesta del sol, se oyen gemidos en la oscuridad. Quédate cerca de un refugio.',
+  'Mine 10 natural MINA ore blocks to earn 1 MINA. With your welcome MINA, you have the 2 MINA needed to equip the green pickaxe. Open the crafting table to see the recipe: 7 wood and 2 MINA gems.': 'Extrae 10 bloques naturales de mineral MINA para ganar 1 MINA. Con el MINA de bienvenida tendrás los 2 MINA necesarios para equipar el pico verde. Abre la mesa de fabricación para ver la receta: 7 de madera y 2 gemas MINA.',
+  'You have 2 MINA gems! Craft the green MINA pickaxe with 7 wood and 2 MINA gems at the crafting table.': '¡Tienes 2 gemas MINA! Fabrica el pico MINA verde con 7 de madera y 2 gemas MINA en la mesa de fabricación.',
+  'Mine 10 natural blocks of one ore for its token when rewards are configured. Look deep for blue ore; red is the rarest.': 'Extrae 10 bloques naturales de un mismo mineral para obtener su token si las recompensas están activadas. Busca el mineral azul en las profundidades; el rojo es el más raro.',
   'Craft a MINA pickaxe with 2 MINA': 'Fabricar un pico MINA con 2 MINA',
   'Next wizard tutorial tip': 'Siguiente consejo del mago',
   'Move and look': 'Moverse y mirar',
@@ -269,6 +280,17 @@ const spanish = {
 };
 
 const french = {
+  'Swipe here to look': 'Glissez ici pour regarder',
+  'Drag to walk': 'Faites glisser pour marcher',
+  'MINA ore': 'Minerai MINA',
+  'Lapis ore': 'Minerai de lapis-lazuli',
+  'Redstone ore': 'Minerai de redstone',
+  'Verify wallet': 'Vérifier le portefeuille',
+  'Mushrooms and the night': 'Champignons et nuit',
+  'Collect wild red or brown mushrooms to restore one lost heart each. After sunset, strange groans rise from the dark. Stay close to shelter.': 'Ramassez des champignons sauvages rouges ou bruns pour récupérer un cœur perdu par champignon. Après le coucher du soleil, des grognements étranges s’élèvent dans le noir. Restez près d’un abri.',
+  'Mine 10 natural MINA ore blocks to earn 1 MINA. With your welcome MINA, you have the 2 MINA needed to equip the green pickaxe. Open the crafting table to see the recipe: 7 wood and 2 MINA gems.': 'Minez 10 blocs naturels de minerai MINA pour gagner 1 MINA. Avec le MINA de bienvenue, vous aurez les 2 MINA nécessaires pour équiper la pioche verte. Ouvrez la table de fabrication pour voir la recette : 7 bois et 2 gemmes MINA.',
+  'You have 2 MINA gems! Craft the green MINA pickaxe with 7 wood and 2 MINA gems at the crafting table.': 'Vous avez 2 gemmes MINA ! Fabriquez la pioche MINA verte avec 7 bois et 2 gemmes MINA à la table de fabrication.',
+  'Mine 10 natural blocks of one ore for its token when rewards are configured. Look deep for blue ore; red is the rarest.': 'Minez 10 blocs naturels d’un même minerai pour obtenir son jeton si les récompenses sont activées. Cherchez le minerai bleu en profondeur ; le rouge est le plus rare.',
   'Craft a MINA pickaxe with 2 MINA': 'Fabriquer une pioche MINA avec 2 MINA',
   'Next wizard tutorial tip': 'Conseil suivant du magicien',
   'Move and look': 'Se déplacer et regarder',
@@ -537,6 +559,17 @@ const french = {
 };
 
 const german = {
+  'Swipe here to look': 'Hier wischen, um dich umzusehen',
+  'Drag to walk': 'Zum Laufen ziehen',
+  'MINA ore': 'MINA-Erz',
+  'Lapis ore': 'Lapislazulierz',
+  'Redstone ore': 'Redstone-Erz',
+  'Verify wallet': 'Wallet verifizieren',
+  'Mushrooms and the night': 'Pilze und die Nacht',
+  'Collect wild red or brown mushrooms to restore one lost heart each. After sunset, strange groans rise from the dark. Stay close to shelter.': 'Sammle wilde rote oder braune Pilze, um pro Pilz ein verlorenes Herz zurückzugewinnen. Nach Sonnenuntergang ertönt seltsames Stöhnen aus der Dunkelheit. Bleib in der Nähe eines Unterschlupfs.',
+  'Mine 10 natural MINA ore blocks to earn 1 MINA. With your welcome MINA, you have the 2 MINA needed to equip the green pickaxe. Open the crafting table to see the recipe: 7 wood and 2 MINA gems.': 'Baue 10 natürlich vorkommende MINA-Erzblöcke ab, um 1 MINA zu verdienen. Mit dem Willkommens-MINA hast du die 2 MINA für die grüne Spitzhacke. Öffne die Werkbank, um das Rezept zu sehen: 7 Holz und 2 MINA-Edelsteine.',
+  'You have 2 MINA gems! Craft the green MINA pickaxe with 7 wood and 2 MINA gems at the crafting table.': 'Du hast 2 MINA-Edelsteine! Stelle die grüne MINA-Spitzhacke mit 7 Holz und 2 MINA-Edelsteinen an der Werkbank her.',
+  'Mine 10 natural blocks of one ore for its token when rewards are configured. Look deep for blue ore; red is the rarest.': 'Baue 10 natürlich vorkommende Blöcke derselben Erzart ab, um ihren Token zu erhalten, falls Belohnungen aktiv sind. Suche tief nach blauem Erz; rotes Erz ist am seltensten.',
   'Craft a MINA pickaxe with 2 MINA': 'MINA-Spitzhacke für 2 MINA herstellen',
   'Next wizard tutorial tip': 'Nächster Tipp des Zauberers',
   'Move and look': 'Bewegen und umsehen',
