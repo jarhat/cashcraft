@@ -1398,7 +1398,7 @@ test('wizard follows the panels in reading order and resets when closed', () => 
   assert.deepEqual([...highlighted], ['transfer-section']);
   assert.equal(guidePosition, 'transfer-section');
   element('wizard-next').listeners.click();
-  assert.deepEqual([...highlighted], ['games-toggle']);
+  assert.deepEqual([...highlighted], ['game-netcraft']);
   assert.equal(guidePosition, 'topbar');
   element('wizard-next').listeners.click();
   assert.equal(element('wizard-dialog').hidden, true);

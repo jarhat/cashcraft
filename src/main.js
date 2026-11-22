@@ -398,28 +398,23 @@ function report(error, { log = true } = {}) {
   $('log').textContent = `Action failed: ${error?.message || String(error)}\nCheck the status above, your inputs and wallet connection before retrying.`;
 }
 
-for (const name of ['language', 'games']) {
-  const toggle = $(`${name}-toggle`);
-  const menu = $(`${name}-menu`);
+{
+  const toggle = $('language-toggle');
+  const menu = $('language-menu');
   const close = () => {
     menu.hidden = true;
     toggle.setAttribute('aria-expanded', 'false');
   };
   toggle.addEventListener('click', () => {
-    const opening = menu.hidden;
-    document.querySelectorAll('.tool-dropdown').forEach((other) => { other.hidden = true; });
-    document.querySelectorAll('.tool-menu > button').forEach((other) => other.setAttribute('aria-expanded', 'false'));
-    menu.hidden = !opening;
-    toggle.setAttribute('aria-expanded', String(opening));
+    menu.hidden = !menu.hidden;
+    toggle.setAttribute('aria-expanded', String(!menu.hidden));
   });
   menu.addEventListener('click', (event) => {
     const button = event.target.closest('button');
     if (!button) return;
-    if (name === 'language') {
-      setLanguage(button.dataset.languageOption);
-      if (paymentPriceSnapshot) {
-        $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;
-      }
+    setLanguage(button.dataset.languageOption);
+    if (paymentPriceSnapshot) {
+      $('payment-price').textContent = `${translate('Indicative token price')}: ${formatPaymentPrice()}`;
     }
     close();
     toggle.focus();
@@ -2675,7 +2670,7 @@ $('pickaxe-retry').addEventListener('click', async () => {
 $('game-crafting').addEventListener('click', async () => {
   try {
     if (!walletReady || !registeredRewardAddress) {
-      if (!walletReady) $('game-notifications').click();
+      if (!walletReady) $('game-guide-wallet').click();
       else throw new Error('Your wallet is still registering. Try crafting again shortly.');
       return;
     }
@@ -3095,9 +3090,9 @@ const tutorialSteps = [
     message: 'Select a token to send, or switch to Receive to create a payment QR. Amounts are whole base units; review every transaction in your wallet.',
   },
   {
-    id: 'games-toggle',
+    id: 'game-netcraft',
     title: 'Play CashCraft',
-    message: 'Open the game menu to launch CashCraft. Use the gem in the game to see your wallet and rewards, and Ranking to compare mining rewards.',
+    message: 'Select CashCraft to play in fullscreen. Use the gem in the game to see your wallet and rewards, and Ranking to compare mining rewards.',
   },
 ];
 let tutorialStep = 0;
@@ -3110,7 +3105,7 @@ function showTutorialStep() {
   const focused = dialog.contains(document.activeElement) ? document.activeElement : null;
   panel.classList.add('tutorial-highlight');
   if (tutorialStep === 0) openConnectionDialog();
-  if (step.id === 'games-toggle') (panel.closest('.topbar') || panel.closest('.game-toolbar')).after(dialog);
+  if (step.id === 'game-netcraft') (panel.closest('.topbar') || panel.closest('.game-toolbar')).after(dialog);
   else panel.before(dialog);
   if (tutorialStep !== 0 && $('connection-dialog').open) $('connection-dialog').close();
   $('wizard-title').textContent = step.title;

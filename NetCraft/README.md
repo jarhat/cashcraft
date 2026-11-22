@@ -228,6 +228,13 @@ MINA progress into that address. Other ore rewards still require a connected
 wallet. On the first mined block without a wallet, a brief reminder appears in
 wallet connection details. New rewards and notifications make the game's
 wallet button blink green until the wallet is opened.
+
+The CashCraft launcher opens fullscreen from a click where supported. Shared
+CashCraft links open the game without requesting browser fullscreen and start
+with the wizard's touch controls. The wizard then shows textured ore counters,
+WizardConnect pairing, and the crafting table for the permanent MINA pickaxe.
+The combined wizard-and-gem button opens the guide, replays the tutorial, and
+provides access to wallet connection and reward notifications.
 Browser wallet creation requires a password and confirmation of the recovery
 phrase backup. The wallet scans receive and change addresses, rescans after
 registration, and refreshes periodically while connected.

@@ -114,15 +114,10 @@
       <button id="wiki-open" class="theme-toggle" type="button" aria-label="CashTokens wiki" aria-haspopup="dialog" aria-controls="wiki-dialog">
         <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-2-2-5-2-9-1v13c4-1 7-1 9 1m0-13c2-2 5-2 9-1v13c-4-1-7-1-9 1m0-13v13"/></svg>
       </button>
-      <div id="game-launcher" class="tool-menu game-launcher">
-        <button id="games-toggle" class="theme-toggle" type="button" aria-label="Choose a game" aria-expanded="false" aria-controls="games-menu">
-          <img src="/pickaxe.svg" alt="" width="24" height="24">
-        </button>
-        <div id="games-menu" class="tool-dropdown" hidden>
-          <button id="game-netcraft" type="button">⛏️ CashCraft</button>
-          <button id="game-pk2" type="button" hidden>🐔 Pekka Kana 2</button>
-        </div>
-      </div>
+      <button id="game-netcraft" class="theme-toggle cashcraft-launcher" type="button" aria-controls="game-dialog">
+        <img src="/pickaxe.svg" alt="" width="24" height="24">CashCraft
+      </button>
+      <button id="game-pk2" type="button" hidden>🐔 Pekka Kana 2</button>
       <div id="game-minimized-controls" class="game-minimized-controls" hidden>
         <nav id="minimized-wallet-actions" class="minimized-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
         <div class="game-minimized-buttons">
@@ -151,7 +146,8 @@
         <button id="game-sound" type="button" aria-label="Game sound" title="Game sound" aria-pressed="true" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="sound-waves" d="M16 9a5 5 0 0 1 0 6m2-8a7.25 7.25 0 0 1 0 10"/><path class="sound-muted" d="m16 10 4 4m0-4-4 4"/></svg>
         </button>
-        <button id="game-notifications" type="button" aria-label="Wallet and notifications" title="Wallet and notifications" aria-haspopup="dialog" aria-controls="notifications-dialog">
+        <button id="game-notifications" type="button" aria-label="Game guide and wallet" title="Game guide and wallet" aria-haspopup="dialog" aria-controls="game-guide">
+          <img class="game-hub-wizard" src="/wizard.svg" alt="">
           <img src="/mina-gem.svg" alt="">
           <span id="game-notification-indicator" class="visually-hidden" hidden>Unread wallet notification</span>
         </button>
@@ -163,9 +159,6 @@
         </button>
         <button id="game-fullscreen" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/></svg>
-        </button>
-        <button id="game-guide-open" type="button" aria-label="Next wizard tutorial tip" title="Next wizard tutorial tip" aria-controls="game-wizard-speech">
-          <img src="/wizard.svg" alt="">
         </button>
       </div>
     </div>
@@ -657,9 +650,22 @@
         <p id="game-payment-status" class="fine" role="status"></p>
         <button id="game-payment-dismiss" class="small-button" type="button" aria-label="Dismiss payment request">×</button>
       </div>
-      <div id="game-wizard-speech" class="game-wizard-speech" role="status" aria-live="polite" hidden>
-        <img src="/wizard.svg" alt="">
-        <div><p id="game-wizard-message"></p><div id="game-wizard-ores" class="ore-stats" hidden></div></div>
+      <div id="game-wizard-speech" class="game-wizard-speech" hidden>
+        <img class="game-wizard-avatar" src="/wizard.svg" alt="">
+        <div class="game-wizard-card">
+          <div role="status" aria-live="polite">
+            <strong id="game-wizard-step" class="game-wizard-step" hidden></strong>
+            <p id="game-wizard-message"></p>
+          </div>
+          <div id="game-wizard-ores" class="ore-stats" hidden></div>
+          <img id="game-wizard-table" src="/mining-table.svg" alt="" width="64" height="64" hidden>
+          <div id="game-wizard-actions" class="game-wizard-actions" hidden>
+            <button id="game-wizard-wallet" class="small-button" type="button" hidden>Pair with WizardConnect</button>
+            <button id="game-wizard-craft" class="small-button" type="button" hidden>Open crafting table</button>
+            <button id="game-wizard-next" class="small-button" type="button">Next</button>
+            <button id="game-wizard-skip" class="small-button" type="button">Keep playing</button>
+          </div>
+        </div>
       </div>
       <nav id="game-wallet-actions" class="game-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
       <dialog id="game-receive-dialog" class="notifications-dialog game-receive-dialog" aria-labelledby="game-receive-title">
@@ -682,10 +688,14 @@
       <dialog id="game-guide" class="game-guide" aria-labelledby="game-guide-title">
         <div class="game-guide-body">
           <div class="notifications-heading">
-            <strong id="game-guide-title"><img class="game-wizard-art" src="/wizard.svg" alt=""> Wizard's CashCraft guide</strong>
+            <strong id="game-guide-title"><img class="game-wizard-art" src="/wizard.svg" alt=""> Game guide and wallet</strong>
             <button id="game-guide-close" class="small-button" type="button" aria-label="Close guide">×</button>
           </div>
-          <div class="browser-wallet-actions"><button id="game-guide-wallet" class="button primary" type="button">Connect wallet</button><button id="game-guide-done" class="small-button" type="button">Play</button></div>
+          <div class="browser-wallet-actions">
+            <button id="game-guide-wallet" class="button primary" type="button">Connect wallet</button>
+            <button id="game-guide-open" class="small-button" type="button" aria-controls="game-wizard-speech">Start wizard tutorial</button>
+            <button id="game-guide-done" class="small-button" type="button">Play</button>
+          </div>
           <div class="game-guide-copy" tabindex="0">
             <p>Explore and mine 10 naturally generated green MINA ore blocks online to earn 1 MINA. Connect a wallet to receive it.</p>
             <p>Set up a token-aware wallet to receive your earned MINA. Your mining progress and unclaimed rewards stay with this browser. A new wallet is also queued 1 welcome MINA. Rewards depend on the payout service.</p>
