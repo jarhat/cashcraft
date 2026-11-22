@@ -131,9 +131,6 @@
       </div>
       <div id="game-controls-right" class="game-controls game-controls-right" role="group" aria-label="CashCraft controls">
         <button id="game-close" type="button" aria-label="Minimize CashCraft" title="Minimize CashCraft">−</button>
-        <button id="game-controls-toggle" type="button" aria-label="Collapse game controls" title="Collapse game controls" aria-expanded="true" aria-controls="game-extra-controls">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14"/></svg>
-        </button>
         <div id="game-extra-controls" class="game-extra-controls">
         <button id="game-verify-wallet" type="button" aria-label="Verify wallet" title="Verify ownership of your CashCraft wallet" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 4-3 7-7 10-4-3-7-6-7-10V6z"/><path d="m9 12 2 2 4-4"/></svg>
@@ -147,11 +144,6 @@
         <button id="game-sound" type="button" aria-label="Game sound" title="Game sound" aria-pressed="true" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="sound-waves" d="M16 9a5 5 0 0 1 0 6m2-8a7.25 7.25 0 0 1 0 10"/><path class="sound-muted" d="m16 10 4 4m0-4-4 4"/></svg>
         </button>
-        <button id="game-notifications" type="button" aria-label="Game guide and wallet" title="Game guide and wallet" aria-haspopup="dialog" aria-controls="game-guide">
-          <img class="game-hub-wizard" src="/wizard.svg" alt="">
-          <img src="/mina-gem.svg" alt="">
-          <span id="game-notification-indicator" class="visually-hidden" hidden>Unread wallet notification</span>
-        </button>
         <button id="game-send" type="button" aria-label="Send tokens to a player" title="Send tokens to a player" aria-haspopup="dialog" aria-controls="game-send-dialog" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17V4m-5 5 5-5 5 5M4 17v3h16v-3"/></svg>
         </button>
@@ -159,9 +151,13 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v13m-5-5 5 5 5-5M4 17v3h16v-3"/></svg>
         </button>
         </div>
+        <button id="game-notifications" type="button" aria-label="Game guide and wallet" title="Game guide and wallet" aria-haspopup="dialog" aria-controls="game-guide">
+          <img class="game-hub-wizard" src="/wizard.svg" alt="">
+          <img src="/mina-gem.svg" alt="">
+          <span id="game-notification-indicator" class="visually-hidden" hidden>Unread wallet notification</span>
+        </button>
         <button id="game-crafting" type="button" aria-label="Craft a MINA pickaxe with 2 MINA" title="Craft a MINA pickaxe with 2 MINA" hidden>
-          <img src="/wizard.svg" alt="">
-          <img src="/mining-table.svg" alt="">
+          <img src="/mina-pickaxe.svg" alt="">
         </button>
         <button id="game-fullscreen" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fullscreen-expand" d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/><path class="fullscreen-minimize" d="M5 12h14"/></svg>
@@ -193,7 +189,7 @@
               <li><strong>Mine</strong> (hold): break blocks. <strong>Build</strong>: place the selected block. <strong>Jump</strong>: jump.</li>
               <li><strong>Block selection</strong>: scroll the mouse wheel, or drag up or down on the right edge of the screen on touch devices.</li>
               <li><strong>Rewards</strong>: mining MINA ore pays MINA-linked CashTokens. Redstone, gold and lapis ores pay separate token categories when the operator configures them.</li>
-              <li><strong>Crafting</strong>: after earning 2 MINA, review a 2 MINA payment to unlock the pickaxe after confirmation.</li>
+              <li><strong>Crafting</strong>: mine 10 MINA ore blocks for 1 MINA, add your 1 welcome MINA, then craft the green pickaxe from 7 wood and 2 MINA gems.</li>
             </ul>
           </details>
         </div>
@@ -707,8 +703,30 @@
             <p>Set up a token-aware wallet to receive your earned MINA. Your mining progress and unclaimed rewards stay with this browser. A new wallet is also queued 1 welcome MINA. Rewards depend on the payout service.</p>
             <p>Clearing this browser's site data will lose access to unclaimed rewards.</p>
             <p id="game-guide-progress" role="status" aria-live="polite"></p>
-            <p>Use the wizard for tutorial tips. After earning 2 MINA, craft the pickaxe with a reviewable payment.</p>
+            <p>Use the wizard for tutorial tips. Mine 10 MINA ore blocks, add your welcome MINA, then craft the green pickaxe from 7 wood and 2 MINA gems.</p>
             <p>Use WASD to move, space to jump, left click to mine and right click to build. On mobile, use the joystick and the jump, mine and build buttons. Scroll to choose blocks.</p>
+          </div>
+        </div>
+      </dialog>
+      <dialog id="craft-recipe" class="game-guide craft-recipe" aria-labelledby="craft-recipe-title">
+        <div class="game-guide-body">
+          <div class="notifications-heading">
+            <strong id="craft-recipe-title"><img class="game-wizard-art" src="/mining-table.svg" alt=""> Crafting table</strong>
+            <button id="craft-recipe-close" class="small-button" type="button" aria-label="Close crafting table">×</button>
+          </div>
+          <div class="craft-recipe-art" role="img" aria-label="Recipe: 7 wood and 2 MINA gems make a green MINA pickaxe">
+            <div class="craft-grid" aria-hidden="true">
+              <img src="/wood.svg" alt=""><img src="/wood.svg" alt=""><img src="/wood.svg" alt="">
+              <img src="/wood.svg" alt=""><img src="/mina-gem.svg" alt=""><img src="/wood.svg" alt="">
+              <img src="/wood.svg" alt=""><img src="/mina-gem.svg" alt=""><img src="/wood.svg" alt="">
+            </div>
+            <span class="craft-arrow" aria-hidden="true">→</span>
+            <img class="craft-result" src="/mina-pickaxe.svg" alt="" aria-hidden="true">
+          </div>
+          <p>Craft the green MINA pickaxe from 7 wood and 2 MINA gems. Mine 10 MINA ore blocks to earn 1 MINA; your welcome MINA is the second one.</p>
+          <div class="browser-wallet-actions">
+            <button id="craft-recipe-open" class="button primary" type="button">Open crafting table</button>
+            <button id="craft-recipe-later" class="small-button" type="button">Keep playing</button>
           </div>
         </div>
       </dialog>
@@ -718,7 +736,7 @@
         <div class="mining-art" aria-hidden="true"><img src="/mining-table.svg" alt=""><img src="/mina-gem.svg" alt=""></div>
         <div class="crypto-mesh"><img src="/bitcoin-cash-official.svg" alt="Bitcoin Cash"><img src="/mina-gem.svg" alt="MINA"><span>BCH × MINA</span></div>
         <p id="mining-prompt-message"></p>
-        <p>Mine 20 natural MINA ore blocks to earn 2 MINA for crafting. Rewards depend on the payout service.</p>
+        <p>Mine 10 natural MINA ore blocks for 1 MINA; with your 1 welcome MINA you can craft the pickaxe (7 wood and 2 MINA gems). Rewards depend on the payout service.</p>
         <button id="mining-prompt-craft" class="small-button" type="button" hidden>Open crafting table</button>
         <p>MINA CashTokens are received in a Bitcoin Cash transaction. Connect or set up a wallet to claim them.</p>
         <p>Need BCH? <a href="https://sideshift.ai" target="_blank" rel="noopener noreferrer">SideShift.ai</a> is an independent swap service on mainnet. Check network, rates and fees.</p>

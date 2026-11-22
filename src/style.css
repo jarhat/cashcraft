@@ -2815,13 +2815,15 @@ body.cashcraft-playing .market-strip-bottom { display: none; }
 .game-stage:fullscreen iframe, .game-auto-open .game-stage iframe { flex: 1; height: 0; min-height: 0; }
 .game-fullscreen-toolbar { display: none; }
 .game-stage:fullscreen .game-fullscreen-toolbar {
+  position: absolute; z-index: 2; inset: var(--game-ticker-height) 0 auto 0;
   display: flex; justify-content: flex-end; padding: var(--game-controls-inset);
-  background: #101813;
+  background: transparent; pointer-events: none;
 }
+.game-fullscreen-toolbar > * { pointer-events: auto; }
 .game-chain-ticker {
-  flex: none; box-sizing: border-box; height: var(--game-ticker-height);
-  border-top: 1px solid #285345; background: #0b1a15;
-  color: #c0e2d2; line-height: 1rem;
+  position: absolute; z-index: 2; inset: 0 0 auto 0; box-sizing: border-box; height: var(--game-ticker-height);
+  border: 0; background: transparent; pointer-events: none;
+  color: #e4fff1; line-height: 1rem; text-shadow: 0 1px 3px #000, 0 0 6px #000a;
 }
 .game-stage:fullscreen .game-payment-bubble {
   inset: calc(var(--game-control-size) + 38px + var(--game-ticker-height)) auto auto 1rem;
@@ -3205,7 +3207,7 @@ html[data-theme="voxel"] .topbar > .mesh-sun {
 .game-panel, .game-stage {
   container-type: inline-size;
   --game-controls-inset: 8px;
-  --game-control-size: clamp(23px, calc((100cqw - 66px) / 10), 52px);
+  --game-control-size: clamp(40px, calc((100cqw - 66px) / 10), 52px);
 }
 .game-panel { margin: 12px 0; }
 .game-panel > .game-toolbar { margin: 0; }
@@ -3237,30 +3239,44 @@ html[data-theme="voxel"] .game-panel > .game-dialog {
 html[data-theme="voxel"] .game-panel > .game-auto-open {
   border-radius: 0;
 }
+.game-panel:has(> .game-auto-open[open]:not([hidden])) > .game-toolbar {
+  --game-ticker-height: 2rem;
+  position: absolute; z-index: 101; inset: var(--game-ticker-height) 0 auto 0; margin: 0;
+  border: 0; background: transparent; box-shadow: none; backdrop-filter: none;
+  pointer-events: none;
+}
+.game-panel:has(> .game-auto-open[open]:not([hidden])) > .game-toolbar > * { pointer-events: auto; }
+.game-panel:has(> .game-auto-open[open]:not([hidden])) .game-toolbar > .game-controls-right { background: transparent; border-color: transparent; box-shadow: none; }
+.game-panel:has(> .game-auto-open[open]:not([hidden])) .game-toolbar > .game-controls-right button { background: #080e0bb0; }
 .game-panel > .game-auto-open,
 .game-auto-open .game-stage { min-height: 0; flex: 1; }
 .game-auto-open[open]:not([hidden]) { display: flex; flex-direction: column; }
 .game-controls-right {
   inset: var(--game-controls-inset) var(--game-controls-inset) auto auto;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
   gap: 4px;
   padding: 4px;
   border: 1px solid #5bea9a;
-  border-radius: 999px;
+  border-radius: 24px;
   background: #080e0b;
   box-shadow: 0 4px 14px #0008;
 }
+.game-extra-controls { flex-wrap: wrap; justify-content: flex-end; }
 .game-toolbar > .game-controls-right, .game-fullscreen-toolbar > .game-controls-right {
   position: static;
   margin-inline-start: auto;
 }
 .game-panel:not(:has(> .game-dialog[open]:not([hidden]))) .game-toolbar > .game-controls-right,
-.game-stage:fullscreen :is(#game-close, #game-controls-toggle, #game-extra-controls),
-#game-extra-controls[hidden],
+.game-stage:fullscreen :is(#game-close, #game-extra-controls),
 #game-fullscreen[aria-pressed="false"] .fullscreen-minimize,
-#game-fullscreen[aria-pressed="true"] .fullscreen-expand,
-.game-stage:fullscreen .game-wizard-speech:not(.is-crafting) { display: none; }
+#game-fullscreen[aria-pressed="true"] .fullscreen-expand { display: none; }
 .game-extra-controls { display: flex; gap: inherit; }
+.game-stage:fullscreen .game-extra-controls { display: contents; }
+.game-stage:fullscreen .game-controls-right { background: transparent; border-color: transparent; box-shadow: none; }
+.game-stage:fullscreen .game-controls-right button { background: #080e0bb0; }
 .game-controls-right button {
   flex: 0 0 var(--game-control-size);
   width: var(--game-control-size);
@@ -3284,7 +3300,7 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
   background: #174831;
   box-shadow: 0 0 8px #82ffc0;
 }
-#game-crafting img { width: 42%; height: 65%; object-fit: contain; }
+#game-crafting img { width: 70%; height: 70%; object-fit: contain; image-rendering: pixelated; }
 #game-invite svg { width: 56%; height: 56%; }
 #game-sound[aria-pressed="true"] .sound-muted,
 #game-sound[aria-pressed="false"] .sound-waves { display: none; }
@@ -3322,3 +3338,13 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
 .game-guide-copy { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-color: #43d98e #183529; padding: 0 8px 0 2px; }
 .game-guide-copy:focus-visible { outline-offset: -2px; }
 #game-guide-wallet { width: auto; min-height: 44px; padding: 8px 14px; }
+
+.craft-recipe-art { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 10px 0; }
+.craft-grid { display: grid; grid-template-columns: repeat(3, 44px); gap: 3px; padding: 5px; border: 2px solid #44de90; background: #07100b; }
+.craft-grid img { width: 44px; height: 44px; padding: 4px; box-sizing: border-box; background: #183529; image-rendering: pixelated; }
+.craft-arrow { font-size: 1.8rem; color: #82ffc0; }
+.craft-result { width: 64px; height: 64px; padding: 6px; border: 2px solid #44de90; background: #183529; image-rendering: pixelated; }
+#craft-recipe-close { min-width: 48px; min-height: 48px; padding: 0; border-radius: 50%; font-size: 1.8rem; line-height: 1; }
+
+/* Challenges and wallet verification are hidden for now. */
+#game-ranking, #game-verify-wallet { display: none !important; }

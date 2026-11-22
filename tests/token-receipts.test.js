@@ -81,6 +81,7 @@ test('bundles multiple wallet outputs from the same transaction', async () => {
 test('announces each distinct MINA output once, not other tokens or self-sent change', async () => {
   const h = receiptHarness();
   await h.api.loadRewardCategory();
+  h.api.notifyTokenReceipts([]);
   h.api.rememberSentTransaction('self');
   const other = { txid: 'other', token: { category: 'a'.repeat(64), amount: 1n } };
   const nft = { txid: 'nft', token: { category: h.category, amount: 0n, nft: {} } };
@@ -105,12 +106,13 @@ test('announces each distinct MINA output once, not other tokens or self-sent ch
   const anotherWallet = receiptHarness(h.stored, 'another-wallet');
   await anotherWallet.api.loadRewardCategory();
   anotherWallet.api.notifyTokenReceipts([reward]);
-  assert.equal(anotherWallet.celebrations, 1);
+  assert.equal(anotherWallet.celebrations, 0);
 });
 
 test('announces a MINA receipt with more than one token', async () => {
   const h = receiptHarness();
   await h.api.loadRewardCategory();
+  h.api.notifyTokenReceipts([]);
   h.api.notifyTokenReceipts([{ txid: 'a'.repeat(64), vout: 0, token: { category: h.category, amount: 2n } }]);
   assert.equal(h.celebrations, 1);
   assert.equal(h.elements.get('mina-receipt-count').textContent, '2 MINA received in 1 transaction');
@@ -123,6 +125,7 @@ test('announces a MINA receipt with more than one token', async () => {
 test('announces fungible MINA carried alongside an NFT', async () => {
   const h = receiptHarness();
   await h.api.loadRewardCategory();
+  h.api.notifyTokenReceipts([]);
   h.api.notifyTokenReceipts([{ txid: 'a'.repeat(64), vout: 0, token: { category: h.category, amount: 2n, nft: {} } }]);
   assert.equal(h.celebrations, 1);
   assert.equal(h.elements.get('mina-receipt-count').textContent, '2 MINA received in 1 transaction');
@@ -132,10 +135,11 @@ test('announces every new MINA output discovered in the same scan', async () => 
   const h = receiptHarness();
   await h.api.loadRewardCategory();
   const token = { category: h.category, amount: 1n };
+  h.api.notifyTokenReceipts([]);
   h.api.notifyTokenReceipts([{ txid: 'one', vout: 0, token }, { txid: 'two', vout: 0, token }]);
-  assert.equal(h.celebrations, 2);
+  assert.equal(h.celebrations, 1);
   h.api.notifyTokenReceipts([{ txid: 'one', vout: 0, token }, { txid: 'two', vout: 0, token }]);
-  assert.equal(h.celebrations, 2);
+  assert.equal(h.celebrations, 1);
 });
 
 test('migrates existing notices without replaying GAMBA or showing other tokens', async () => {

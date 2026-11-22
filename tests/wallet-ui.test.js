@@ -32,7 +32,7 @@ test('crafting prefills a reviewable 2 MINA pickaxe payment', async () => {
     setTransferTab() {}, translate: (text) => text, report(error) { throw error; },
   };
   runInNewContext(source.slice(start, end), context);
-  await $('game-crafting').listeners.click();
+  await $('craft-recipe-open').listeners.click();
   assert.equal($('recipient').value, 'craft-address');
   assert.equal($('category').value, 'mina-category');
   assert.equal($('amount').value, '2');

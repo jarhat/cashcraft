@@ -104,11 +104,6 @@ test('game buttons minimize and restore without unloading the active game', asyn
     },
   });
   assert.equal(gameToolbarSelected, true);
-  $('game-controls-toggle').listeners.click();
-  assert.equal($('game-extra-controls').hidden, true);
-  assert.equal($('game-controls-toggle')['aria-expanded'], 'false');
-  $('game-controls-toggle').listeners.click();
-  assert.equal($('game-extra-controls').hidden, false);
   let wallet = 0;
   $('connection-open').click = () => { wallet++; };
   $('notifications-toggle').click = () => {};

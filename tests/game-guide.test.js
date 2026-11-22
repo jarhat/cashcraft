@@ -147,14 +147,12 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   $('game-wizard-next').listeners.click();
   assert.equal($('game-wizard-table').hidden, false);
   assert.equal($('game-wizard-craft').hidden, true);
-  assert.match($('game-wizard-message').textContent, /20 natural MINA ore blocks.*review/);
+  assert.match($('game-wizard-message').textContent, /10 natural MINA ore blocks.*7 wood.*review/);
   dismiss();
   assert.equal($('game-wizard-speech').hidden, true);
   assert.equal($('game-guide-wallet').textContent, 'Connect wallet');
   await $('game-close').listeners.click();
   assert.equal($('game-guide').open, false);
-  $('game-controls-toggle').listeners.click();
-  assert.equal($('game-extra-controls').hidden, true);
   $('game-stage').requestFullscreen = async () => {
     document.fullscreenElement = $('game-stage');
     documentListeners.fullscreenchange();
@@ -169,9 +167,6 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   assert.equal($('game-dialog').hidden, true);
   assert.equal($('game-frame').src, gameUrl);
   $('game-restore').listeners.click();
-  assert.equal($('game-extra-controls').hidden, true);
-  $('game-controls-toggle').listeners.click();
-  assert.equal($('game-extra-controls').hidden, false);
   assert.equal($('game-guide').open, false);
   const message = (data) => handlers.message({ source: $('game-frame').contentWindow, data });
   message({ type: 'netcraft-ore-progress', counts: [2, 3, 4] });
