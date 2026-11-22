@@ -1448,13 +1448,13 @@ async function refreshBalances({ quiet = false } = {}) {
         if (!walletReady || manager !== scanManager || registeredRewardAddress !== rewardAddress) {
           throw new Error('Wallet or reward address changed while checking the pickaxe.');
         }
-        minaPickaxe = unlocked;
+        minaPickaxe = unlocked || minaBalance >= 2n;
         updateGameRewardAddress(registeredRewardAddress);
         notifyTokenReceipts(utxos);
       }
     } catch (error) {
       if (walletReady && manager === scanManager) {
-        minaPickaxe = false;
+        minaPickaxe = minaBalance >= 2n;
         updateGameRewardAddress(registeredRewardAddress);
       }
       receiptError = error;

@@ -1732,9 +1732,8 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                             admin::Proof::Wallet | admin::Proof::Admin => {
                                 player.verified_wallet_address = Some(address);
                                 player.admin.granted = result == admin::Proof::Admin;
-                                player.admin.flying &= player.admin.granted;
                                 send(player, if player.admin.granted {
-                                    b"WA,1\nT,Admin verified. Double-tap Space to fly. The MINA axe breaks blocks instantly.\n".to_vec()
+                                    b"WA,1\nT,Admin verified. The MINA axe breaks blocks instantly.\n".to_vec()
                                 } else {
                                     b"WA,0\nT,Wallet verified.\n".to_vec()
                                 });
@@ -1746,10 +1745,8 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
         }
         "AF" if args.is_empty() => {
             if let Some(player) = server.state.lock().unwrap().players.get_mut(&id) {
-                if player.admin.granted {
-                    player.admin.flying = !player.admin.flying;
-                    send(player, format!("AF,{}\n", u8::from(player.admin.flying)));
-                }
+                player.admin.flying = !player.admin.flying;
+                send(player, format!("AF,{}\n", u8::from(player.admin.flying)));
             }
         }
         "L" if args.len() == 4 => {
@@ -1948,7 +1945,7 @@ fn reset_wallet_verification(player: &mut Player) {
     let was_verified = player.verified_wallet_address.take().is_some();
     player.admin.revoke();
     if was_verified {
-        send(player, b"WA,0\nAF,0\n".to_vec());
+        send(player, b"WA,0\n".to_vec());
     }
 }
 
@@ -3036,7 +3033,6 @@ mod tests {
         let address = "bitcoincash:zppyysjzgfpyysjzgfpyysjzgfpyysjzgg32rxwn8h";
         handle_command(&server, 1, &format!("W,{address}")).unwrap();
         while first.try_recv().is_ok() {}
-        handle_command(&server, 1, "AF").unwrap();
         handle_command(&server, 1, "FP,0,100,0,0,0").unwrap();
         handle_command(&server, 1, "AB,0,1,0").unwrap();
         assert!(second.try_recv().is_err());
@@ -3060,7 +3056,6 @@ mod tests {
         let state = server.state.lock().unwrap();
         assert!(state.players[&1].verified_wallet_address.is_none());
         assert!(!state.players[&1].admin.granted);
-        assert!(!state.players[&1].admin.flying);
     }
 
     #[test]

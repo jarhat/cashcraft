@@ -18,6 +18,13 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   const toolbar = document.querySelector('.game-toolbar');
   const controls = $('game-controls-right');
   const controlsHome = controls.parentNode || toolbar;
+  const updateBarBottom = () => {
+    if (!controls.getBoundingClientRect || !stage.style?.setProperty) return;
+    const bottom = controls.getBoundingClientRect().bottom - stage.getBoundingClientRect().top;
+    stage.style.setProperty('--game-bar-bottom', `${Math.max(0, Math.ceil(bottom))}px`);
+  };
+  if (typeof ResizeObserver === 'function') new ResizeObserver(updateBarBottom).observe(controls);
+  window.addEventListener?.('resize', updateBarBottom);
   const showStageDialog = (popup, show) => {
     if (popup.parentNode !== stage) {
       const home = popup.parentNode;
@@ -109,8 +116,9 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     'You can mine before connecting. Pair a WizardConnect wallet to claim your rewards: open the wallet on this device or scan the QR on another device, then approve the connection. The gem shows your wallet and rewards.',
     'Use the jump, mine and build buttons on touchscreens. With a keyboard and mouse, press Space to jump, left-click to mine and right-click to place a block. Scroll the block slots to choose what to build with.',
     'Mine 10 natural MINA ore blocks to earn 1 MINA. With your 1 welcome MINA, that makes the 2 MINA gems for the recipe. Gather 7 wood, open the crafting table and review the payment in your wallet to unlock the faster green pickaxe permanently.',
+    'Your hearts show your health. Pick mushrooms in the wild to heal the hearts you lose. Beware of the night: when the sun sets, strange groans rise from the dark. Stay close to shelter and keep your mushrooms ready.',
   ];
-  const tutorialTitles = ['Move and look', 'Mine ore', 'Claim rewards', 'Build with blocks', 'Craft a MINA pickaxe'];
+  const tutorialTitles = ['Move and look', 'Mine ore', 'Claim rewards', 'Build with blocks', 'Craft a MINA pickaxe', 'Mushrooms and the night'];
   function renderOreBars(container, counts, max, showGoal) {
     container.replaceChildren();
     for (const [index, [color, name, column, row]] of ores.entries()) {
@@ -121,7 +129,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         const texture = document.createElement('span');
         texture.className = 'wizard-ore-texture';
         texture.setAttribute('aria-hidden', 'true');
-        texture.style.backgroundPosition = `-${column * 16}px -${row * 16}px`;
+        texture.style.backgroundPosition = `-${column * 32}px -${row * 32}px`;
         label.prepend(texture);
       }
       bar.className = `ore-bar ore-${color}`;
@@ -718,6 +726,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     const controlsHost = active ? $('game-fullscreen-toolbar') : controlsHome;
     if (controls.parentNode !== controlsHost) controlsHost.appendChild(controls);
     stage.classList.toggle('is-fullscreen', active);
+    updateBarBottom();
     dialog.classList.toggle('is-fullscreen', active);
     setPlayingUi();
     const label = translate(active ? 'Minimize CashCraft' : 'Enter fullscreen');

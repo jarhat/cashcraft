@@ -138,7 +138,7 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   assert.equal($('game-wizard-speech').hidden, false);
   assert.match($('game-wizard-message').textContent, /bottom left to walk.*game view to look around/);
   $('game-wizard-next').listeners.click();
-  assert.match($('game-wizard-step').textContent, /2\/5.*Mine ore/);
+  assert.match($('game-wizard-step').textContent, /2\/6.*Mine ore/);
   assert.equal($('game-wizard-ores').children.length, 3);
   $('game-wizard-next').listeners.click();
   assert.equal($('game-wizard-wallet').hidden, false);
@@ -148,6 +148,8 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   assert.equal($('game-wizard-table').hidden, false);
   assert.equal($('game-wizard-craft').hidden, true);
   assert.match($('game-wizard-message').textContent, /10 natural MINA ore blocks.*7 wood.*review/);
+  $('game-wizard-next').listeners.click();
+  assert.match($('game-wizard-message').textContent, /mushrooms.*night/);
   dismiss();
   assert.equal($('game-wizard-speech').hidden, true);
   assert.equal($('game-guide-wallet').textContent, 'Connect wallet');
