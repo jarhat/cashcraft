@@ -18,6 +18,9 @@ static bool wallet_connected = false;
 static bool admin_axe = false;
 static bool holding_mine_button = false;
 static bool attacking_animal = false;
+static bool server_timed = false;
+static bool waiting_for_start = false;
+static bool waiting_for_edit = false;
 static int building_progress = 0;
 static bool holding_build_button = false;
 
@@ -37,7 +40,7 @@ extern void on_mine(void);
 extern void on_build(void);
 extern void on_mining_swing(void);
 extern bool on_pickaxe_attack(void);
-extern void on_mining_target(int x, int y, int z);
+extern bool on_mining_target(int x, int y, int z);
 extern int get_targeted_block(int *x, int *y, int *z, int *face);
 
 static void update_pickaxe(void) {
@@ -91,8 +94,34 @@ double mining_swing_elapsed(void) {
 void mining_stop() {
     holding_mine_button = false;
     attacking_animal = false;
+    waiting_for_start = waiting_for_edit = false;
     mining_started = 0;
     mining_stage = 0;
+}
+
+static void start_target(void) {
+    mining_started = glfwGetTime();
+    next_swing_sound = mining_started;
+    mining_stage = 0;
+    waiting_for_edit = false;
+    server_timed = mining_w && isfinite(is_hardness(mining_w)) &&
+        on_mining_target(mining_x, mining_y, mining_z);
+    waiting_for_start = server_timed;
+}
+
+void mining_target_confirmed(int x, int y, int z) {
+    if (waiting_for_start && x == mining_x && y == mining_y && z == mining_z) {
+        mining_started = glfwGetTime();
+        waiting_for_start = false;
+    }
+}
+
+void mining_block_updated(int x, int y, int z) {
+    if (waiting_for_edit && x == mining_x && y == mining_y && z == mining_z) {
+        waiting_for_edit = false;
+        mining_stage = 0;
+        mining_w = 0;
+    }
 }
 
 void mining_tick() {
@@ -114,12 +143,11 @@ void mining_tick() {
             mining_y = target_y;
             mining_z = target_z;
             mining_w = target_w;
-            if (target_w) on_mining_target(mining_x, mining_y, mining_z);
-
-            mining_started = glfwGetTime();
-            mining_stage = 0;
+            start_target();
             return;
         }
+
+        if (waiting_for_start || waiting_for_edit) return;
 
         if (!target_w || !isfinite(is_hardness(target_w))) {
             mining_started = glfwGetTime();
@@ -128,12 +156,12 @@ void mining_tick() {
         }
 
         double now = glfwGetTime();
-        if (has_pickaxe && now >= next_swing_sound) {
+        double hardness = is_hardness(target_w) * (has_pickaxe ? 0.25 : 1.0);
+        double elapsed = now - mining_started;
+        if (has_pickaxe && hardness > .18 && elapsed < hardness && now >= next_swing_sound) {
             on_mining_swing();
             next_swing_sound = now + .18;
         }
-        double hardness = is_hardness(target_w) * (has_pickaxe ? 0.25 : 1.0);
-        double elapsed = glfwGetTime() - mining_started;
 
         // Block break indicator
         if (hardness <= 0) mining_stage = 9;
@@ -141,7 +169,8 @@ void mining_tick() {
 
         if (elapsed >= hardness) {
             mining_started = glfwGetTime();
-            mining_stage = 0;
+            waiting_for_edit = server_timed;
+            mining_stage = waiting_for_edit ? 9 : 0;
             on_mine();
             return;
         }
@@ -155,6 +184,7 @@ void mining_start() {
     has_swung = true;
     next_swing_sound = mining_started;
     attacking_animal = on_pickaxe_attack();
+    waiting_for_start = waiting_for_edit = false;
 
     mining_w = get_targeted_block(&mining_x, &mining_y, &mining_z, &target_face);
     if (!attacking_animal && mining_w && isfinite(is_hardness(mining_w))) {
@@ -162,7 +192,7 @@ void mining_start() {
             on_mining_swing();
             on_mine();
         } else {
-            on_mining_target(mining_x, mining_y, mining_z);
+            start_target();
         }
     }
 }

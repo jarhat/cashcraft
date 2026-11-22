@@ -451,7 +451,7 @@ function setConnection(connected) {
   $('forget').hidden = !connected || !!manager?.isBrowserWallet;
   $('disconnect').hidden = !connected;
   $('logout').hidden = !connected;
-  $('wizard-toggle').hidden = false;
+  $('wizard-toggle').hidden = connected;
   updateGameRewardAddress(connected && registeredRewardAddress === addressFor(0, 0) ? registeredRewardAddress : null);
   if (!connected) $('game-status').textContent = '';
   document.body.classList.toggle('wallet-connected', connected);
@@ -2117,6 +2117,8 @@ updateGameRewardAddress = setupGames($, {
   isWalletConnected: () => walletReady,
   getMinaBalance: () => walletReady ? minaBalance : 0n,
   hasMinaPickaxe: () => walletReady && minaPickaxe,
+  canSignGameWalletChallenge: (address) => walletReady && !!manager?.isBrowserWallet &&
+    registeredRewardAddress === address && addressFor(0, 0) === address,
   signGameWalletChallenge: (nonce, address) => {
     if (walletReady && manager?.isBrowserWallet && registeredRewardAddress === address && addressFor(0, 0) === address) {
       return manager.signNetcraftWalletChallenge(nonce);

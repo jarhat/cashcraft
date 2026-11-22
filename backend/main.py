@@ -1174,8 +1174,17 @@ def netcraft_admin_proof(proof: NetcraftAdminProof, request: Request) -> Respons
         raise HTTPException(status_code=503, detail="Wallet verification unavailable") from exc
     if verified is not True:
         raise HTTPException(status_code=403, detail="Admin wallet verification failed")
-    configured = os.getenv("NETCRAFT_ADMIN_BCH_ADDRESS", "").strip().lower()
-    return Response(status_code=204 if address == configured else 202)
+    configured = os.getenv("NETCRAFT_ADMIN_BCH_ADDRESS", "").strip()
+    try:
+        configured_address, configured_prefix, configured_type = validate_cashaddr(configured, token_aware=False)
+    except ValueError:
+        return Response(status_code=202)
+    is_admin = (
+        configured_prefix == prefix
+        and configured_type in (0, 2)
+        and configured_address.split(":")[1][1:-8] == claimed_payload[1:]
+    )
+    return Response(status_code=204 if is_admin else 202)
 
 
 @app.get("/api/internal/netcraft-mempool")

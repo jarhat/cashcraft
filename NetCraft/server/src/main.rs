@@ -1386,7 +1386,7 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
         send(&player, format!("J,{x},{y},{z},{w},1\n"));
     }
     let changes = changes.concat();
-    if mode == BreakMode::Admin {
+    if mode == BreakMode::Admin || (mode == BreakMode::Timed && w == 0) {
         send(&player, changes.clone());
     }
     broadcast(&state, Some(id), &changes);
@@ -1706,6 +1706,9 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                     player.mining_target = (target.iter().zip(player.position)
                         .take(3).map(|(&coord, pos)| (f64::from(coord) - pos).powi(2)).sum::<f64>() <= 100.0)
                         .then(|| (target, Instant::now()));
+                    if player.mining_target.is_some() {
+                        send(player, format!("MB,{x},{y},{z}\n"));
+                    }
                 }
             }
         }
@@ -3061,6 +3064,25 @@ mod tests {
         assert!(state.players[&1].verified_wallet_address.is_none());
         assert!(!state.players[&1].admin.granted);
         assert!(!state.players[&1].admin.flying);
+    }
+
+    #[test]
+    fn timed_pickaxe_break_acknowledges_start_and_returns_the_new_block_to_the_miner() {
+        let (server, first, second) = setup();
+        handle_command(&server, 1, "MB,0,1,0").unwrap();
+        assert_eq!(first.try_recv().unwrap(), b"MB,0,1,0\n");
+        let quarter_hardness = Duration::from_secs_f32(block_hardness(6) * 0.25);
+        {
+            let mut state = server.state.lock().unwrap();
+            state.players.get_mut(&1).unwrap().mining_target =
+                Some(([0, 1, 0], Instant::now() - quarter_hardness));
+        }
+        handle_command(&server, 1, "B,0,1,0,0").unwrap();
+        assert_eq!(first.try_recv().unwrap(), b"I,6\n");
+        let update = first.try_recv().unwrap();
+        assert!(std::str::from_utf8(&update).unwrap().lines().any(|line| line == "B,0,0,0,1,0,0"));
+        assert_eq!(second.try_recv().unwrap(), update);
+        assert!(first.try_recv().is_err());
     }
 
     #[test]

@@ -6,7 +6,7 @@ const games = {
 };
 const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 
-export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, getMinaBalance = () => 0n, hasMinaPickaxe = () => false, getGuestId = getGameGuestId, openPlayerTransfer, openGamePaymentRequest, signGameWalletChallenge, autoOpen = false, autoOpenGame = 'netcraft' }) {
+export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, getMinaBalance = () => 0n, hasMinaPickaxe = () => false, getGuestId = getGameGuestId, openPlayerTransfer, openGamePaymentRequest, canSignGameWalletChallenge = () => false, signGameWalletChallenge, autoOpen = false, autoOpenGame = 'netcraft' }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
@@ -20,13 +20,31 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   const controlsHome = controls.parentNode || toolbar;
   const controlsToggle = $('game-controls-toggle');
   const extraControls = $('game-extra-controls');
-  controlsToggle.addEventListener('click', () => {
-    extraControls.hidden = !extraControls.hidden;
-    controlsToggle.setAttribute('aria-expanded', String(!extraControls.hidden));
-    const label = translate(extraControls.hidden ? 'Expand game controls' : 'Collapse game controls');
+  const topbarDock = $('game-controls-dock');
+  const topbar = topbarDock.closest?.('.topbar');
+  const setControlsExpanded = (expanded) => {
+    extraControls.hidden = !expanded;
+    controlsToggle.setAttribute('aria-expanded', String(expanded));
+    const label = translate(expanded ? 'Collapse game controls' : 'Expand game controls');
     controlsToggle.setAttribute('aria-label', label);
     controlsToggle.setAttribute('title', label);
-  });
+  };
+  setControlsExpanded(false);
+  controlsToggle.addEventListener('click', () => setControlsExpanded(extraControls.hidden));
+  const positionControls = () => {
+    const fullscreen = document.fullscreenElement === stage;
+    const pinned = !fullscreen && dialog.open && !dialog.hidden && topbar &&
+      toolbar.getBoundingClientRect().top < topbar.getBoundingClientRect().bottom;
+    const host = fullscreen ? $('game-fullscreen-toolbar') : pinned ? topbarDock : controlsHome;
+    if (controls.parentNode === host) return;
+    const focused = document.activeElement;
+    const restoreFocus = controls.contains?.(focused);
+    if (pinned) setControlsExpanded(false);
+    host.appendChild(controls);
+    if (restoreFocus) (pinned ? controlsToggle : focused).focus({ preventScroll: true });
+  };
+  window.addEventListener('scroll', positionControls, { passive: true });
+  window.addEventListener('resize', positionControls);
   const showStageDialog = (popup, show) => {
     if (popup.parentNode !== stage) {
       const home = popup.parentNode;
@@ -40,18 +58,23 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     const playing = dialog.open && !dialog.hidden;
     document.body.classList.toggle('cashcraft-playing', playing);
     dock.hidden = !dialog.open || !dialog.hidden || !activeGame;
+    positionControls();
   };
   toolbar.after(dialog);
   stage.addEventListener('contextmenu', (event) => event.preventDefault());
   let generation = 0;
   let activeGame = null;
-  const verifyWallet = $('game-verify-wallet');
+  const adminButton = $('game-guide-admin');
   let walletProof = null;
-  verifyWallet?.addEventListener('click', () => {
+  const requestWalletProof = (automatic) => {
     const address = getRewardAddress();
-    if (!address || activeGame !== 'netcraft' || dialog.hidden) return;
-    walletProof = { address, generation, requestedAt: Date.now() };
+    if (!address || activeGame !== 'netcraft' || !frame.contentWindow) return;
+    walletProof = { address, generation, automatic, requestedAt: Date.now() };
     frame.contentWindow?.postMessage({ type: 'netcraft-wallet-proof', signature: '' }, '*');
+  };
+  adminButton.addEventListener('click', () => {
+    guide.close();
+    requestWalletProof(false);
   });
   let paymentRequest = null;
   const dismissPayment = () => {
@@ -146,6 +169,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     tutorialActive = false;
     tutorialStep = 0;
     $('game-notifications').classList.remove('tutorial-active');
+    controls.classList.remove('tutorial-active');
     $('game-wizard-speech').hidden = true;
     oreOverviewVisible = false;
   }
@@ -159,6 +183,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     }
     tutorialActive = true;
     $('game-notifications').classList.add('tutorial-active');
+    controls.classList.add('tutorial-active');
     const step = tutorialStep++;
     const message = step === 0 && touchFirst
       ? 'On a touchscreen, drag the joystick at the bottom left to walk. Drag an open area of the game view to look around. On a computer, use WASD and move the mouse to look.'
@@ -215,8 +240,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     }
     const gemLabel = connected ? 'Wallet and notifications' : 'Connect wallet';
     $('game-guide-wallet').textContent = translate(gemLabel);
-    $('game-ranking').hidden = activeGame !== 'netcraft';
-    if (verifyWallet) verifyWallet.hidden = activeGame !== 'netcraft' || !connected || !address;
+    adminButton.hidden = activeGame !== 'netcraft' || !connected || !address || canSignGameWalletChallenge(address);
     if (walletProof && (!connected || walletProof.address !== address)) walletProof = null;
     $('game-send').hidden = $('game-receive').hidden = activeGame !== 'netcraft';
     if (activeGame) {
@@ -304,6 +328,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
         if (request !== generation) return;
         dismissPayment();
         stopTutorial();
+        setControlsExpanded(false);
         touchFirst = shared;
         sharedTutorialPending = id === 'netcraft' && shared && !guideShown;
         if (guide.open) guide.close();
@@ -505,20 +530,27 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       if (event.origin === window.location.origin) receiveChallenge(event.data.packet);
       return;
     }
+    if (event.data?.type === 'netcraft-wallet-address-sent') {
+      const { address } = event.data;
+      if (address && address === getRewardAddress() && canSignGameWalletChallenge(address)) {
+        requestWalletProof(true);
+      }
+      return;
+    }
     if (event.data?.type === 'netcraft-wallet-challenge') {
       const { nonce } = event.data;
       const proof = walletProof;
       if (!proof || proof.generation !== generation || getRewardAddress() !== proof.address ||
-          Date.now() - proof.requestedAt > 15_000 || dialog.hidden ||
+          Date.now() - proof.requestedAt > 15_000 || (!proof.automatic && dialog.hidden) ||
           typeof nonce !== 'string' || !/^[0-9a-f]{64}$/.test(nonce)) return;
       walletProof = null;
       try {
-        document.exitPointerLock?.();
+        if (!proof.automatic) document.exitPointerLock?.();
         const signed = signGameWalletChallenge?.(nonce, proof.address);
-        const signature = signed ?? window.prompt(
+        const signature = signed ?? (proof.automatic ? null : window.prompt(
           `Sign the message below using your CashCraft BCH wallet, then replace it with the signature:\n${proof.address}`,
           `CashCraft wallet login v1: ${nonce}`,
-        )?.trim();
+        )?.trim());
         if (typeof signature === 'string' && /^[A-Za-z0-9+/]{87}=$/.test(signature) &&
             generation === proof.generation && getRewardAddress() === proof.address) {
           frame.contentWindow?.postMessage({ type: 'netcraft-wallet-proof', signature }, '*');
@@ -716,8 +748,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   $('ranking-close').addEventListener('click', () => $('ranking-dialog').close());
   document.addEventListener('fullscreenchange', () => {
     const active = document.fullscreenElement === stage;
-    const controlsHost = active ? $('game-fullscreen-toolbar') : controlsHome;
-    if (controls.parentNode !== controlsHost) controlsHost.appendChild(controls);
     stage.classList.toggle('is-fullscreen', active);
     dialog.classList.toggle('is-fullscreen', active);
     setPlayingUi();

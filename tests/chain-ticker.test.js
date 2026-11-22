@@ -67,7 +67,7 @@ test('chain ticker renders node and payout data independently', async (t) => {
   assert.equal(first.children[2].children[1].title, status.best_block_hash);
   assert.equal(first.children[4].children[1].textContent, 'Syncing');
   assert.equal(first.children[5].children[0].textContent, 'Headers');
-  assert.equal(first.children[6].children[0].textContent, 'MINA ore');
+  assert.equal(first.children[6].children[0].textContent, 'MINA ore mined');
   assert.equal(first.children[6].children[1].textContent, (5678).toLocaleString());
   assert.equal(first.children[7].children[1].textContent, '1.20000000 BCH');
   assert.ok(!requests.includes('/api/mina-rewards-sent'));

@@ -2430,7 +2430,7 @@ static int heart_counts[2];
 void on_mining_swing(void) {
 #ifdef __EMSCRIPTEN__
     if (g->mode != MODE_ONLINE || online_ready) {
-        EM_ASM(if (Module.playGameSound) Module.playGameSound('mine'););
+        EM_ASM(if (Module.playGameSound) Module.playGameSound('mine', .65););
     }
 #endif
 }
@@ -3333,16 +3333,17 @@ bool on_pickaxe_attack(void) {
     return true;
 }
 
-void on_mining_target(int x, int y, int z) {
-    if (g->mode != MODE_ONLINE) return;
+bool on_mining_target(int x, int y, int z) {
+    if (g->mode != MODE_ONLINE) return false;
 #ifdef __EMSCRIPTEN__
-    if (!online_ready) return;
+    if (!online_ready) return false;
 #endif
     State *s = &g->players->state;
     client_position(s->x, s->y, s->z, s->rx, s->ry, g->flying);
     char message[64];
     snprintf(message, sizeof(message), "MB,%d,%d,%d\n", x, y, z);
     client_send(message);
+    return true;
 }
 
 void on_mine() {
@@ -3352,12 +3353,17 @@ void on_mine() {
     int hx, hy, hz, face;
     int hw = get_targeted_block(&hx, &hy, &hz, &face);
     if (hw && hy > DEEP_BEDROCK_Y && hy <= WORLD_MAX_Y && is_destructable(hw)) {
-        if (g->admin_tools && g->mode == MODE_ONLINE) {
+        if (g->mode == MODE_ONLINE) {
             State *s = &g->players->state;
             client_position(s->x, s->y, s->z, s->rx, s->ry, g->flying);
-            char message[64];
-            snprintf(message, sizeof(message), "AB,%d,%d,%d\n", hx, hy, hz);
-            client_send(message);
+            if (g->admin_tools) {
+                char message[64];
+                snprintf(message, sizeof(message), "AB,%d,%d,%d\n", hx, hy, hz);
+                client_send(message);
+            } else {
+                client_block(hx, hy, hz, 0);
+                record_block(hx, hy, hz, 0);
+            }
             return;
         }
         set_block(hx, hy, hz, 0);
@@ -3377,7 +3383,6 @@ void on_mine() {
 
         record_block(hx, hy, hz, 0);
         if (is_plant(get_block(hx, hy + 1, hz))) {
-            on_mining_target(hx, hy + 1, hz);
             set_block(hx, hy + 1, hz, 0);
         }
     }
@@ -4199,6 +4204,9 @@ void parse_buffer(char *buffer, int len) {
 #endif
         }
         int bp, bq, bx, by, bz, bw;
+        if (sscanf(line, "MB,%d,%d,%d", &bx, &by, &bz) == 3) {
+            mining_target_confirmed(bx, by, bz);
+        }
         int mined_item;
         if (line[0] == 'I' && sscanf(line, "I,%d", &mined_item) == 1) {
             Inventory_collect(&g->inventory, mined_item);
@@ -4314,8 +4322,13 @@ void parse_buffer(char *buffer, int len) {
         if (line[0] == 'B' && sscanf(line, "B,%d,%d,%d,%d,%d,%d",
             &bp, &bq, &bx, &by, &bz, &bw) == 6)
         {
+            if (chunked(bx) == bp && chunked(bz) == bq) {
+                mining_block_updated(bx, by, bz);
+            }
+            int previous = get_block(bx, by, bz);
             _set_block(bp, bq, bx, by, bz, bw, false);
-            if (bw > 0 && is_obstacle(bw) && player_intersects_block(2, s->x, s->y, s->z, bx, by, bz)) {
+            if (bw > 0 && is_obstacle(bw) && !is_obstacle(previous) &&
+                player_intersects_block(2, s->x, s->y, s->z, bx, by, bz)) {
                 s->y = highest_block(s->x, s->z) + 2;
             }
         }
@@ -4775,6 +4788,7 @@ void client_connection_failed(void) {
     if (!connecting && !online_ready) return;
     connecting = false;
     online_ready = false;
+    mining_stop();
     set_admin_tools(false);
     for (int i = 0; i < g->chunk_count; ++i) {
         g->chunks[i].sync_pending = 0;

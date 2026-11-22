@@ -153,7 +153,6 @@ test('wizard tips fade without blocking play and crafting requires two spendable
   assert.equal($('game-guide-wallet').textContent, 'Connect wallet');
   await $('game-close').listeners.click();
   assert.equal($('game-guide').open, false);
-  $('game-controls-toggle').listeners.click();
   assert.equal($('game-extra-controls').hidden, true);
   $('game-stage').requestFullscreen = async () => {
     document.fullscreenElement = $('game-stage');
