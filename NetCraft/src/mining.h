@@ -4,6 +4,8 @@ bool mining_is_swinging(void);
 bool mining_has_pickaxe(void);
 double mining_swing_elapsed(void);
 void mining_stop(void);
+void mining_target_confirmed(int x, int y, int z);
+void mining_block_updated(int x, int y, int z);
 void mining_tick(void);
 void mining_start(void);
 void mining_set_pickaxe(int enabled);

@@ -318,7 +318,7 @@ void init_blocks() {
     register_block("Command Block",       RC( 4, 8), RC( 4, 8), RC( 4, 8), RC( 4, 8), RC( 4, 8), RC( 4, 8),
             1.0, 0);
     register_block("MINA Ore",            RC( 5,11), RC( 5,11), RC( 5,11), RC( 5,11), RC( 5,11), RC( 5,11),
-            7.0, 0);
+            6.0, 0);
     register_block("Soul Sand",           RC( 9, 8), RC( 9, 8), RC( 9, 8), RC( 9, 8), RC( 9, 8), RC( 9, 8),
             1.0, 0);
     register_block("Nether Brick",        RC( 1, 0), RC( 1, 0), RC( 1, 0), RC( 1, 0), RC( 1, 0), RC( 1, 0),

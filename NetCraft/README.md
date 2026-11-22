@@ -211,18 +211,22 @@ currently connected, verified wallets only. Practice rounds restart with the
 server and do not accept stakes or pay prizes.
 
 To enable admin tools, set `NETCRAFT_ADMIN_BCH_ADDRESS` to the wallet's
-prefixed, non-token-aware P2PKH CashAddr in `.env`. Connect that wallet in
-CashCraft, register its reward address, and choose **Verify wallet**. The
-built-in wallet signs the challenge directly; external wallets can paste a
-standard BCH signed-message proof. Only a verified admin can double-tap
+first prefixed P2PKH CashAddr (regular or token-aware) in `.env`. Connect
+that wallet in CashCraft and choose **Unlock admin tools** in the game
+wizard when available. External wallets can paste a standard BCH
+signed-message proof. Only a verified admin can double-tap
 Space to toggle flight or use the green MINA axe to break mineable blocks
-with one press. Reconnecting or changing wallets requires verification again.
-Deploy matching Rust server and game client builds: normal mining now starts
-with a timing message before the block edit.
+with one press, regardless of pickaxe orders. Reconnecting or changing
+wallets requires verification again. Deploy matching Rust server and game
+client builds: online mining waits for the server to acknowledge the target
+and apply the edit. The MINA pickaxe plays repeated strikes while mining
+slower blocks; the cracks show progress until the server confirms the break.
 
 Players can mine MINA ore without a wallet. Their browser stores a random bearer
 identity used to retain server-side progress and unclaimed rewards; clearing
-browser storage loses access to them, so keep that identity private. Connecting
+browser storage loses access to them, so keep that identity private. If browser
+storage is unavailable, guests can still break blocks, but unclaimed rewards
+are not saved. Connecting
 a registered token-aware wallet claims pending rewards and merges incomplete
 MINA progress into that address. Other ore rewards still require a connected
 wallet. On the first mined block without a wallet, a brief reminder appears in

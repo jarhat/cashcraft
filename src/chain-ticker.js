@@ -69,7 +69,7 @@ export function setupChainTicker(container, logger = console, gameContainer = nu
         item.className = 'market-ticker-item';
         const name = document.createElement('strong');
         name.textContent = label;
-        if (label === 'MINA ore') name.className = 'mina-label';
+        if (label === 'MINA ore mined') name.className = 'mina-label';
         const detail = document.createElement('span');
         update(detail, entry);
         details.push(detail);
@@ -106,7 +106,7 @@ export function setupChainTicker(container, logger = console, gameContainer = nu
         items.push(['Blockchain status', 'Unavailable']);
       }
       if (mined.status !== 'fulfilled') logger.warn('MINA ore total unavailable:', mined.reason);
-      items.push(['MINA ore', mined.status === 'fulfilled' ? mined.value : 'Unavailable', 'Ore blocks mined since tracking began']);
+      items.push(['MINA ore mined', mined.status === 'fulfilled' ? mined.value : 'Unavailable', 'Ore blocks mined since tracking began']);
       if (balance.status === 'fulfilled') items.push(['Payout wallet', balance.value]);
       else {
         logger.warn('Payout wallet balance unavailable:', balance.reason);
