@@ -115,8 +115,8 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     'Mine 10 natural green MINA ore blocks to earn 1 MINA. Blue lapis and redstone have separate counters and may earn their own tokens. Placed blocks do not count.',
     'You can mine before connecting. Pair a WizardConnect wallet to claim your rewards: open the wallet on this device or scan the QR on another device, then approve the connection. The gem shows your wallet and rewards.',
     'Use the jump, mine and build buttons on touchscreens. With a keyboard and mouse, press Space to jump, left-click to mine and right-click to place a block. Scroll the block slots to choose what to build with.',
-    'Mine 10 natural MINA ore blocks to earn 1 MINA. With your 1 welcome MINA, that makes the 2 MINA gems for the recipe. Gather 7 wood, open the crafting table and review the payment in your wallet to unlock the faster green pickaxe permanently.',
-    'Your hearts show your health. Pick mushrooms in the wild to heal the hearts you lose. Beware of the night: when the sun sets, strange groans rise from the dark. Stay close to shelter and keep your mushrooms ready.',
+    'Mine 10 natural MINA ore blocks to earn 1 MINA. With your welcome MINA, you have the 2 MINA needed to equip the green pickaxe. Open the crafting table to see the recipe: 7 wood and 2 MINA gems.',
+    'Collect wild red or brown mushrooms to restore one lost heart each. After sunset, strange groans rise from the dark. Stay close to shelter.',
   ];
   const tutorialTitles = ['Move and look', 'Mine ore', 'Claim rewards', 'Build with blocks', 'Craft a MINA pickaxe', 'Mushrooms and the night'];
   function renderOreBars(container, counts, max, showGoal) {
@@ -140,6 +140,13 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     }
   }
 
+  function showTutorialControls(step) {
+    frame.contentWindow?.postMessage({
+      type: 'netcraft-tutorial-highlight', step,
+      look: translate('Swipe here to look'), move: translate('Drag to walk'),
+    }, '*');
+  }
+
   function stopTutorial() {
     clearTimeout(wizardTimer);
     tutorialActive = false;
@@ -147,6 +154,10 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     $('game-notifications').classList.remove('tutorial-active');
     $('game-wizard-speech').hidden = true;
     oreOverviewVisible = false;
+    if (activeGame === 'netcraft' && tutorialControlsVisible) {
+      showTutorialControls(-1);
+      tutorialControlsVisible = false;
+    }
   }
 
   function nextTutorialTip() {
@@ -159,10 +170,14 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     tutorialActive = true;
     $('game-notifications').classList.add('tutorial-active');
     const step = tutorialStep++;
-    const message = step === 0 && touchFirst
+    const message = step === 0 && (touchFirst || window.matchMedia?.('(any-pointer: coarse)').matches)
       ? 'On a touchscreen, drag the joystick at the bottom left to walk. Drag an open area of the game view to look around. On a computer, use WASD and move the mouse to look.'
       : tutorialTips[step];
     showWizard(message, step === 1, nextTutorialTip, step);
+    if (step === 0 || step === 3 || tutorialControlsVisible) {
+      showTutorialControls(step);
+      tutorialControlsVisible = step === 0 || step === 3;
+    }
   }
 
   function showWizard(message, overview = false, advance = null, step = -1, crafting = false) {
@@ -182,13 +197,13 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     $('game-wizard-table').hidden = !craftingTip;
     const connected = isWalletConnected ? isWalletConnected() : Boolean(getRewardAddress());
     $('game-wizard-wallet').hidden = step !== 2 || connected;
-    $('game-wizard-craft').hidden = !craftingTip || $('game-crafting').hidden;
+    $('game-wizard-craft').hidden = !craftingTip;
     $('game-wizard-actions').hidden = step < 0 && !craftingTip;
     $('game-wizard-next').hidden = $('game-wizard-skip').hidden = step < 0;
     const text = translate(message);
     const duration = Math.max(7000, 2000 + text.trim().split(/\s+/).length * 350);
     $('game-wizard-message').textContent = text;
-    bubble.style.setProperty('--wizard-tip-duration', `${duration}ms`);
+    bubble.style?.setProperty('--wizard-tip-duration', `${duration}ms`);
     void bubble.offsetWidth;
     bubble.hidden = false;
     wizardTimer = setTimeout(() => {
@@ -201,6 +216,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     }, duration);
   }
   let soundEnabled = true;
+  let tutorialControlsVisible = false;
   let craftingNoteShown = false;
   const updateRewardAddress = (address) => {
     const connected = isWalletConnected ? isWalletConnected() : Boolean(address);
@@ -209,7 +225,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     const craftingButton = $('game-crafting');
     craftingButton.hidden = !crafting;
     if (!crafting) craftingNoteShown = false;
-    if (craftingTip) $('game-wizard-craft').hidden = !crafting;
+    $('craft-recipe-open').hidden = !crafting;
     if (crafting && !craftingNoteShown && !dialog.hidden) {
       craftingNoteShown = true;
       showWizard('You have 2 MINA gems! Craft the green MINA pickaxe with 7 wood and 2 MINA gems at the crafting table.', false, null, -1, true);
@@ -224,8 +240,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       const title = games[activeGame].title;
       $('game-restore').setAttribute('aria-label', `Resume ${title}`);
       $('game-restore').setAttribute('title', `Resume ${title}`);
-      $('game-minimized-fullscreen').setAttribute('aria-label', `Resume ${title} in fullscreen`);
-      $('game-minimized-fullscreen').setAttribute('title', `Resume ${title} in fullscreen`);
     }
     if (activeGame === 'netcraft') {
       frame.contentWindow?.postMessage({ type: 'netcraft-reward-address', address: address || '', pickaxe: connected && hasMinaPickaxe(), connected, guestId, embeddedSound: true }, '*');
@@ -392,18 +406,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     setPlayingUi();
     frame.focus({ preventScroll: true });
   });
-  $('game-minimized-fullscreen').addEventListener('click', async () => {
-    if (!activeGame) return;
-    dialog.hidden = false;
-    reopenOverlays();
-    setPlayingUi();
-    try {
-      await stage.requestFullscreen();
-      frame.focus({ preventScroll: true });
-    } catch (error) {
-      $('game-dialog-status').textContent = translate('Fullscreen is unavailable.');
-    }
-  });
   const openWallet = () => {
     const connected = isWalletConnected ? isWalletConnected() : Boolean(getRewardAddress());
     const overlay = $(connected ? 'notifications-dialog' : 'connection-dialog');
@@ -484,12 +486,14 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     }
   });
   const recipe = $('craft-recipe');
-  $('game-crafting').addEventListener('click', () => {
+  const openRecipe = () => {
     document.exitPointerLock?.();
     if (!recipe.open) recipe.show();
-  });
+  };
+  $('game-crafting').addEventListener('click', openRecipe);
   $('game-wizard-craft').addEventListener('click', () => {
-    if (!$('game-crafting').hidden) $('game-crafting').click();
+    stopTutorial();
+    openRecipe();
   });
   for (const id of ['craft-recipe-close', 'craft-recipe-later']) $(id).addEventListener('click', () => recipe.close());
   $('game-guide-wallet').addEventListener('click', () => {
@@ -515,7 +519,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     if (event.data?.type === 'netcraft-wallet-challenge') {
       const { nonce } = event.data;
       const proof = walletProof;
-      if (!proof || proof.generation !== generation || getRewardAddress() !== proof.address ||
+      if (event.origin !== 'null' || !proof || proof.generation !== generation || getRewardAddress() !== proof.address ||
           Date.now() - proof.requestedAt > 15_000 || dialog.hidden ||
           typeof nonce !== 'string' || !/^[0-9a-f]{64}$/.test(nonce)) return;
       walletProof = null;
@@ -729,14 +733,14 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     updateBarBottom();
     dialog.classList.toggle('is-fullscreen', active);
     setPlayingUi();
-    const label = translate(active ? 'Minimize CashCraft' : 'Enter fullscreen');
+    const label = translate(active ? 'Exit fullscreen' : 'Enter fullscreen');
     $('game-fullscreen').setAttribute('aria-pressed', String(active));
     $('game-fullscreen').setAttribute('aria-label', label);
     $('game-fullscreen').setAttribute('title', label);
   });
   $('game-fullscreen').addEventListener('click', async () => {
     try {
-      if (document.fullscreenElement === stage) await minimize();
+      if (document.fullscreenElement === stage) await document.exitFullscreen();
       else {
         await stage.requestFullscreen();
         frame.focus();

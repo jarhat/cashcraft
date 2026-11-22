@@ -16,7 +16,7 @@ export async function fetchChainStatus() {
   return status;
 }
 
-export async function fetchMinaOreMined() {
+async function fetchOreTotals() {
   const response = await fetch('/api/mina-ore-mined', {
     cache: 'no-store',
     signal: AbortSignal.timeout(10000),
@@ -26,7 +26,13 @@ export async function fetchMinaOreMined() {
   if (typeof data.mined !== 'string' || !/^(0|[1-9][0-9]*)$/.test(data.mined)) {
     throw new Error('Invalid MINA ore total.');
   }
-  return BigInt(data.mined).toLocaleString();
+  return [data.mined, data.lapis_ore, data.redstone_ore].map(value =>
+    typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value)
+      ? BigInt(value).toLocaleString() : 'Unavailable');
+}
+
+export async function fetchMinaOreMined() {
+  return (await fetchOreTotals())[0];
 }
 
 export async function fetchPayoutBalance() {
@@ -42,7 +48,7 @@ export async function fetchPayoutBalance() {
   return `${(amount / 100000000n).toLocaleString()}.${(amount % 100000000n).toString().padStart(8, '0')} BCH`;
 }
 
-export function setupChainTicker(container, logger = console, gameContainer = null) {
+export function setupChainTicker(container, logger = console) {
   const rendered = new WeakMap();
   function render(target, items) {
     const update = (detail, [, value, title]) => {
@@ -64,12 +70,12 @@ export function setupChainTicker(container, logger = console, gameContainer = nu
       group.className = 'market-ticker-group';
       if (copy) group.setAttribute('aria-hidden', 'true');
       for (const entry of items) {
-        const [label] = entry;
+        const [label, , , color] = entry;
         const item = document.createElement('span');
         item.className = 'market-ticker-item';
         const name = document.createElement('strong');
         name.textContent = label;
-        if (label === 'MINA ore') name.className = 'mina-label';
+        if (color) name.className = `mina-label ore-gem-${color}`;
         const detail = document.createElement('span');
         update(detail, entry);
         details.push(detail);
@@ -88,61 +94,48 @@ export function setupChainTicker(container, logger = console, gameContainer = nu
     loading = true;
     try {
       const [chain, mined, balance] = await Promise.allSettled([
-        fetchChainStatus(), fetchMinaOreMined(), fetchPayoutBalance(),
+        fetchChainStatus(), fetchOreTotals(), fetchPayoutBalance(),
       ]);
       const items = [];
-      if (chain.status === 'fulfilled') {
-        const status = chain.value;
-        items.push(
-        ['Network', 'Mainnet'],
-        ['Block height', status.blocks.toLocaleString()],
-        ['Latest block', `${status.best_block_hash.slice(0, 12)}…`, status.best_block_hash],
-        ['Difficulty', status.difficulty.toLocaleString(undefined, { maximumFractionDigits: 2 })],
-        ['Node status', status.syncing ? 'Syncing' : 'Synced']
-        );
-        if (status.syncing) items.push(['Headers', status.headers.toLocaleString()]);
-      } else {
-        logger.warn('Blockchain status unavailable:', chain.reason);
-        items.push(['Blockchain status', 'Unavailable']);
-      }
       if (mined.status !== 'fulfilled') logger.warn('MINA ore total unavailable:', mined.reason);
-      items.push(['MINA ore', mined.status === 'fulfilled' ? mined.value : 'Unavailable', 'Ore blocks mined since tracking began']);
+      for (const [index, [ore, color]] of [['MINA', 'green'], ['Lapis', 'blue'], ['Redstone', 'red']].entries()) {
+        items.push([`${ore} ore mined`, mined.status === 'fulfilled' ? mined.value[index] : 'Unavailable',
+          'Ore blocks mined since tracking began', color]);
+      }
       if (balance.status === 'fulfilled') items.push(['Payout wallet', balance.value]);
       else {
         logger.warn('Payout wallet balance unavailable:', balance.reason);
         items.push(['Payout wallet', 'Unavailable']);
       }
-      render(container, items);
-      if (gameContainer) {
-        const detailed = [];
-        if (chain.status === 'fulfilled') {
-          const s = chain.value;
-          detailed.push(
-            ['BCHN', s.syncing ? 'Mainnet / syncing' : 'Mainnet / synced'],
-            ['Height', s.blocks.toLocaleString()],
-            ['Headers', s.headers.toLocaleString()],
-            ['Header lag', (s.headers - s.blocks).toLocaleString()],
-            ['Difficulty', s.difficulty.toLocaleString(undefined, { maximumSignificantDigits: 12 })],
-            ['Tip hash', s.best_block_hash],
-          );
-          if (typeof s.verification_progress === 'number' && s.verification_progress >= 0 && s.verification_progress <= 1) {
-            detailed.push(['Verification', `${(s.verification_progress * 100).toFixed(5)}%`]);
-          }
-          if (Number.isSafeInteger(s.median_time) && s.median_time >= 0 && s.median_time <= 8640000000000) {
-            detailed.push(['Median block time', new Date(s.median_time * 1000).toISOString()]);
-          }
-          if (typeof s.chainwork === 'string' && /^[0-9a-f]{1,64}$/.test(s.chainwork)) {
-            detailed.push(['Chainwork', `0x${s.chainwork}`]);
-          }
-          if (Number.isSafeInteger(s.size_on_disk) && s.size_on_disk >= 0) {
-            detailed.push(['Block data', `${(s.size_on_disk / 2 ** 30).toFixed(2)} GiB`]);
-          }
-          if (typeof s.pruned === 'boolean') detailed.push(['Storage', s.pruned ? 'Pruned' : 'Unpruned']);
-        } else {
-          detailed.push(['BCHN', 'Unavailable']);
+      const detailed = [];
+      if (chain.status === 'fulfilled') {
+        const s = chain.value;
+        detailed.push(
+          ['BCHN', s.syncing ? 'Mainnet / syncing' : 'Mainnet / synced'],
+          ['Height', s.blocks.toLocaleString()],
+          ['Headers', s.headers.toLocaleString()],
+          ['Header lag', (s.headers - s.blocks).toLocaleString()],
+          ['Difficulty', s.difficulty.toLocaleString(undefined, { maximumSignificantDigits: 12 })],
+          ['Tip hash', s.best_block_hash],
+        );
+        if (typeof s.verification_progress === 'number' && s.verification_progress >= 0 && s.verification_progress <= 1) {
+          detailed.push(['Verification', `${(s.verification_progress * 100).toFixed(5)}%`]);
         }
-        render(gameContainer, [...detailed, ...items.slice(-2)]);
+        if (Number.isSafeInteger(s.median_time) && s.median_time >= 0 && s.median_time <= 8640000000000) {
+          detailed.push(['Median block time', new Date(s.median_time * 1000).toISOString()]);
+        }
+        if (typeof s.chainwork === 'string' && /^[0-9a-f]{1,64}$/.test(s.chainwork)) {
+          detailed.push(['Chainwork', `0x${s.chainwork}`]);
+        }
+        if (Number.isSafeInteger(s.size_on_disk) && s.size_on_disk >= 0) {
+          detailed.push(['Block data', `${(s.size_on_disk / 2 ** 30).toFixed(2)} GiB`]);
+        }
+        if (typeof s.pruned === 'boolean') detailed.push(['Storage', s.pruned ? 'Pruned' : 'Unpruned']);
+      } else {
+        logger.warn('Blockchain status unavailable:', chain.reason);
+        detailed.push(['BCHN', 'Unavailable']);
       }
+      render(container, [...detailed, ...items]);
     } finally {
       loading = false;
     }

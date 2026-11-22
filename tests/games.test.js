@@ -121,11 +121,11 @@ test('game buttons minimize and restore without unloading the active game', asyn
   $('invite-dialog').listeners.close();
   assert.equal($('invite-dialog').parentNode, parent);
   assert.equal($('game-frame').focused, true);
-  assert.equal($('game-fullscreen')['aria-label'], 'Minimize CashCraft');
+  assert.equal($('game-fullscreen')['aria-label'], 'Exit fullscreen');
   assert.equal($('game-fullscreen')['aria-pressed'], 'true');
   await $('game-fullscreen').listeners.click();
   assert.equal(document.fullscreenElement, null);
-  assert.equal($('game-dialog').hidden, true);
+  assert.ok(!$('game-dialog').hidden);
   assert.equal($('game-controls-right').parentNode, toolbar);
   assert.equal($('game-fullscreen')['aria-label'], 'Enter fullscreen');
   assert.equal($('game-fullscreen')['aria-pressed'], 'false');
@@ -357,6 +357,7 @@ test('fullscreen game regains keyboard focus without stealing focus from other d
       const classes = new Set();
       elements.set(id, {
         listeners: {}, open: false,
+        replaceChildren() {},
         addEventListener(type, fn) { this.listeners[type] = fn; },
         setAttribute() {},
         appendChild(child) { child.parentNode = this; }, insertBefore(child) { child.parentNode = this; },
@@ -371,6 +372,7 @@ test('fullscreen game regains keyboard focus without stealing focus from other d
   globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
   globalThis.document = { documentElement: { classList: { remove() {} } }, body: { classList: { toggle() {} } }, fullscreenElement: null, activeElement: null, addEventListener() {}, querySelector() { return { after() {} }; } };
   globalThis.requestAnimationFrame = (fn) => callbacks.push(fn);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   setupGames($, { translate: (text) => text, getRewardAddress: () => 'bitcoincash:ztest' });
   $('game-dialog').classList.add('game-auto-open');
   await $('game-netcraft').listeners.click();

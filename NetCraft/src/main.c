@@ -2788,7 +2788,7 @@ static char username[128] = {0};
 static char access_token[128] = {0};
 
 static void set_admin_tools(bool enabled) {
-    if (!enabled) g->flying = false;
+    if (!enabled && g->mode == MODE_ONLINE) g->noclip = false;
     g->admin_tools = enabled;
     g->admin_jump_at = -1;
     mining_set_admin(enabled);
@@ -3224,9 +3224,9 @@ void parse_command(const char *buffer, bool forward) {
         cylinder(&g->block0, &g->block1, radius, 0);
     }
     else if (strcmp(buffer, "/noclip") == 0) {
-        if (g->mode == MODE_ONLINE) {
+        if (g->mode == MODE_ONLINE && !g->admin_tools) {
             g->noclip = false;
-            add_message("Noclip is unavailable online.");
+            add_message("Verify the NetCraft admin wallet to use noclip online.");
         } else {
             g->noclip = !g->noclip;
         }
@@ -3985,7 +3985,7 @@ void handle_movement(double dt) {
         (void)old_step_y;
         (void)old_step_z;
 #endif
-        if (g->noclip && g->mode != MODE_ONLINE) continue;
+        if (g->noclip && (g->mode != MODE_ONLINE || g->admin_tools)) continue;
         if (collide(2, &s->x, &s->y, &s->z)) {
 #ifdef __EMSCRIPTEN__
             if (dy < 0) grounded = true;
@@ -4166,9 +4166,7 @@ void parse_buffer(char *buffer, int len) {
             animals_remove(animal_id);
         }
         if (!strcmp(line, "WA,0") || !strcmp(line, "WA,1")) {
-            bool was_flying = g->flying;
             set_admin_tools(line[3] == '1');
-            g->flying = was_flying;
         }
         if (!strcmp(line, "AF,0") || !strcmp(line, "AF,1")) {
             g->flying = line[3] == '1';
@@ -4483,6 +4481,7 @@ void reset_model() {
     g->player_count = 0;
     g->observe1 = 0;
     g->observe2 = 0;
+    g->flying = false;
     set_admin_tools(false);
     g->item_index = 0;
     Inventory_reset(&g->inventory);
@@ -4777,6 +4776,7 @@ void client_connection_failed(void) {
     if (!connecting && !online_ready) return;
     connecting = false;
     online_ready = false;
+    g->flying = false;
     set_admin_tools(false);
     for (int i = 0; i < g->chunk_count; ++i) {
         g->chunks[i].sync_pending = 0;
@@ -4805,6 +4805,7 @@ void client_closed(int fd, void *userData) {
     client_connection_failed();
 #else
     add_message("Client closed the connection");
+    g->flying = false;
     set_admin_tools(false);
     client_disable();
 #endif

@@ -107,7 +107,7 @@ const prefix = mainnet ? 'bitcoincash' : 'bchtest';
 const $ = (id) => document.getElementById(id);
 if (mainnet && !$('receive-category').value) $('receive-category').value = PUSD_CATEGORY;
 setupMarketTicker($('market-ticker'), translate, logger);
-setupChainTicker($('chain-ticker'), logger, $('game-chain-ticker'));
+setupChainTicker($('chain-ticker'), logger);
 setupMediaSlideshow($);
 
 const updateReceiveToken = () => {

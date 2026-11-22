@@ -1175,7 +1175,7 @@ def netcraft_admin_proof(proof: NetcraftAdminProof, request: Request) -> Respons
     if verified is not True:
         raise HTTPException(status_code=403, detail="Admin wallet verification failed")
     configured = os.getenv("NETCRAFT_ADMIN_BCH_ADDRESS", "").strip().lower()
-    return Response(status_code=204 if address == configured else 202)
+    return Response(status_code=204 if configured in (claimed, address) else 202)
 
 
 @app.get("/api/internal/netcraft-mempool")
@@ -1301,15 +1301,17 @@ def ore_ranking() -> dict:
 def mina_ore_mined() -> dict:
     try:
         with open_db(timeout=5) as db:
-            row = db.execute(
-                "SELECT total FROM mining_totals WHERE name = 'mina_ore'"
-            ).fetchone()
-            if row is None:
+            totals = dict(db.execute(
+                "SELECT name, total FROM mining_totals WHERE name IN ('mina_ore', 'lapis_ore', 'redstone_ore')"
+            ))
+            if "mina_ore" not in totals:
                 raise sqlite3.DatabaseError("Mining total unavailable")
     except (RewardDatabaseError, sqlite3.Error) as exc:
         logger.error("Could not read MINA ore total: %s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Mining total unavailable.") from exc
-    return {"mined": str(row[0])}
+    return {"mined": str(totals["mina_ore"]), **{
+        name: str(totals[name]) for name in ("lapis_ore", "redstone_ore") if name in totals
+    }}
 
 
 @app.get("/api/mina-mined")

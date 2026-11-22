@@ -22,6 +22,8 @@ class NetcraftWalletTests(unittest.TestCase):
             rpc.assert_called_once_with("verifymessage", [
                 address, proof["signature"], f"CashCraft wallet login v1: {proof['nonce']}",
             ])
+            with patch.dict("os.environ", {"NETCRAFT_ADMIN_BCH_ADDRESS": token}):
+                self.assertEqual(client.post(path, headers=headers, json=proof).status_code, 204)
             with patch.dict("os.environ", {"NETCRAFT_ADMIN_BCH_ADDRESS": ""}):
                 self.assertEqual(client.post(path, headers=headers, json=proof).status_code, 202)
             rpc.return_value = False
