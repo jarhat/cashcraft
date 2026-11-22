@@ -107,7 +107,7 @@ const prefix = mainnet ? 'bitcoincash' : 'bchtest';
 const $ = (id) => document.getElementById(id);
 if (mainnet && !$('receive-category').value) $('receive-category').value = PUSD_CATEGORY;
 setupMarketTicker($('market-ticker'), translate, logger);
-setupChainTicker($('chain-ticker'), logger, $('game-chain-ticker'));
+setupChainTicker($('chain-ticker'), logger);
 setupMediaSlideshow($);
 
 const updateReceiveToken = () => {
@@ -1448,13 +1448,13 @@ async function refreshBalances({ quiet = false } = {}) {
         if (!walletReady || manager !== scanManager || registeredRewardAddress !== rewardAddress) {
           throw new Error('Wallet or reward address changed while checking the pickaxe.');
         }
-        minaPickaxe = unlocked;
+        minaPickaxe = unlocked || minaBalance >= 2n;
         updateGameRewardAddress(registeredRewardAddress);
         notifyTokenReceipts(utxos);
       }
     } catch (error) {
       if (walletReady && manager === scanManager) {
-        minaPickaxe = false;
+        minaPickaxe = minaBalance >= 2n;
         updateGameRewardAddress(registeredRewardAddress);
       }
       receiptError = error;

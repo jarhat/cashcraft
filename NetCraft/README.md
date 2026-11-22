@@ -211,12 +211,13 @@ currently connected, verified wallets only. Practice rounds restart with the
 server and do not accept stakes or pay prizes.
 
 To enable admin tools, set `NETCRAFT_ADMIN_BCH_ADDRESS` to the wallet's
-prefixed, non-token-aware P2PKH CashAddr in `.env`. Connect that wallet in
-CashCraft, register its reward address, and choose **Verify wallet**. The
+prefixed P2PKH CashAddr (token-aware or standard) in `.env`. Connect that wallet in
+CashCraft, register its reward address, and choose **Verify wallet** in the game guide. The
 built-in wallet signs the challenge directly; external wallets can paste a
-standard BCH signed-message proof. Only a verified admin can double-tap
-Space to toggle flight or use the green MINA axe to break mineable blocks
-with one press. Reconnecting or changing wallets requires verification again.
+standard BCH signed-message proof. Any online player can double-tap Space
+to toggle flight. Verified admins can also use `/noclip` and break mineable
+blocks with one press using the admin MINA axe. Reconnecting or changing
+wallets requires verification again.
 Deploy matching Rust server and game client builds: normal mining now starts
 with a timing message before the block edit.
 
