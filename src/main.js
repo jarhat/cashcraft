@@ -185,6 +185,7 @@ let rewardCategory = null;
 let rewardCategoryPromise = null;
 let receiptWallet = null;
 let minaPickaxe = false;
+let minaBalance = 0n;
 
 async function loadRewardCategory() {
   if (!rewardCategoryPromise) {
@@ -435,6 +436,7 @@ function setConnection(connected) {
   if (!connected) {
     registeredRewardAddress = null;
     minaPickaxe = false;
+    minaBalance = 0n;
   }
   if (connected && !$('game-wallet-notice').hidden) {
     $('game-wallet-notice').hidden = true;
@@ -480,6 +482,7 @@ function setConnection(connected) {
 
 function clearWalletDisplay() {
   minaPickaxe = false;
+  minaBalance = 0n;
   updateGameRewardAddress(null);
   balanceSatoshis = null;
   emptyBalanceNotified = false;
@@ -1430,6 +1433,9 @@ async function refreshBalances({ quiet = false } = {}) {
         const mina = utxos.reduce((sum, utxo) => utxo.token &&
           String(utxo.token.category).toLowerCase() === rewardCategory
           ? sum + BigInt(utxo.token.amount || 0) : sum, 0n);
+        minaBalance = utxos.reduce((sum, { token }) => token && !token.nft &&
+          String(token.category).toLowerCase() === rewardCategory
+          ? sum + BigInt(token.amount || 0) : sum, 0n);
         $('mina-balance').textContent = mina.toString();
         $('notification-mina').textContent = mina.toString();
         const rewardAddress = registeredRewardAddress;
@@ -2109,6 +2115,7 @@ updateGameRewardAddress = setupGames($, {
   translate,
   getRewardAddress: () => walletReady ? registeredRewardAddress : null,
   isWalletConnected: () => walletReady,
+  getMinaBalance: () => walletReady ? minaBalance : 0n,
   hasMinaPickaxe: () => walletReady && minaPickaxe,
   signGameWalletChallenge: (nonce, address) => {
     if (walletReady && manager?.isBrowserWallet && registeredRewardAddress === address && addressFor(0, 0) === address) {

@@ -231,7 +231,10 @@ wallet button blink green until the wallet is opened.
 
 The CashCraft launcher opens fullscreen from a click where supported. Shared
 CashCraft links open the game without requesting browser fullscreen and start
-with the wizard's touch controls. The wizard then shows textured ore counters,
+with the wizard's touch controls. Collapse the extra buttons with the toolbar
+toggle in windowed play. Fullscreen keeps only the available crafting shortcut
+and the minimize button; minimizing preserves the active game.
+The wizard shows textured ore counters,
 WizardConnect pairing, and the crafting table for the permanent MINA pickaxe.
 The combined wizard-and-gem button opens the guide, replays the tutorial, and
 provides access to wallet connection and reward notifications.
@@ -241,8 +244,9 @@ registration, and refreshes periodically while connected.
 The browser wallet's unlocked session survives a refresh in the same tab until
 explicitly disconnected or the tab session ends. WizardConnect attempts to
 restore its saved pairing; the external wallet may still require approval.
-Players have a regular pixel pickaxe in the lower-right corner. After earning
-two MINA from 20 eligible ore blocks, the crafting control prepares a payment of
+Players have a regular pixel pickaxe in the lower-right corner. When the
+connected wallet has at least 2 spendable green MINA and does not already have
+the upgrade, the crafting table is highlighted. It prepares a payment of
 2 MINA to a unique address in the BCHN payout wallet. Players must connect a
 wallet and approve the transfer. After one confirmation, the faster green
 pickaxe is permanently unlocked for that registered wallet; it reduces mining

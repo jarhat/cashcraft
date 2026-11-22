@@ -131,11 +131,12 @@
       </div>
       <div id="game-controls-right" class="game-controls game-controls-right" role="group" aria-label="CashCraft controls">
         <button id="game-close" type="button" aria-label="Minimize CashCraft" title="Minimize CashCraft">−</button>
+        <button id="game-controls-toggle" type="button" aria-label="Collapse game controls" title="Collapse game controls" aria-expanded="true" aria-controls="game-extra-controls">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14"/></svg>
+        </button>
+        <div id="game-extra-controls" class="game-extra-controls">
         <button id="game-verify-wallet" type="button" aria-label="Verify wallet" title="Verify ownership of your CashCraft wallet" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 4-3 7-7 10-4-3-7-6-7-10V6z"/><path d="m9 12 2 2 4-4"/></svg>
-        </button>
-        <button id="game-crafting" type="button" aria-label="Craft a MINA pickaxe with 2 MINA" title="Craft a MINA pickaxe with 2 MINA" hidden>
-          <img src="/mining-table.svg" alt="">
         </button>
         <button id="game-ranking" class="game-ranking-button" type="button" aria-label="Challenges and rankings" title="Challenges and rankings" aria-haspopup="dialog" aria-controls="ranking-dialog" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v3a4 4 0 0 1-8 0zm0 1H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4M12 11v5m-4 4h8m-7-4h6v4"/></svg>
@@ -157,8 +158,13 @@
         <button id="game-receive" type="button" aria-label="Receive tokens" title="Receive tokens" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v13m-5-5 5 5 5-5M4 17v3h16v-3"/></svg>
         </button>
+        </div>
+        <button id="game-crafting" type="button" aria-label="Craft a MINA pickaxe with 2 MINA" title="Craft a MINA pickaxe with 2 MINA" hidden>
+          <img src="/wizard.svg" alt="">
+          <img src="/mining-table.svg" alt="">
+        </button>
         <button id="game-fullscreen" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fullscreen-expand" d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/><path class="fullscreen-minimize" d="M5 12h14"/></svg>
         </button>
       </div>
     </div>

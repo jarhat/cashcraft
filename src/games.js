@@ -6,7 +6,7 @@ const games = {
 };
 const netcraftServer = import.meta.env?.VITE_NETCRAFT_WS_URL || '-';
 
-export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, hasMinaPickaxe = () => false, getGuestId = getGameGuestId, openPlayerTransfer, openGamePaymentRequest, signGameWalletChallenge, autoOpen = false, autoOpenGame = 'netcraft' }) {
+export function setupGames($, { translate, getRewardAddress = () => null, isWalletConnected = null, getMinaBalance = () => 0n, hasMinaPickaxe = () => false, getGuestId = getGameGuestId, openPlayerTransfer, openGamePaymentRequest, signGameWalletChallenge, autoOpen = false, autoOpenGame = 'netcraft' }) {
   const dialog = $('game-dialog');
   const frame = $('game-frame');
   const stage = $('game-stage');
@@ -18,6 +18,15 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   const toolbar = document.querySelector('.game-toolbar');
   const controls = $('game-controls-right');
   const controlsHome = controls.parentNode || toolbar;
+  const controlsToggle = $('game-controls-toggle');
+  const extraControls = $('game-extra-controls');
+  controlsToggle.addEventListener('click', () => {
+    extraControls.hidden = !extraControls.hidden;
+    controlsToggle.setAttribute('aria-expanded', String(!extraControls.hidden));
+    const label = translate(extraControls.hidden ? 'Expand game controls' : 'Collapse game controls');
+    controlsToggle.setAttribute('aria-label', label);
+    controlsToggle.setAttribute('title', label);
+  });
   const showStageDialog = (popup, show) => {
     if (popup.parentNode !== stage) {
       const home = popup.parentNode;
@@ -90,7 +99,7 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   let guestId = null;
   let guestUnlocked = null;
   let lastProgress = null;
-  let earnedRewards = null;
+  let craftingTip = false;
   let firstBlockShown = false;
   let oreOverviewVisible = false;
   let oreCounts = [0, 0, 0];
@@ -157,10 +166,12 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     showWizard(message, step === 1, nextTutorialTip, step);
   }
 
-  function showWizard(message, overview = false, advance = null, step = -1) {
+  function showWizard(message, overview = false, advance = null, step = -1, crafting = false) {
     if (tutorialActive && !advance) return;
     const bubble = $('game-wizard-speech');
     const bars = $('game-wizard-ores');
+    craftingTip = crafting || step === 4;
+    bubble.classList.toggle('is-crafting', craftingTip);
     clearTimeout(wizardTimer);
     bubble.hidden = true;
     oreOverviewVisible = overview;
@@ -169,11 +180,12 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     const heading = $('game-wizard-step');
     heading.hidden = step < 0;
     if (step >= 0) heading.textContent = `${step + 1}/${tutorialTips.length} · ${translate(tutorialTitles[step])}`;
-    $('game-wizard-table').hidden = step !== 4;
+    $('game-wizard-table').hidden = !craftingTip;
     const connected = isWalletConnected ? isWalletConnected() : Boolean(getRewardAddress());
     $('game-wizard-wallet').hidden = step !== 2 || connected;
-    $('game-wizard-craft').hidden = step !== 4 || !(earnedRewards >= 2);
-    $('game-wizard-actions').hidden = step < 0;
+    $('game-wizard-craft').hidden = !craftingTip || $('game-crafting').hidden;
+    $('game-wizard-actions').hidden = step < 0 && !craftingTip;
+    $('game-wizard-next').hidden = $('game-wizard-skip').hidden = step < 0;
     const text = translate(message);
     const duration = Math.max(7000, 2000 + text.trim().split(/\s+/).length * 350);
     $('game-wizard-message').textContent = text;
@@ -192,6 +204,15 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
   let soundEnabled = true;
   const updateRewardAddress = (address) => {
     const connected = isWalletConnected ? isWalletConnected() : Boolean(address);
+    const crafting = activeGame === 'netcraft' && connected && Boolean(address) &&
+      !hasMinaPickaxe() && getMinaBalance() >= 2n;
+    const craftingButton = $('game-crafting');
+    const newlyAvailable = crafting && craftingButton.hidden !== false;
+    craftingButton.hidden = !crafting;
+    if (craftingTip) $('game-wizard-craft').hidden = !crafting;
+    if (newlyAvailable && !dialog.hidden) {
+      showWizard('You have 2 MINA! Use the crafting table to review a payment for your pickaxe.', false, null, -1, true);
+    }
     const gemLabel = connected ? 'Wallet and notifications' : 'Connect wallet';
     $('game-guide-wallet').textContent = translate(gemLabel);
     $('game-ranking').hidden = activeGame !== 'netcraft';
@@ -554,15 +575,6 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
       showWizard('Mine 10 natural blocks of one ore for its token when rewards are configured. Look deep for blue ore; red is the rarest.', true);
       return;
     }
-    if (event.data?.type === 'netcraft-mina-earned' &&
-        Number.isSafeInteger(event.data.rewards) && event.data.rewards >= 0) {
-      $('game-crafting').hidden = event.data.rewards < 2;
-      if (!oreOverviewVisible && event.data.rewards >= 2 && earnedRewards !== null && earnedRewards < 2) {
-        showWizard('You earned 2 MINA! Use the crafting table to review a payment for your pickaxe.');
-      }
-      earnedRewards = event.data.rewards;
-      return;
-    }
     if (
         event.data?.type !== 'netcraft-mining-progress' ||
         !Number.isInteger(event.data.blocks) || event.data.blocks < 0 || event.data.blocks > 9 ||
@@ -709,14 +721,14 @@ export function setupGames($, { translate, getRewardAddress = () => null, isWall
     stage.classList.toggle('is-fullscreen', active);
     dialog.classList.toggle('is-fullscreen', active);
     setPlayingUi();
-    const label = translate(active ? 'Exit fullscreen' : 'Enter fullscreen');
+    const label = translate(active ? 'Minimize CashCraft' : 'Enter fullscreen');
     $('game-fullscreen').setAttribute('aria-pressed', String(active));
     $('game-fullscreen').setAttribute('aria-label', label);
     $('game-fullscreen').setAttribute('title', label);
   });
   $('game-fullscreen').addEventListener('click', async () => {
     try {
-      if (document.fullscreenElement === stage) await document.exitFullscreen();
+      if (document.fullscreenElement === stage) await minimize();
       else {
         await stage.requestFullscreen();
         frame.focus();

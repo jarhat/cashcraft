@@ -3255,7 +3255,12 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
   margin-inline-start: auto;
 }
 .game-panel:not(:has(> .game-dialog[open]:not([hidden]))) .game-toolbar > .game-controls-right,
-.game-stage:fullscreen #game-close { display: none; }
+.game-stage:fullscreen :is(#game-close, #game-controls-toggle, #game-extra-controls),
+#game-extra-controls[hidden],
+#game-fullscreen[aria-pressed="false"] .fullscreen-minimize,
+#game-fullscreen[aria-pressed="true"] .fullscreen-expand,
+.game-stage:fullscreen .game-wizard-speech:not(.is-crafting) { display: none; }
+.game-extra-controls { display: flex; gap: inherit; }
 .game-controls-right button {
   flex: 0 0 var(--game-control-size);
   width: var(--game-control-size);
@@ -3272,6 +3277,14 @@ html[data-theme="voxel"] .game-panel > .game-auto-open {
 .game-controls-right button:focus-visible { outline-color: #b7ffda; }
 .game-controls-right button[hidden] { display: none; }
 .game-controls-right button svg, .game-controls-right button img { width: 56%; height: 56%; }
+.game-controls-right #game-crafting:not([hidden]) {
+  display: flex;
+  justify-content: center;
+  border-color: #b7ffda;
+  background: #174831;
+  box-shadow: 0 0 8px #82ffc0;
+}
+#game-crafting img { width: 42%; height: 65%; object-fit: contain; }
 #game-invite svg { width: 56%; height: 56%; }
 #game-sound[aria-pressed="true"] .sound-muted,
 #game-sound[aria-pressed="false"] .sound-waves { display: none; }

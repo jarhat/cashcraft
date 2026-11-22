@@ -64,6 +64,12 @@ int main(void) {
                (standard[b + 1] - standard[a + 1]) * (standard[c] - standard[a]) > 0);
     }
 
+    assert(admin_axe_vertices(mina) == count);
+    for (int i = 0; i < count; i++) {
+        const float *pixel = mina + i * PICKAXE_VERTEX_COMPONENTS;
+        assert(pixel[3] > pixel[2] && pixel[3] > pixel[4]);
+    }
+
     for (int i = 0; i < 2; i++) {
         int width = i ? 390 : 1280;
         int height = i ? 844 : 720;

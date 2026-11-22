@@ -43,7 +43,7 @@ test('toolbar initialization works without the removed game menu', () => {
   assert.equal(elements['language-menu'].hidden, true);
 });
 
-test('wizard tips fade without blocking play and crafting appears after two rewards', async (t) => {
+test('wizard tips fade without blocking play and crafting requires two spendable MINA', async (t) => {
   const previous = { document: globalThis.document, fetch: globalThis.fetch, raf: globalThis.requestAnimationFrame, window: globalThis.window, setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
   t.after(() => {
     globalThis.document = previous.document;
@@ -71,12 +71,20 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
     });
     return elements.get(id);
   };
-  const toolbar = { after(child) { child.parentNode = this; } };
+  const toolbar = {
+    after(child) { child.parentNode = this; },
+    appendChild(child) { child.parentNode = this; },
+  };
+  const documentListeners = {};
   globalThis.document = {
     documentElement: { classList: { remove() {} } },
     body: { classList: { toggle() {} } }, fullscreenElement: null,
-    querySelector() { return toolbar; }, addEventListener() {},
-    async exitFullscreen() { this.fullscreenElement = null; },
+    querySelector() { return toolbar; },
+    addEventListener(type, fn) { documentListeners[type] = fn; },
+    async exitFullscreen() {
+      this.fullscreenElement = null;
+      documentListeners.fullscreenchange();
+    },
     createElement() {
       return {
         children: [], style: {}, setAttribute() {},
@@ -93,6 +101,8 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
   globalThis.window = { addEventListener(type, fn) { handlers[type] = fn; } };
   globalThis.fetch = async () => ({ ok: true, headers: { get: () => 'text/html' }, text: async () => '<html></html>' });
   let connected = false;
+  let minaBalance = 0n;
+  let pickaxeUnlocked = false;
   let connections = 0;
   let notifications = 0;
   $('connection-open').click = () => { connections++; };
@@ -102,6 +112,7 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
   const transfers = [];
   const update = setupGames($, {
     translate: (text) => text, isWalletConnected: () => connected, getGuestId: () => guestId,
+    getMinaBalance: () => minaBalance, hasMinaPickaxe: () => pickaxeUnlocked,
     openPlayerTransfer: (target) => transfers.push(target),
   });
   const fetchGame = globalThis.fetch;
@@ -142,10 +153,25 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
   assert.equal($('game-guide-wallet').textContent, 'Connect wallet');
   await $('game-close').listeners.click();
   assert.equal($('game-guide').open, false);
-  $('game-stage').requestFullscreen = async () => { document.fullscreenElement = $('game-stage'); };
+  $('game-controls-toggle').listeners.click();
+  assert.equal($('game-extra-controls').hidden, true);
+  $('game-stage').requestFullscreen = async () => {
+    document.fullscreenElement = $('game-stage');
+    documentListeners.fullscreenchange();
+  };
   await $('game-netcraft').listeners.click({ isTrusted: true });
   assert.equal(document.fullscreenElement, $('game-stage'));
-  await document.exitFullscreen();
+  assert.equal($('game-controls-right').parentNode, $('game-fullscreen-toolbar'));
+  assert.equal($('game-fullscreen')['aria-label'], 'Minimize CashCraft');
+  const gameUrl = $('game-frame').src;
+  await $('game-fullscreen').listeners.click();
+  assert.equal(document.fullscreenElement, null);
+  assert.equal($('game-dialog').hidden, true);
+  assert.equal($('game-frame').src, gameUrl);
+  $('game-restore').listeners.click();
+  assert.equal($('game-extra-controls').hidden, true);
+  $('game-controls-toggle').listeners.click();
+  assert.equal($('game-extra-controls').hidden, false);
   assert.equal($('game-guide').open, false);
   const message = (data) => handlers.message({ source: $('game-frame').contentWindow, data });
   message({ type: 'netcraft-ore-progress', counts: [2, 3, 4] });
@@ -169,7 +195,23 @@ test('wizard tips fade without blocking play and crafting appears after two rewa
   handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-mina-earned', rewards: 1 } });
   assert.equal($('game-crafting').hidden, true);
   handlers.message({ source: $('game-frame').contentWindow, data: { type: 'netcraft-mina-earned', rewards: 2 } });
+  assert.equal($('game-crafting').hidden, true);
+  const rewardAddress = 'bitcoincash:ztest';
+  connected = true;
+  minaBalance = 1n;
+  update(rewardAddress);
+  assert.equal($('game-crafting').hidden, true);
+  minaBalance = 2n;
+  update(rewardAddress);
   assert.equal($('game-crafting').hidden, false);
+  assert.equal($('game-wizard-craft').hidden, false);
+  pickaxeUnlocked = true;
+  update(rewardAddress);
+  assert.equal($('game-crafting').hidden, true);
+  pickaxeUnlocked = false;
+  connected = false;
+  update(null);
+  assert.equal($('game-crafting').hidden, true);
   $('game-notifications').listeners.click();
   assert.equal($('game-guide').open, true);
   $('game-guide-wallet').listeners.click();
