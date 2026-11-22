@@ -843,14 +843,16 @@ int _hit_test(
     int *hx, int *hy, int *hz)
 {
     int m = 32;
-    int px = 0;
-    int py = 0;
-    int pz = 0;
+    int px = roundf(x);
+    int py = roundf(y);
+    int pz = roundf(z);
+    // With noclip, the block containing the camera is not a mining target.
+    bool noclip = g->noclip && (g->mode != MODE_ONLINE || g->admin_tools);
     for (int i = 0; i < max_distance * m; i++) {
         int nx = roundf(x);
         int ny = roundf(y);
         int nz = roundf(z);
-        if (nx != px || ny != py || nz != pz) {
+        if ((i == 0 && !noclip) || nx != px || ny != py || nz != pz) {
             int hw = map_get(map, nx, ny, nz);
             if (hw > 0) {
                 if (previous) {
@@ -908,7 +910,7 @@ int hit_test_face(Player *player, int *x, int *y, int *z, int *face, int *nx, in
     if (!w) return 0;
 
     int hx, hy, hz;
-    hit_test(true, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
+    if (!hit_test(true, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz)) return 0;
     *nx = hx - *x;
     *ny = hy - *y;
     *nz = hz - *z;
@@ -3292,7 +3294,12 @@ void on_light() {
 
 int get_targeted_block(int *x, int *y, int *z, int *face) {
     int nx, ny, nz;
-    return hit_test_face(g->players, x, y, z, face, &nx, &ny, &nz);
+    *face = -1;
+    int block = hit_test_face(g->players, x, y, z, face, &nx, &ny, &nz);
+    if (block) return block;
+    // Mining needs a block, not a placement face.
+    State *s = &g->players->state;
+    return hit_test(false, s->x, s->y, s->z, s->rx, s->ry, x, y, z);
 }
 
 bool on_pickaxe_attack(void) {
@@ -4314,8 +4321,12 @@ void parse_buffer(char *buffer, int len) {
         if (line[0] == 'B' && sscanf(line, "B,%d,%d,%d,%d,%d,%d",
             &bp, &bq, &bx, &by, &bz, &bw) == 6)
         {
+            bool noclip = g->noclip && (g->mode != MODE_ONLINE || g->admin_tools);
+            Chunk *chunk = find_chunk(bp, bq);
+            bool newly_solid = !noclip && chunk && bw > 0 && is_obstacle(bw) &&
+                !is_obstacle(map_get(&chunk->map, bx, by, bz));
             _set_block(bp, bq, bx, by, bz, bw, false);
-            if (bw > 0 && is_obstacle(bw) && player_intersects_block(2, s->x, s->y, s->z, bx, by, bz)) {
+            if (newly_solid && player_intersects_block(2, s->x, s->y, s->z, bx, by, bz)) {
                 s->y = highest_block(s->x, s->z) + 2;
             }
         }

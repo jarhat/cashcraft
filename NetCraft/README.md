@@ -220,6 +220,9 @@ blocks with one press using the admin MINA axe. Reconnecting or changing
 wallets requires verification again.
 Deploy matching Rust server and game client builds: normal mining now starts
 with a timing message before the block edit.
+If the world is regenerated while retaining CashAddr reward history, ore at
+previously rewarded coordinates is still mineable but does not count toward
+another payout.
 
 Players can mine MINA ore without a wallet. Their browser stores a random bearer
 identity used to retain server-side progress and unclaimed rewards; clearing

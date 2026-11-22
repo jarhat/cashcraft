@@ -1263,9 +1263,22 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
                     params![ore_miner(&player), default, player.name],
                 )?;
             }
+            // Reward history can outlive a world reset. Re-mine the block without
+            // counting an already-credited coordinate toward another payout.
+            let reward_category = server.reward_categories.get(&default);
+            let reward_category = if reward_category.is_some() && transaction.query_row(
+                "SELECT EXISTS(SELECT 1 FROM mining_rewards WHERE x=?1 AND y=?2 AND z=?3)
+                     OR EXISTS(SELECT 1 FROM guest_mining_rewards WHERE x=?1 AND y=?2 AND z=?3)",
+                params![x, y, z],
+                |row| row.get::<_, bool>(0),
+            )? {
+                None
+            } else {
+                reward_category
+            };
             if let (Some(address), Some(category)) = (
                 player.reward_address.as_ref(),
-                server.reward_categories.get(&default),
+                reward_category,
             ) {
                 let mut qualifies = true;
                 if TRACKED_ORES.contains(&default) {
@@ -1307,7 +1320,7 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
             } else if TRACKED_ORES.contains(&default) && player.reward_address.is_none() {
                 if let (Some(guest), Some(category)) = (
                     player.guest_id.as_ref(),
-                    server.reward_categories.get(&default),
+                    reward_category,
                 ) {
                     transaction.execute(
                         "INSERT INTO guest_mining_progress (guest_id,category,blocks) VALUES (?1,?2,0)
@@ -2469,6 +2482,41 @@ mod tests {
         ).unwrap();
         assert_eq!(total, 2);
         assert_eq!(state.db.query_row("SELECT SUM(blocks) FROM ore_scores", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
+    }
+
+    #[test]
+    fn admin_can_mine_mina_ore_at_a_previously_rewarded_coordinate() {
+        let (server, first, _) = setup();
+        let address = "bitcoincash:zppyysjzgfpyysjzgfpyysjzgfpyysjzgg32rxwn8h";
+        let category = &server.reward_categories[&MINA_ORE];
+        let ore = ore_positions(&server);
+        let (x, y, z) = ore[0];
+        handle_command(&server, 1, &format!("W,{address}")).unwrap();
+        first.try_iter().for_each(drop);
+        {
+            let mut state = server.state.lock().unwrap();
+            state.players.get_mut(&1).unwrap().admin.granted = true;
+            state.db.execute(
+                "INSERT INTO mina_mining_progress (cash_address,category,blocks) VALUES (?1,?2,9)",
+                params![address, category],
+            ).unwrap();
+            state.db.execute(
+                "INSERT INTO mining_rewards (x,y,z,cash_address,category) VALUES (?1,?2,?3,?4,?5)",
+                params![x, y, z, address, category],
+            ).unwrap();
+        }
+        move_to(&server, (x, y, z));
+        assert!(handle_command(&server, 1, &format!("AB,{x},{y},{z}")).unwrap());
+        let output = String::from_utf8(first.try_iter().flatten().collect()).unwrap();
+        assert!(output.contains(&format!("B,0,0,{x},{y},{z},0\n")));
+        assert!(output.contains("I,83\n"));
+        assert!(output.contains("OP,9,0,0\n"));
+        let (nx, ny, nz) = ore[1];
+        move_to(&server, (nx, ny, nz));
+        assert!(handle_command(&server, 1, &format!("AB,{nx},{ny},{nz}")).unwrap());
+        let state = server.state.lock().unwrap();
+        assert_eq!(state.players[&1].inventory[MINA_ORE as usize], 2);
+        assert_eq!(completed_mina_rewards(&state.db, &state.players[&1], category).unwrap(), 2);
     }
 
     #[test]
