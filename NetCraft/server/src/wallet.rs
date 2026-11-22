@@ -5,15 +5,12 @@ use std::time::{Duration, Instant};
 
 #[derive(Clone, Default)]
 pub struct Session {
-    pub granted: bool,
-    pub flying: bool,
     challenge: Option<(Instant, String)>,
     last_request: Option<Instant>,
 }
 
 impl Session {
     pub fn revoke(&mut self) {
-        self.granted = false;
         self.challenge = None;
     }
 
@@ -45,7 +42,6 @@ pub struct Verifier {
 pub enum Proof {
     Rejected,
     Wallet,
-    Admin,
 }
 
 impl Verifier {
@@ -59,7 +55,7 @@ impl Verifier {
         // These fields come from the validated W command, our nonce, and base64.
         let verify = || -> io::Result<Proof> {
             let remote = self.target.to_socket_addrs()?.next()
-                .ok_or_else(|| io::Error::other("admin verifier address did not resolve"))?;
+                .ok_or_else(|| io::Error::other("wallet verifier address did not resolve"))?;
             let mut stream = TcpStream::connect_timeout(&remote, Duration::from_secs(2))?;
             stream.set_read_timeout(Some(Duration::from_secs(5)))?;
             stream.set_write_timeout(Some(Duration::from_secs(2)))?;
@@ -69,8 +65,7 @@ impl Verifier {
             let mut line = String::new();
             BufReader::new(stream.take(256)).read_line(&mut line)?;
             let proof = match line.split_ascii_whitespace().take(2).collect::<Vec<_>>().as_slice() {
-                ["HTTP/1.1" | "HTTP/1.0", "204"] => Proof::Admin,
-                ["HTTP/1.1" | "HTTP/1.0", "202"] => Proof::Wallet,
+                ["HTTP/1.1" | "HTTP/1.0", "204" | "202"] => Proof::Wallet,
                 _ => Proof::Rejected,
             };
             Ok(proof)

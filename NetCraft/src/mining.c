@@ -15,7 +15,7 @@ static double next_swing_sound = 0;
 static bool has_pickaxe = false;
 static bool wallet_pickaxe = false;
 static bool wallet_connected = false;
-static bool admin_axe = false;
+static double next_break_attempt;
 static bool holding_mine_button = false;
 static bool attacking_animal = false;
 static int building_progress = 0;
@@ -65,12 +65,6 @@ void mining_set_wallet_connected(int enabled) {
     update_pickaxe();
 }
 
-void mining_set_admin(bool enabled) {
-    if (admin_axe == enabled) return;
-    admin_axe = enabled;
-    mining_stop();
-}
-
 bool is_mining() {
     return holding_mine_button && target_w != 0 && !attacking_animal;
 }
@@ -100,7 +94,6 @@ void mining_tick() {
     target_w = get_targeted_block(&target_x, &target_y, &target_z, &target_face);
 
     if (holding_mine_button) {
-        if (admin_axe) return; // One instant break per press.
         bool was_attacking = attacking_animal;
         attacking_animal = on_pickaxe_attack();
         if (attacking_animal) {
@@ -139,10 +132,12 @@ void mining_tick() {
         if (hardness <= 0) mining_stage = 9;
         else mining_stage = (int)fmin(9, floor(elapsed / hardness * 9));
 
-        if (elapsed >= hardness) {
+        if (elapsed >= hardness && now >= next_break_attempt) {
+            next_break_attempt = now + .15;
+            on_mine();
+            if (target_w) on_mining_target(mining_x, mining_y, mining_z);
             mining_started = glfwGetTime();
             mining_stage = 0;
-            on_mine();
             return;
         }
     }
@@ -151,6 +146,7 @@ void mining_tick() {
 void mining_start() {
     holding_mine_button = true;
     mining_started = glfwGetTime();
+    next_break_attempt = mining_started;
     mining_swing_started = mining_started;
     has_swung = true;
     next_swing_sound = mining_started;
@@ -158,12 +154,7 @@ void mining_start() {
 
     mining_w = get_targeted_block(&mining_x, &mining_y, &mining_z, &target_face);
     if (!attacking_animal && mining_w && isfinite(is_hardness(mining_w))) {
-        if (admin_axe) {
-            on_mining_swing();
-            on_mine();
-        } else {
-            on_mining_target(mining_x, mining_y, mining_z);
-        }
+        on_mining_target(mining_x, mining_y, mining_z);
     }
 }
 

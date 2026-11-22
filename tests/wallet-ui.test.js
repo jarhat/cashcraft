@@ -74,6 +74,10 @@ test('MINA pickaxe follows the paid entitlement or a balance of 2 MINA', async (
     assert.equal(updates.at(-1), expected);
   }
   context.registeredRewardAddress = null;
+  context.nextUtxos = [token('mina', 1), token('mina', 1, 0, 1)];
+  context.updatePickaxeStatus = async () => assert.fail('no reward address');
+  await context.refreshBalances({ quiet: true });
+  assert.equal(context.minaPickaxe, true);
   context.nextUtxos = [token('mina', 1)];
   await context.refreshBalances({ quiet: true });
   assert.equal(context.minaPickaxe, false);

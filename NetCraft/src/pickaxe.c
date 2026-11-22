@@ -3,13 +3,11 @@
 #include "pickaxe.h"
 
 static int tool_vertices(float *vertices, int palette) {
-    static const float colors[3][6][3] = {
+    static const float colors[2][6][3] = {
         {{.20f, .16f, .12f}, {.55f, .40f, .24f}, {.20f, .22f, .24f},
          {.61f, .66f, .68f}, {.88f, .91f, .92f}, {.69f, .50f, .28f}},
         {{.20f, .16f, .12f}, {.55f, .40f, .24f}, {.08f, .23f, .17f},
-         {.19f, .65f, .40f}, {.48f, .96f, .67f}, {.69f, .50f, .28f}},
-        {{.06f, .32f, .18f}, {.13f, .58f, .31f}, {.08f, .23f, .17f},
-         {.19f, .65f, .40f}, {.48f, .96f, .67f}, {.28f, .81f, .48f}}
+         {.19f, .65f, .40f}, {.48f, .96f, .67f}, {.69f, .50f, .28f}}
     };
     static const float corners[6][2] = {
         {0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}
@@ -44,10 +42,6 @@ static int tool_vertices(float *vertices, int palette) {
 
 int pickaxe_vertices(float *vertices, bool mina) {
     return tool_vertices(vertices, mina ? 1 : 0);
-}
-
-int admin_axe_vertices(float *vertices) {
-    return tool_vertices(vertices, 2);
 }
 
 PickaxePose pickaxe_pose(int width, int height, bool mining, double elapsed) {

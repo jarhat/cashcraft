@@ -210,16 +210,11 @@ natural block removals until NetCraft observes a new BCHN tip. Rankings show
 currently connected, verified wallets only. Practice rounds restart with the
 server and do not accept stakes or pay prizes.
 
-To enable admin tools, set `NETCRAFT_ADMIN_BCH_ADDRESS` to the wallet's
-prefixed P2PKH CashAddr (token-aware or standard) in `.env`. Connect that wallet in
-CashCraft, register its reward address, and choose **Verify wallet** in the game guide. The
-built-in wallet signs the challenge directly; external wallets can paste a
-standard BCH signed-message proof. Any online player can double-tap Space
-to toggle flight. Verified admins can also use `/noclip` and break mineable
-blocks with one press using the admin MINA axe. Reconnecting or changing
-wallets requires verification again.
-Deploy matching Rust server and game client builds: normal mining now starts
-with a timing message before the block edit.
+Any online player can double-tap Space to toggle flight. Connected wallets
+holding at least 2 MINA equip the faster MINA pickaxe automatically. Wallet
+verification is only for challenges and does not grant special mining or
+movement abilities. Deploy matching Rust server and game client builds:
+online mining waits for the server to confirm the block removal.
 If the world is regenerated while retaining CashAddr reward history, ore at
 previously rewarded coordinates is still mineable but does not count toward
 another payout.

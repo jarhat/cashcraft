@@ -118,10 +118,6 @@ pub(super) fn command(state: &mut State, id: u32, args: &[&str]) -> rusqlite::Re
         error("Connect and verify your wallet in-game before playing a challenge.");
         return Ok(());
     }
-    if player.admin.granted && !matches!(args, ["list"]) {
-        error("Admin tools are not available in challenges. Use a regular player wallet.");
-        return Ok(());
-    }
     match args {
         ["invite", mode, invitees @ ..]
             if !invitees.is_empty() && invitees.len() <= MAX_INVITEES =>
@@ -146,7 +142,6 @@ pub(super) fn command(state: &mut State, id: u32, args: &[&str]) -> rusqlite::Re
                 || !ids.iter().all(|other| {
                     players.get(other).is_some_and(|p| {
                         eligible(p)
-                            && !p.admin.granted
                             && addresses.insert(p.reward_address.as_deref())
                     })
                 })
@@ -339,7 +334,7 @@ impl Challenges {
             let online = |id: &u32| {
                 players
                     .get(id)
-                    .is_some_and(|player| eligible(player) && !player.admin.granted)
+                    .is_some_and(eligible)
             };
             let close = |round: &Round| {
                 for (&id, player) in players {

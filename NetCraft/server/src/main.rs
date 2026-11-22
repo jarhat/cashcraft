@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-mod admin;
+mod wallet;
 mod flow;
 mod challenge;
 
@@ -67,6 +67,7 @@ extern "C" {
     fn world_stream(x: i32, z: i32, bottom: *mut i32, top: *mut i32) -> i32;
     fn world_stream_direction(x: i32) -> i32;
     fn world_spawn_x() -> i32;
+    fn world_surface(x: i32, z: i32, biome: *mut std::ffi::c_uint, water: *mut i32) -> i32;
     fn biome_at_pos(x: i32, z: i32) -> std::ffi::c_uint;
 }
 
@@ -117,7 +118,8 @@ struct Player {
     position: [f64; 5],
     reward_address: Option<String>,
     verified_wallet_address: Option<String>,
-    admin: admin::Session,
+    wallet_proof: wallet::Session,
+    flying: bool,
     mining_target: Option<([i32; 3], Instant)>,
     guest_id: Option<String>,
     inventory: [u32; 256],
@@ -190,7 +192,7 @@ struct Server {
     reward_categories: HashMap<i32, String>,
     address_prefix: String,
     reward_wake: Option<SyncSender<(i64, Player)>>,
-    wallet_verifier: Option<admin::Verifier>,
+    wallet_verifier: Option<wallet::Verifier>,
 }
 
 fn start_reward_wake() -> Result<Option<SyncSender<(i64, Player)>>, String> {
@@ -458,7 +460,10 @@ fn update_animals(server: &Server) -> rusqlite::Result<()> {
 }
 
 fn spawn_position() -> [f64; 5] {
-    [f64::from(unsafe { world_spawn_x() }), 0.0, 0.0, 0.0, 0.0]
+    let x = unsafe { world_spawn_x() };
+    let (mut biome, mut water) = (0, 0);
+    let y = unsafe { world_surface(x, 0, &mut biome, &mut water) } + 2;
+    [f64::from(x), f64::from(y), 0.0, 0.0, 0.0]
 }
 
 fn damage_player(state: &mut State, id: u32, amount: u8, death: &[u8]) {
@@ -469,13 +474,16 @@ fn damage_player(state: &mut State, id: u32, amount: u8, death: &[u8]) {
         player.position = spawn_position();
         player.lives = PLAYER_LIVES;
         player.inventory.fill(0);
+        player.mining_target = None;
         send(player, death.to_vec());
+        let [x, y, ..] = player.position;
+        send(player, format!("U,{id},{x},{y},0,0,0\n"));
     }
     send(player, format!("HP,{}\n", player.lives));
     if respawn {
         state.challenges.eliminated(id);
-        let x = spawn_position()[0];
-        broadcast(state, Some(id), &format!("P,{id},{x},0,0,0,0\n"));
+        let [x, y, ..] = spawn_position();
+        broadcast(state, Some(id), &format!("P,{id},{x},{y},0,0,0\n"));
     }
 }
 
@@ -1110,7 +1118,6 @@ enum BreakMode {
     #[cfg(test)]
     Direct,
     Timed,
-    Admin,
 }
 
 #[cfg(test)]
@@ -1147,9 +1154,6 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
     let Some(player) = state.players.get(&id).cloned() else {
         return Ok(());
     };
-    if mode == BreakMode::Admin && !player.admin.granted {
-        return Ok(());
-    }
     let edited: Option<i32> = state
         .db
         .query_row(
@@ -1194,7 +1198,6 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
                 .is_some_and(|(target, start)| target == [x, y, z]
                     && start.elapsed().as_secs_f32() >= (hardness * 0.25 - 0.02).max(0.0))
         }
-        BreakMode::Admin => !block_hardness(previous).is_finite(),
         #[cfg(test)]
         BreakMode::Direct => false,
     };
@@ -1365,7 +1368,7 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
     } else {
         None
     };
-    let challenge_block = w == 0 && edited.is_none() && previous == default && challenge::eligible(&player) && !player.admin.granted;
+    let challenge_block = w == 0 && edited.is_none() && previous == default && challenge::eligible(&player);
     if challenge_block {
         transaction.execute(
             "INSERT INTO cashaddr.challenge_mining(address,blocks) VALUES (?1,1)
@@ -1373,6 +1376,10 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
             [player.reward_address.as_deref().unwrap()],
         )?;
     }
+    let completed = match guest_progress.and_then(|_| server.reward_categories.get(&MINA_ORE)) {
+        Some(category) => Some(completed_mina_rewards(&transaction, &player, category)?),
+        None => None,
+    };
     transaction.commit()?;
     if challenge_block {
         state.challenges.mined(id);
@@ -1398,8 +1405,7 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
         }
         if let Some((blocks, unlocked)) = guest_progress {
             send(&player, format!("G,{blocks},{}\n", i32::from(unlocked)));
-            if let Some(category) = server.reward_categories.get(&MINA_ORE) {
-                let completed = completed_mina_rewards(&state.db, &player, category)?;
+            if let Some(completed) = completed {
                 send(&player, format!("ME,{completed}\n"));
             }
         }
@@ -1413,7 +1419,7 @@ fn apply_block_edit(server: &Server, id: u32, x: i32, y: i32, z: i32, w: i32, mo
         send(&player, format!("J,{x},{y},{z},{w},1\n"));
     }
     let changes = changes.concat();
-    if mode == BreakMode::Admin {
+    if w == 0 && mode == BreakMode::Timed {
         send(&player, changes.clone());
     }
     broadcast(&state, Some(id), &changes);
@@ -1719,16 +1725,20 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                 args[2].parse(),
                 args[3].parse(),
             ) {
-                apply_block_edit(server, id, x, y, z, w, BreakMode::Timed)?;
+                if let Err(error) = apply_block_edit(server, id, x, y, z, w, BreakMode::Timed) {
+                    eprintln!("client {id} block edit rolled back: {error}");
+                    if let Some(player) = server.state.lock().unwrap().players.get(&id) {
+                        send(player, b"T,Block edit could not be saved. Try again.\n".to_vec());
+                        if w > 0 {
+                            send(player, format!("J,{x},{y},{z},{w},0\n"));
+                        }
+                    }
+                }
             }
         }
-        "MB" | "AB" if args.len() == 3 => {
+        "MB" if args.len() == 3 => {
             if let (Ok(x), Ok(y), Ok(z)) = (args[0].parse(), args[1].parse(), args[2].parse()) {
-                if command == "AB" {
-                    if server.state.lock().unwrap().players.get(&id).is_some_and(|p| p.admin.granted) {
-                        apply_block_edit(server, id, x, y, z, 0, BreakMode::Admin)?;
-                    }
-                } else if let Some(player) = server.state.lock().unwrap().players.get_mut(&id) {
+                if let Some(player) = server.state.lock().unwrap().players.get_mut(&id) {
                     let target = [x, y, z];
                     player.mining_target = (target.iter().zip(player.position)
                         .take(3).map(|(&coord, pos)| (f64::from(coord) - pos).powi(2)).sum::<f64>() <= 100.0)
@@ -1739,7 +1749,7 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
         "WC" if args.is_empty() => {
             if let Some(player) = server.state.lock().unwrap().players.get_mut(&id) {
                 if server.wallet_verifier.is_some() && player.reward_address.is_some() {
-                    if let Some(nonce) = player.admin.request() {
+                    if let Some(nonce) = player.wallet_proof.request() {
                         send(player, format!("WC,{nonce}\n"));
                     }
                 } else {
@@ -1749,21 +1759,16 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
         }
         "WV" if args.len() == 1 => {
             let challenge = server.state.lock().unwrap().players.get_mut(&id).and_then(|player|
-                Some((player.reward_address.clone()?, player.admin.consume()?)));
+                Some((player.reward_address.clone()?, player.wallet_proof.consume()?)));
             if let (Some(verifier), Some((address, nonce))) = (&server.wallet_verifier, challenge) {
                 let result = verifier.verify(&address, &nonce, args[0]);
                 if let Some(player) = server.state.lock().unwrap().players.get_mut(&id) {
                     if player.reward_address.as_deref() == Some(&address) {
                         match result {
-                            admin::Proof::Rejected => send(player, b"T,Wallet verification failed.\n".to_vec()),
-                            admin::Proof::Wallet | admin::Proof::Admin => {
+                            wallet::Proof::Rejected => send(player, b"T,Wallet verification failed.\n".to_vec()),
+                            wallet::Proof::Wallet => {
                                 player.verified_wallet_address = Some(address);
-                                player.admin.granted = result == admin::Proof::Admin;
-                                send(player, if player.admin.granted {
-                                    b"WA,1\nT,Admin verified. The MINA axe breaks blocks instantly.\n".to_vec()
-                                } else {
-                                    b"WA,0\nT,Wallet verified.\n".to_vec()
-                                });
+                                send(player, b"T,Wallet verified.\n".to_vec());
                             }
                         }
                     }
@@ -1772,8 +1777,8 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
         }
         "AF" if args.is_empty() => {
             if let Some(player) = server.state.lock().unwrap().players.get_mut(&id) {
-                player.admin.flying = !player.admin.flying;
-                send(player, format!("AF,{}\n", u8::from(player.admin.flying)));
+                player.flying = !player.flying;
+                send(player, format!("AF,{}\n", u8::from(player.flying)));
             }
         }
         "L" if args.len() == 4 => {
@@ -1808,7 +1813,7 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
             if let Some(values) = values {
                 let mut state = server.state.lock().unwrap();
                 if let Some(player) = state.players.get_mut(&id) {
-                    if command == "FP" && !player.admin.flying {
+                    if command == "FP" && !player.flying {
                         return Ok(true);
                     }
                     if player.position.as_slice() != values.as_slice() {
@@ -1886,10 +1891,12 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
                 send(&player, format!("T,Players: {names}\n").into_bytes());
             } else if text == "/spawn" {
                 let position = spawn_position();
-                let x = position[0];
-                state.players.get_mut(&id).unwrap().position = position;
-                send(&player, format!("U,{id},{x},0,0,0,0\n").into_bytes());
-                broadcast(&state, Some(id), &format!("P,{id},{x},0,0,0,0\n"));
+                let [x, y, ..] = position;
+                let respawning = state.players.get_mut(&id).unwrap();
+                respawning.position = position;
+                respawning.mining_target = None;
+                send(&player, format!("U,{id},{x},{y},0,0,0\n").into_bytes());
+                broadcast(&state, Some(id), &format!("P,{id},{x},{y},0,0,0\n"));
             } else if text == "/chat" {
                 send(&player, b"T,Use /chat MESSAGE or type a message without a command.\n".to_vec());
             } else if text.starts_with('/') && !text.starts_with("/chat ") {
@@ -1969,11 +1976,8 @@ fn handle_command(server: &Server, id: u32, line: &str) -> rusqlite::Result<bool
 }
 
 fn reset_wallet_verification(player: &mut Player) {
-    let was_verified = player.verified_wallet_address.take().is_some();
-    player.admin.revoke();
-    if was_verified {
-        send(player, b"WA,0\n".to_vec());
-    }
+    player.verified_wallet_address = None;
+    player.wallet_proof.revoke();
 }
 
 fn write_client(mut stream: TcpStream, receiver: mpsc::Receiver<Vec<u8>>, interval: Duration) {
@@ -2007,7 +2011,7 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
             .checked_add(1)
             .ok_or_else(|| io::Error::other("player IDs exhausted"))?;
         let position = spawn_position();
-        let x = position[0];
+        let [x, y, ..] = position;
         let player = Player {
             sender,
             socket,
@@ -2015,7 +2019,8 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
             position,
             reward_address: None,
             verified_wallet_address: None,
-            admin: admin::Session::default(),
+            wallet_proof: wallet::Session::default(),
+            flying: false,
             mining_target: None,
             guest_id: None,
             inventory: [0; 256],
@@ -2027,7 +2032,7 @@ fn serve_client(server: Arc<Server>, stream: TcpStream) -> io::Result<()> {
         let now = world_time();
         send(
             &player,
-            format!("U,{id},{x},0,0,0,0\nN,{id},{}\nE,{now},{DAY_LENGTH}\nZN,{}\nHP,{PLAYER_LIVES}\nT,Welcome to NetCraft!\n",
+            format!("U,{id},{x},{y},0,0,0\nN,{id},{}\nE,{now},{DAY_LENGTH}\nZN,{}\nHP,{PLAYER_LIVES}\nT,Welcome to NetCraft!\n",
                 player.name, u8::from(is_night(now))).into_bytes(),
         );
         let mut snapshot = String::new();
@@ -2172,7 +2177,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         reward_wake: start_reward_wake()?,
         wallet_verifier: env::var("NETCRAFT_REWARD_API").ok().filter(|target| !target.is_empty())
             .zip(env::var("NETCRAFT_REWARD_WAKE_SECRET").ok().filter(|secret| !secret.is_empty()))
-            .map(|(target, secret)| admin::Verifier { target, secret }),
+            .map(|(target, secret)| wallet::Verifier { target, secret }),
     });
     if let (Ok(target), Ok(secret)) = (
         env::var("NETCRAFT_REWARD_API"),
@@ -2290,7 +2295,8 @@ mod tests {
                     position: [0.0, 1.0, 0.0, 0.0, 0.0],
                     reward_address: None,
                     verified_wallet_address: None,
-                    admin: admin::Session::default(),
+                    wallet_proof: wallet::Session::default(),
+                    flying: false,
                     mining_target: None,
                     guest_id: None,
                     inventory: [0; 256],
@@ -2485,7 +2491,7 @@ mod tests {
     }
 
     #[test]
-    fn admin_can_mine_mina_ore_at_a_previously_rewarded_coordinate() {
+    fn timed_mining_confirms_mina_ore_breaks_without_duplicate_rewards() {
         let (server, first, _) = setup();
         let address = "bitcoincash:zppyysjzgfpyysjzgfpyysjzgfpyysjzgg32rxwn8h";
         let category = &server.reward_categories[&MINA_ORE];
@@ -2494,8 +2500,7 @@ mod tests {
         handle_command(&server, 1, &format!("W,{address}")).unwrap();
         first.try_iter().for_each(drop);
         {
-            let mut state = server.state.lock().unwrap();
-            state.players.get_mut(&1).unwrap().admin.granted = true;
+            let state = server.state.lock().unwrap();
             state.db.execute(
                 "INSERT INTO mina_mining_progress (cash_address,category,blocks) VALUES (?1,?2,9)",
                 params![address, category],
@@ -2506,14 +2511,20 @@ mod tests {
             ).unwrap();
         }
         move_to(&server, (x, y, z));
-        assert!(handle_command(&server, 1, &format!("AB,{x},{y},{z}")).unwrap());
+        let mine = |x, y, z| {
+            handle_command(&server, 1, &format!("MB,{x},{y},{z}")).unwrap();
+            server.state.lock().unwrap().players.get_mut(&1).unwrap().mining_target =
+                Some(([x, y, z], Instant::now() - Duration::from_secs(2)));
+            assert!(handle_command(&server, 1, &format!("B,{x},{y},{z},0")).unwrap());
+        };
+        mine(x, y, z);
         let output = String::from_utf8(first.try_iter().flatten().collect()).unwrap();
         assert!(output.contains(&format!("B,0,0,{x},{y},{z},0\n")));
         assert!(output.contains("I,83\n"));
         assert!(output.contains("OP,9,0,0\n"));
         let (nx, ny, nz) = ore[1];
         move_to(&server, (nx, ny, nz));
-        assert!(handle_command(&server, 1, &format!("AB,{nx},{ny},{nz}")).unwrap());
+        mine(nx, ny, nz);
         let state = server.state.lock().unwrap();
         assert_eq!(state.players[&1].inventory[MINA_ORE as usize], 2);
         assert_eq!(completed_mina_rewards(&state.db, &state.players[&1], category).unwrap(), 2);
@@ -3113,7 +3124,7 @@ mod tests {
     }
 
     #[test]
-    fn admin_tools_require_a_verified_session_and_are_revoked_on_wallet_change() {
+    fn verification_does_not_enable_instant_mining_and_flight_is_public() {
         let (server, first, second) = setup();
         let address = "bitcoincash:zppyysjzgfpyysjzgfpyysjzgfpyysjzgg32rxwn8h";
         handle_command(&server, 1, &format!("W,{address}")).unwrap();
@@ -3128,7 +3139,6 @@ mod tests {
         {
             let mut state = server.state.lock().unwrap();
             let player = state.players.get_mut(&1).unwrap();
-            player.admin.granted = true;
             player.verified_wallet_address = Some(address.into());
         }
         handle_command(&server, 1, "AF").unwrap();
@@ -3136,11 +3146,48 @@ mod tests {
         handle_command(&server, 1, "FP,0,2,0,0,0").unwrap();
         assert_eq!(second.try_recv().unwrap(), b"P,1,0,2,0,0,0\n");
         handle_command(&server, 1, "AB,0,1,0").unwrap();
-        assert!(String::from_utf8(second.try_recv().unwrap()).unwrap().contains("B,0,0,0,1,0,0"));
+        assert!(second.try_recv().is_err());
         handle_command(&server, 1, "W,").unwrap();
         let state = server.state.lock().unwrap();
         assert!(state.players[&1].verified_wallet_address.is_none());
-        assert!(!state.players[&1].admin.granted);
+        assert!(state.players[&1].flying);
+    }
+
+    #[test]
+    fn spawn_sends_the_same_above_ground_position_to_both_clients() {
+        let (server, first, second) = setup();
+        handle_command(&server, 1, "T,/spawn").unwrap();
+        let [x, y, ..] = spawn_position();
+        let chunk = server.terrain.lock().unwrap().chunk(chunked(x as i32), 0);
+        assert!(chunk.get(&(x as i32, y as i32 - 2, 0)).is_some_and(|&w| w > 0));
+        assert!(!chunk.contains_key(&(x as i32, y as i32 - 1, 0)));
+        assert!(!chunk.contains_key(&(x as i32, y as i32, 0)));
+        assert_eq!(first.try_recv().unwrap(), format!("U,1,{x},{y},0,0,0\n").as_bytes());
+        assert_eq!(second.try_recv().unwrap(), format!("P,1,{x},{y},0,0,0\n").as_bytes());
+    }
+
+    #[test]
+    fn failed_block_write_leaves_the_player_connected_and_the_block_intact() {
+        let (server, first, second) = setup();
+        let (x, y, z) = ore_positions(&server)[0];
+        move_to(&server, (x, y, z));
+        {
+            let mut state = server.state.lock().unwrap();
+            state.players.get_mut(&1).unwrap().mining_target =
+                Some(([x, y, z], Instant::now() - Duration::from_secs(2)));
+            state.db.execute_batch(
+                "CREATE TEMP TRIGGER fail_block BEFORE INSERT ON block
+                 BEGIN SELECT RAISE(ABORT, 'test write failure'); END;"
+            ).unwrap();
+        }
+        assert!(handle_command(&server, 1, &format!("B,{x},{y},{z},0")).unwrap());
+        assert!(first.try_recv().unwrap().starts_with(b"T,Block edit could not be saved"));
+        assert!(second.try_recv().is_err());
+        {
+            let state = server.state.lock().unwrap();
+            assert_eq!(state.players[&1].inventory[MINA_ORE as usize], 0);
+            assert_eq!(state.db.query_row("SELECT COUNT(*) FROM block", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+        }
     }
 
     #[test]

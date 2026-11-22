@@ -239,8 +239,7 @@ typedef struct {
     int observe1;
     int observe2;
     bool flying;
-    bool admin_tools;
-    double admin_jump_at;
+    double flight_jump_at;
     int item_index;
     int scale;
     int ortho;
@@ -847,7 +846,7 @@ int _hit_test(
     int py = roundf(y);
     int pz = roundf(z);
     // With noclip, the block containing the camera is not a mining target.
-    bool noclip = g->noclip && (g->mode != MODE_ONLINE || g->admin_tools);
+    bool noclip = g->noclip && g->mode != MODE_ONLINE;
     for (int i = 0; i < max_distance * m; i++) {
         int nx = roundf(x);
         int ny = roundf(y);
@@ -2424,8 +2423,8 @@ void render_cover(Attrib *attrib, Player *player) {
 
 static GLuint crosshair_buffer;
 static int crosshair_width, crosshair_height, crosshair_scale;
-static GLuint pickaxe_buffers[3];
-static int pickaxe_counts[3];
+static GLuint pickaxe_buffers[2];
+static int pickaxe_counts[2];
 static GLuint heart_buffers[2];
 static int heart_counts[2];
 
@@ -2469,10 +2468,10 @@ static void end_hud_sprites(Attrib *attrib) {
 }
 
 static void render_pickaxe(Attrib *attrib) {
-    int mina = g->admin_tools ? 2 : mining_has_pickaxe() ? 1 : 0;
+    int mina = mining_has_pickaxe() ? 1 : 0;
     if (!pickaxe_buffers[mina]) {
         float vertices[PICKAXE_MAX_VERTICES * PICKAXE_VERTEX_COMPONENTS];
-        pickaxe_counts[mina] = mina == 2 ? admin_axe_vertices(vertices) : pickaxe_vertices(vertices, mina);
+        pickaxe_counts[mina] = pickaxe_vertices(vertices, mina);
         pickaxe_buffers[mina] = gen_buffer(
             pickaxe_counts[mina] * PICKAXE_VERTEX_COMPONENTS * sizeof(float), vertices);
     }
@@ -2789,13 +2788,6 @@ void add_message(const char *text) {
 static char username[128] = {0};
 static char access_token[128] = {0};
 
-static void set_admin_tools(bool enabled) {
-    if (!enabled && g->mode == MODE_ONLINE) g->noclip = false;
-    g->admin_tools = enabled;
-    g->admin_jump_at = -1;
-    mining_set_admin(enabled);
-}
-
 #ifdef __EMSCRIPTEN__
 static char reward_address[128] = {0};
 static char guest_id[65] = {0};
@@ -2876,7 +2868,6 @@ EMSCRIPTEN_KEEPALIVE void netcraft_set_reward_address(const char *address) {
         return;
     }
     if (strcmp(reward_address, address) == 0) return;
-    set_admin_tools(false);
     snprintf(reward_address, sizeof(reward_address), "%s", address);
     if (online_ready) {
         char message[160];
@@ -3226,9 +3217,9 @@ void parse_command(const char *buffer, bool forward) {
         cylinder(&g->block0, &g->block1, radius, 0);
     }
     else if (strcmp(buffer, "/noclip") == 0) {
-        if (g->mode == MODE_ONLINE && !g->admin_tools) {
+        if (g->mode == MODE_ONLINE) {
             g->noclip = false;
-            add_message("Verify the NetCraft admin wallet to use noclip online.");
+            add_message("Noclip is unavailable online.");
         } else {
             g->noclip = !g->noclip;
         }
@@ -3359,12 +3350,10 @@ void on_mine() {
     int hx, hy, hz, face;
     int hw = get_targeted_block(&hx, &hy, &hz, &face);
     if (hw && hy > DEEP_BEDROCK_Y && hy <= WORLD_MAX_Y && is_destructable(hw)) {
-        if (g->admin_tools && g->mode == MODE_ONLINE) {
+        if (g->mode == MODE_ONLINE) {
             State *s = &g->players->state;
             client_position(s->x, s->y, s->z, s->rx, s->ry, g->flying);
-            char message[64];
-            snprintf(message, sizeof(message), "AB,%d,%d,%d\n", hx, hy, hz);
-            client_send(message);
+            client_block(hx, hy, hz, 0);
             return;
         }
         set_block(hx, hy, hz, 0);
@@ -3516,11 +3505,11 @@ void on_key(GLFWwindow *window, int key, int scancode, int action, int mods) {
     }
     if (key == CRAFT_KEY_JUMP && !g->typing && g->mode == MODE_ONLINE) {
         double now = glfwGetTime();
-        if (g->admin_jump_at >= 0 && now - g->admin_jump_at < JUMP_FLY_THRESHOLD) {
+        if (g->flight_jump_at >= 0 && now - g->flight_jump_at < JUMP_FLY_THRESHOLD) {
             client_send("AF\n");
-            g->admin_jump_at = -1;
+            g->flight_jump_at = -1;
         } else {
-            g->admin_jump_at = now;
+            g->flight_jump_at = now;
         }
     }
     if (key == GLFW_KEY_ESCAPE) {
@@ -3992,7 +3981,7 @@ void handle_movement(double dt) {
         (void)old_step_y;
         (void)old_step_z;
 #endif
-        if (g->noclip && (g->mode != MODE_ONLINE || g->admin_tools)) continue;
+        if (g->noclip && g->mode != MODE_ONLINE) continue;
         if (collide(2, &s->x, &s->y, &s->z)) {
 #ifdef __EMSCRIPTEN__
             if (dy < 0) grounded = true;
@@ -4157,9 +4146,6 @@ void parse_buffer(char *buffer, int len) {
             pending_placement.active = false;
             Inventory_reset(&g->inventory);
             sync_inventory_items();
-            s->x = WORLD_SPAWN_X; s->y = 0; s->z = 0; s->rx = 0; s->ry = 0;
-            force_chunks(me);
-            s->y = highest_block(s->x, s->z) + 2;
         }
         unsigned int animal_id;
         float ax, ay, az;
@@ -4171,9 +4157,6 @@ void parse_buffer(char *buffer, int len) {
         }
         if (line[0] == 'M' && sscanf(line, "MD,%u", &animal_id) == 1) {
             animals_remove(animal_id);
-        }
-        if (!strcmp(line, "WA,0") || !strcmp(line, "WA,1")) {
-            set_admin_tools(line[3] == '1');
         }
         if (!strcmp(line, "AF,0") || !strcmp(line, "AF,1")) {
             g->flying = line[3] == '1';
@@ -4194,7 +4177,9 @@ void parse_buffer(char *buffer, int len) {
         {
             me->id = pid;
 #ifdef __EMSCRIPTEN__
-            if (!preserve_position) {
+            bool keep_position = preserve_position;
+            preserve_position = false;
+            if (!keep_position) {
 #endif
             s->x = ux; s->y = uy; s->z = uz; s->rx = urx; s->ry = ury;
             force_chunks(me);
@@ -4203,6 +4188,7 @@ void parse_buffer(char *buffer, int len) {
             }
 #ifdef __EMSCRIPTEN__
             }
+            client_position(s->x, s->y, s->z, s->rx, s->ry, g->flying);
 #endif
         }
         int bp, bq, bx, by, bz, bw;
@@ -4321,9 +4307,8 @@ void parse_buffer(char *buffer, int len) {
         if (line[0] == 'B' && sscanf(line, "B,%d,%d,%d,%d,%d,%d",
             &bp, &bq, &bx, &by, &bz, &bw) == 6)
         {
-            bool noclip = g->noclip && (g->mode != MODE_ONLINE || g->admin_tools);
             Chunk *chunk = find_chunk(bp, bq);
-            bool newly_solid = !noclip && chunk && bw > 0 && is_obstacle(bw) &&
+            bool newly_solid = chunk && chunk_is_ready(chunk) && bw > 0 && is_obstacle(bw) &&
                 !is_obstacle(map_get(&chunk->map, bx, by, bz));
             _set_block(bp, bq, bx, by, bz, bw, false);
             if (newly_solid && player_intersects_block(2, s->x, s->y, s->z, bx, by, bz)) {
@@ -4493,7 +4478,7 @@ void reset_model() {
     g->observe1 = 0;
     g->observe2 = 0;
     g->flying = false;
-    set_admin_tools(false);
+    g->flight_jump_at = -1;
     g->item_index = 0;
     Inventory_reset(&g->inventory);
     sync_inventory_items();
@@ -4774,10 +4759,7 @@ void client_opened(int fd, void *userData) {
         client_send(message);
     }
 #endif
-#ifdef __EMSCRIPTEN__
-    State *s = &g->players->state;
-    client_position(s->x, s->y, s->z, s->rx, s->ry, false);
-#else
+#ifndef __EMSCRIPTEN__
     main_inited();
 #endif
 }
@@ -4788,7 +4770,9 @@ void client_connection_failed(void) {
     connecting = false;
     online_ready = false;
     g->flying = false;
-    set_admin_tools(false);
+    g->flight_jump_at = -1;
+    mining_stop();
+    building_stop();
     for (int i = 0; i < g->chunk_count; ++i) {
         g->chunks[i].sync_pending = 0;
         g->chunks[i].needs_resync = 1;
@@ -4817,7 +4801,7 @@ void client_closed(int fd, void *userData) {
 #else
     add_message("Client closed the connection");
     g->flying = false;
-    set_admin_tools(false);
+    g->flight_jump_at = -1;
     client_disable();
 #endif
 }
@@ -4924,7 +4908,7 @@ void main_shutdown() {
         del_buffer(crosshair_buffer);
         crosshair_buffer = 0;
     }
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 2; i++) {
         if (pickaxe_buffers[i]) {
             del_buffer(pickaxe_buffers[i]);
             pickaxe_buffers[i] = 0;

@@ -1165,7 +1165,7 @@ def netcraft_admin_proof(proof: NetcraftAdminProof, request: Request) -> Respons
         address = prefix + ":" + payload + "".join(_CHARSET[(checksum >> shift) & 31]
                                                   for shift in range(35, -1, -5))
     except ValueError as exc:
-        raise HTTPException(status_code=403, detail="Admin wallet verification failed") from exc
+        raise HTTPException(status_code=403, detail="Wallet verification failed") from exc
     try:
         verified = bch_rpc("verifymessage", [
             address, proof.signature, f"CashCraft wallet login v1: {proof.nonce}",
@@ -1173,9 +1173,8 @@ def netcraft_admin_proof(proof: NetcraftAdminProof, request: Request) -> Respons
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Wallet verification unavailable") from exc
     if verified is not True:
-        raise HTTPException(status_code=403, detail="Admin wallet verification failed")
-    configured = os.getenv("NETCRAFT_ADMIN_BCH_ADDRESS", "").strip().lower()
-    return Response(status_code=204 if configured in (claimed, address) else 202)
+        raise HTTPException(status_code=403, detail="Wallet verification failed")
+    return Response(status_code=202)
 
 
 @app.get("/api/internal/netcraft-mempool")
