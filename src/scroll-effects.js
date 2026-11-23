@@ -8,36 +8,26 @@ export function scrollEffects(nav, hero, firstPanel, lastPanel) {
   return { opacity: 1 - overlap, cutoff, fadeEnd: cutoff ? cutoff + 28 : 0 };
 }
 
-export function initScrollEffects() {
-  const nav = document.querySelector('.topbar');
-  const fadeTargets = document.querySelectorAll('.hero-copy, .wizard-guide, .learn-section, footer, #log');
-  const firstPanel = document.querySelector('#connection-section');
-  const lastPanel = document.querySelector('#earn-section');
+export function updateScrollEffects(topbar) {
+  const height = topbar.getBoundingClientRect().height;
+  document.documentElement.style.setProperty('--topbar-height', `${Math.ceil(height)}px`);
+}
+
+export function setupScrollEffects() {
+  const topbar = document.querySelector('.topbar');
   let scheduled = false;
-
-  function update() {
-    scheduled = false;
-    const navBounds = nav.getBoundingClientRect();
-    const firstBounds = firstPanel.getBoundingClientRect();
-    const lastBounds = lastPanel.getBoundingClientRect();
-    const effect = scrollEffects(navBounds, fadeTargets[0].getBoundingClientRect(),
-      firstBounds, lastBounds);
-    nav.style.setProperty('--topbar-opacity', effect.opacity);
-    nav.classList.toggle('over-panels', effect.opacity === 0);
-    for (const target of fadeTargets) {
-      const fade = scrollEffects(navBounds, target.getBoundingClientRect(), firstBounds, lastBounds);
-      target.style.setProperty('--content-fade-start', `${effect.opacity ? fade.cutoff : 0}px`);
-      target.style.setProperty('--content-fade-end', `${effect.opacity ? fade.fadeEnd : 0}px`);
-    }
-  }
-
-  function schedule() {
-    if (!scheduled) {
-      scheduled = true;
-      requestAnimationFrame(update);
-    }
-  }
-  window.addEventListener('scroll', schedule, { passive: true });
+  const schedule = () => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      updateScrollEffects(topbar);
+    });
+  };
   window.addEventListener('resize', schedule);
-  update();
+  if ('ResizeObserver' in window) {
+    const observer = new ResizeObserver(schedule);
+    observer.observe(topbar);
+  }
+  updateScrollEffects(topbar);
 }

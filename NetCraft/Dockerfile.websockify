@@ -1,0 +1,6 @@
+FROM python:3.13-alpine
+RUN pip install --no-cache-dir websockify==0.13.0
+USER 65534:65534
+EXPOSE 4081
+ENTRYPOINT ["websockify"]
+CMD ["0.0.0.0:4081", "netcraft:4080"]

@@ -15,3 +15,15 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode !== 'navigate' || new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(fetch(event.request).catch(() => caches.match('/offline.html')));
 });
+
+self.addEventListener('notificationclick', (event) => {
+  if (event.notification.tag !== 'pairing-reminder') return;
+  event.notification.close();
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+    const client = clients.find((item) => {
+      const url = new URL(item.url);
+      return url.origin === self.location.origin && url.pathname === '/';
+    });
+    return client ? client.focus() : self.clients.openWindow('/');
+  }));
+});

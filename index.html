@@ -1,84 +1,71 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="voxel">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>if (['cashcraft', 'pk2'].includes(new URLSearchParams(location.search).get('game'))) document.documentElement.classList.add('game-link-loading');</script>
+  <link rel="stylesheet" href="/craft-loader.css">
   <meta name="theme-color" content="#05070b">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CTF Cash">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/pickaxe.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/pickaxe-192.png" type="image/png">
   <link rel="apple-touch-icon" href="/icon-192.png">
-  <meta name="description" content="Explore permissionless payments with CTF Cash. Connect your Bitcoin Cash wallet to send and receive CashTokens, share payment links, and track balances.">
+  <meta name="description" content="Play CashCraft together: explore, build and mine MINA CashTokens in a multiplayer Bitcoin Cash voxel world.">
+  <link rel="canonical" href='{{if or (eq (placeholder "http.request.scheme") "https") (eq (placeholder "http.request.header.X-Forwarded-Proto") "https")}}https{{else}}http{{end}}://{{placeholder "http.request.host"}}/'>
   <meta property="og:type" content="website">
-  <meta property="og:title" content="CTF Cash | Bitcoin Cash and CashToken Payments">
-  <meta property="og:description" content="Connect your Bitcoin Cash wallet to send and receive CashTokens, create payment links, and explore permissionless payments.">
-  <meta property="og:url" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/'>
-  <meta property="og:image" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/icon-512.png'>
-  <meta property="og:image:width" content="512">
-  <meta property="og:image:height" content="512">
-  <meta property="og:image:alt" content="CTF Cash: send and receive CashTokens">
-  <meta name="twitter:card" content="summary">
-  <meta name="twitter:image" content='{{placeholder "http.request.scheme"}}://{{placeholder "http.request.host"}}/icon-512.png'>
-  <title>CTF Cash | Bitcoin Cash and CashToken Payments</title>
+  <meta property="og:site_name" content="CashCraft">
+  <meta property="og:title" content="CashCraft | Multiplayer MINA mining">
+  <meta property="og:description" content="Play together: explore, build and mine MINA CashTokens in a Bitcoin Cash voxel world.">
+  <meta property="og:url" content='{{if or (eq (placeholder "http.request.scheme") "https") (eq (placeholder "http.request.header.X-Forwarded-Proto") "https")}}https{{else}}http{{end}}://{{placeholder "http.request.host"}}/'>
+  <meta property="og:image" content='{{if or (eq (placeholder "http.request.scheme") "https") (eq (placeholder "http.request.header.X-Forwarded-Proto") "https")}}https{{else}}http{{end}}://{{placeholder "http.request.host"}}/api/craft-preview.png?v=5'>
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="675">
+  <meta property="og:image:alt" content="CashCraft voxel artwork with green MINA gemstones and textured blocks.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="CashCraft | Multiplayer MINA mining">
+  <meta name="twitter:description" content="Play together: explore, build and mine MINA CashTokens in a Bitcoin Cash voxel world.">
+  <meta name="twitter:image" content='{{if or (eq (placeholder "http.request.scheme") "https") (eq (placeholder "http.request.header.X-Forwarded-Proto") "https")}}https{{else}}http{{end}}://{{placeholder "http.request.host"}}/api/craft-preview.png?v=5'>
+  <title>CTF / CASH</title>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "CTF Cash",
+      "applicationCategory": "GameApplication",
+      "operatingSystem": "Any",
+      "description": "Explore, build and mine MINA CashTokens together in a multiplayer Bitcoin Cash voxel game."
+    }
+  </script>
 </head>
 <body>
-  <div class="snow snow-one" aria-hidden="true"></div>
-  <div class="snow snow-two" aria-hidden="true"></div>
-  <div class="snow snow-three" aria-hidden="true"></div>
-  <div class="moon-background" aria-hidden="true">
-    <svg viewBox="0 0 128 128" shape-rendering="crispEdges">
-      <path fill="#071c26" d="M40 7h50v4h13v6h8v9h7v13h4v55h-5v12h-7v9h-10v7H88v4H38v-4H26v-7H16v-9H9V94H5V39h4V26h7v-9h10v-6h14z"/>
-      <path fill="#264d56" d="M39 3h49v4h13v6h9v9h7v13h4v55h-4v13h-7v9h-9v7H88v4H39v-4H26v-7h-9v-9h-7V90H6V35h4V22h7v-9h9V7h13z"/>
-      <path fill="#4f8586" d="M41 8h45v4h12v6h8v9h6v12h4v47h-4v12h-6v8h-8v6H86v4H41v-4H29v-6h-8v-8h-6V86h-4V39h4V27h6v-9h8v-6h12z"/>
-      <path fill="#80bdb2" d="M43 13h41v4h11v6h7v8h6v11h3v41h-3v11h-6v8h-7v5H84v4H43v-4H32v-5h-7v-8h-6V83h-3V42h3V31h6v-8h7v-6h11z"/>
-      <path fill="#315e64" d="M43 13h20v98H43v-4H32v-5h-7v-8h-6V83h-3V42h3V31h6v-8h7v-6h11z"/>
-      <path fill="#193e48" d="M43 21h16v8H39v6h-8v10h-6v30h6v12h8v9h20v8H38v-5H27v-8h-7V79h-4V45h4V33h7v-7h11v-5z"/>
-      <path fill="#b4e8d1" d="M75 17h10v4h10v6h7v8h4v11h-4V36h-6v-8h-7v-5H75zM102 70h5v13h-5v10h-7v7h-9v5H75v-4h9v-5h8v-7h6V79h4z"/>
-      <path fill="#508d88" d="M31 40h8v4h-8zM27 50h4v12h-4zM37 84h8v4h-8zM88 30h7v4h-7zM99 48h4v10h-4zM90 88h7v4h-7z"/>
-      <path fill="#c6f4d8" d="M36 17h5v5h-5zM27 24h4v4h-4zM92 106h5v5h-5zM101 98h4v4h-4z"/>
-      <g transform="translate(48 35) skewX(-12)">
-        <path fill="#163d39" d="M14 0h5v7h6V0h5v7h6v4h5v13h-5v4h5v4h4v14h-5v5h-8v7h-5v-7h-6v7h-5v-7H4v-6h5V13H4V7h10z"/>
-        <path fill="#d2ffdf" fill-rule="evenodd" d="M14 2h4v7h7V2h4v7h6v4h4v10h-4v5h-3v2h6v4h4v10h-4v5h-9v7h-4v-7h-7v7h-4v-7H6v-4h5V13H6V9h8zm4 11v12h11v-4h4v-5h-4v-3zm0 17v14h13v-4h4v-6h-4v-4z"/>
-        <path fill="#f3fff2" d="M14 9h21v4H14zM18 30h14v4H18z"/>
-      </g>
-      <path fill="#b4f7d8" d="M6 9h3v3h3v3H9v3H6v-3H3v-3h3zM117 111h3v3h3v3h-3v3h-3v-3h-3v-3h3zM116 9h3v3h-3zM4 108h3v3H4z"/>
-    </svg>
+  <div id="game-link-loader" class="craft-loader" role="status">
+    <div class="craft-loader-controls"><span class="craft-loading-ring" aria-hidden="true"></span><span>LOADING CASHCRAFT…</span></div>
   </div>
+  <div class="market-strip" aria-label="Bitcoin Cash blockchain status">
+    <div class="chain-label">
+      <span class="market-label">BCH / CHAIN</span>
+      <span class="network"><i aria-hidden="true"></i><span id="network">CHIPNET</span><span id="network-wallet-status" class="visually-hidden">Not connected</span></span>
+    </div>
+    <div id="chain-ticker" class="market-ticker" role="region" tabindex="0" aria-label="Detailed Bitcoin Cash node statistics and ore mined">Loading blockchain status…</div>
+    <svg class="holiday-flight" viewBox="0 0 64 24" shape-rendering="crispEdges" aria-hidden="true">
+      <path fill="#cf3744" d="M5 10h13v6H5zm4-6h6v6H9z"/><path fill="#fff" d="M8 3h7v2H8zm0 7h8v2H8zM15 5h2v3h-2z"/><path fill="#eac09b" d="M10 7h5v3h-5z"/>
+      <path fill="#ad774f" d="M33 10h13v6H33zm11-4h5v7h-5zM35 16h2v4h-2zm8 0h2v4h-2z"/><path fill="#e9c38b" d="M46 3h2v4h-2zm3 1h2v4h-2z"/><path fill="#e34a4a" d="M49 8h2v2h-2z"/><path fill="#9ab8c6" d="M18 15h15v1H18zM3 19h20v1H3z"/>
+    </svg>
+    <button id="donate-open" class="donate-open" type="button" aria-label="Donate Bitcoin Cash" title="Donate Bitcoin Cash" aria-haspopup="dialog" aria-controls="donate-dialog">
+      <svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><path fill="#22a85a" d="M2 2h4v1h1v1h2V3h1V2h4v1h1v5h-1v2h-1v1h-1v1h-1v1H9v1H7v-1H5v-1H4v-1H3v-1H2V8H1V3h1z"/><path fill="#9cf2b6" d="M3 3h3v1H4v1H3z"/></svg>
+    </button>
+  </div>
+  <canvas id="snow-canvas" class="snow" aria-hidden="true"></canvas>
   <main class="shell">
     <header class="topbar">
-      <a class="brand" href="#">
-        <img class="brand-mark" src="/icon.svg" alt="" width="28" height="28">
-        CTF
-        <span class="brand-dim">/ CASH</span>
-      </a>
-      <nav class="quick-nav" aria-label="Wallet actions">
-        <button id="top-send" class="quick-action active" type="button" aria-controls="send-panel">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M12 5l7 7-7 7" /></svg>
-          <span>Send</span>
-        </button>
-        <button id="top-receive" class="quick-action" type="button" aria-controls="receive-panel">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 8.8c0 5.1-8.8 10-8.8 10s-8.8-4.9-8.8-10a4.7 4.7 0 0 1 8.8-2.2 4.7 4.7 0 0 1 8.8 2.2Z" /></svg>
-          <span>Receive</span>
-        </button>
-        <button id="top-earn" class="quick-action" type="button" aria-controls="earn-section">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18v4H3zM5 12v9h14v-9M12 8v13M12 8H8.5a2.5 2.5 0 1 1 2.3-3.5L12 8Zm0 0h3.5a2.5 2.5 0 1 0-2.3-3.5L12 8Z" /></svg>
-          <span>Earn</span>
-        </button>
-      </nav>
-      <div class="topbar-tools">
-        <span class="network"><i></i><span id="network">CHIPNET</span></span>
-        <div class="tool-menu">
-          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Choose theme" aria-expanded="false" aria-controls="theme-menu">
-            <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.7 1.7 0 0 1 1.3-2.7H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><circle cx="7.5" cy="11" r=".7"/><circle cx="10" cy="7.5" r=".7"/><circle cx="14" cy="7.5" r=".7"/><circle cx="17" cy="11" r=".7"/></svg>
-          </button>
-          <div id="theme-menu" class="tool-dropdown" hidden>
-            <button type="button" data-theme-option="dark">Dark</button>
-            <button type="button" data-theme-option="blue">Blue</button>
-            <button type="button" data-theme-option="green">Green</button>
-          </div>
-        </div>
+      <div class="crystal-scene" aria-hidden="true">
+        <div class="crystal"><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div id="topbar-tools-left" class="topbar-tools topbar-tools-left">
         <div class="tool-menu">
           <button id="language-toggle" class="theme-toggle" type="button" aria-label="Choose language" aria-expanded="false" aria-controls="language-menu">
             <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 4 6 4 9s-1 6-4 9c-3-3-4-6-4-9s1-6 4-9Z"/></svg>
@@ -86,109 +73,157 @@
           <div id="language-menu" class="tool-dropdown" hidden>
             <button type="button" data-language-option="en" lang="en">English</button>
             <button type="button" data-language-option="es" lang="es">Español</button>
+            <button type="button" data-language-option="fr" lang="fr">Français</button>
+            <button type="button" data-language-option="de" lang="de">Deutsch</button>
           </div>
         </div>
-        <button id="notifications-toggle" class="theme-toggle notification-toggle" type="button" aria-label="Notifications" aria-controls="notifications-dialog" aria-describedby="notification-indicator" aria-haspopup="dialog">
-          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9ZM10 20h4"/></svg>
-          <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread payment request</span></span>
+      </div>
+      <nav id="quick-nav" class="quick-nav" aria-label="Wallet actions" data-wallet-panel hidden>
+        <button id="top-send" class="quick-action" type="button" aria-controls="send-panel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M12 5l7 7-7 7" /></svg>
+          <span>Send</span>
+        </button>
+        <button id="top-receive" class="quick-action" type="button" aria-controls="receive-panel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 19h16" /></svg>
+          <span>Receive</span>
+        </button>
+        <button id="notifications-toggle" class="theme-toggle notification-toggle" data-wallet-panel hidden type="button" aria-label="Wallet notifications" aria-controls="notifications-dialog" aria-describedby="notification-indicator" aria-haspopup="dialog">
+          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M4 6V5a2 2 0 0 1 2-2h12v3m3 5h-5a2 2 0 0 0 0 4h5"/><circle cx="16" cy="13" r=".6"/></svg>
+          <span id="notification-indicator" class="notification-indicator" hidden><span class="visually-hidden">Unread notification</span></span>
+        </button>
+      </nav>
+
+      <div class="topbar-tools topbar-tools-right">
+        <button id="connection-open" class="theme-toggle" hidden type="button" aria-label="Wallet connection" aria-haspopup="dialog" aria-controls="connection-dialog">
+          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M4 6V5a2 2 0 0 1 2-2h12v3m3 5h-5a2 2 0 0 0 0 4h5"/><circle cx="16" cy="13" r=".6"/></svg>
         </button>
       </div>
+      <aside id="wizard-guide" class="wizard-guide" aria-label="Wizard tutorial">
+        <button id="logout" class="wizard-logout" type="button" aria-label="Disconnect wallet" title="Disconnect wallet" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3m6-12 5 4-5 4m5-4H9"/></svg>
+        </button>
+        <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="No wallet? Open wizard help">
+          <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true"><path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/><path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/><path fill="#f0c7ae" d="M13 18h10v8H13z"/><path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/><path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/><path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/><path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/><path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/><path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/></svg>
+          <span>No wallet?</span>
+        </button>
+      </aside>
     </header>
 
-    <section class="hero">
-      <div class="hero-copy">
-        <p class="eyebrow">BITCOIN CASH · CASHTOKENS</p>
-        <h1 class="hero-headline" aria-label="Send and receive CashTokens, create payment links, and track token balances">
-          <span class="hero-slide" aria-hidden="true">Send<br><span>CashTokens</span></span>
-          <span class="hero-slide" aria-hidden="true">Receive<br><span>CashTokens</span></span>
-          <span class="hero-slide" aria-hidden="true">Create<br><span>Payment links</span></span>
-          <span class="hero-slide" aria-hidden="true">Track<br><span>Token balances</span></span>
-        </h1>
-        <p class="intro">
-          Money should move as freely as you do. Connect your Bitcoin Cash wallet to send and receive CashTokens, share payment links, and explore your balances.
-        </p>
-        <p class="intro">New to permissionless payments? Bitcoin Cash lets you send peer-to-peer without asking a payment provider for permission. Your wallet keeps your keys; you approve every transaction.</p>
-      </div>
-    </section>
-
-    <aside class="wizard-guide" aria-label="Wizard tutorial">
-      <button id="wizard-toggle" class="wizard-toggle" type="button" aria-expanded="false" aria-controls="wizard-dialog" aria-label="Toggle wizard tutorial">
-        <svg viewBox="0 0 32 40" shape-rendering="crispEdges" aria-hidden="true">
-          <path fill="#003b9f" d="M24 1h3v4h-2v5h-2v5h3v3H9v-3h4v-3h3V9h3V6h3V3h2z"/>
-          <path fill="#0087ff" d="M24 4h1v5h-2v4h-4v2h5v2H11v-1h4v-3h3V9h3V6h3z"/>
-          <path fill="#f0c7ae" d="M13 18h10v8H13z"/>
-          <path fill="#172749" d="M14 20h2v2h-2zm6 0h2v2h-2z"/>
-          <path fill="#dcecff" d="M12 24h12v4h-2v3h-8v-3h-2z"/>
-          <path fill="#353c93" d="M10 27h5v4h7v-4h4v4h2v7H7v-7h3z"/>
-          <path fill="#769dff" d="M12 30h2v5h-2zm11 0h2v5h-2z"/>
-          <path fill="#162858" d="M7 37h9v2H6v-1zm13 0h9v2h-9z"/>
-          <path fill="#cfa56e" d="M4 23h2v15H4z"/><path fill="#ffe887" d="M3 21h4v3H3z"/>
-        </svg>
-        <span>Wizard help</span>
+    <div class="game-panel">
+    <div id="game-toolbar" class="game-toolbar">
+      <button id="wiki-open" class="theme-toggle" type="button" aria-label="CashTokens wiki" aria-haspopup="dialog" aria-controls="wiki-dialog">
+        <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-2-2-5-2-9-1v13c4-1 7-1 9 1m0-13c2-2 5-2 9-1v13c-4-1-7-1-9 1m0-13v13"/></svg>
       </button>
+      <button id="game-netcraft" class="theme-toggle cashcraft-launcher" type="button" aria-controls="game-dialog">
+        <img src="/pickaxe.svg" alt="" width="24" height="24">CashCraft
+      </button>
+      <button id="game-pk2" type="button" hidden>🐔 Pekka Kana 2</button>
+      <div id="game-minimized-controls" class="game-minimized-controls" hidden>
+        <nav id="minimized-wallet-actions" class="minimized-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
+        <div class="game-minimized-buttons">
+          <button id="game-restore" class="game-minimized-icon" type="button" aria-label="Resume CashCraft" title="Resume CashCraft">
+            <img src="/icon.svg" alt="">
+          </button>
+        </div>
+      </div>
+      <div id="game-controls-right" class="game-controls game-controls-right" role="group" aria-label="CashCraft controls">
+        <button id="game-close" type="button" aria-label="Minimize CashCraft" title="Minimize CashCraft">−</button>
+        <div id="game-extra-controls" class="game-extra-controls">
+        <button id="game-ranking" class="game-ranking-button" type="button" aria-label="Challenges and rankings" title="Challenges and rankings" aria-haspopup="dialog" aria-controls="ranking-dialog" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v3a4 4 0 0 1-8 0zm0 1H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4M12 11v5m-4 4h8m-7-4h6v4"/></svg>
+        </button>
+        <button id="game-invite" type="button" aria-label="Invite to CashCraft" title="Invite to CashCraft" aria-haspopup="dialog" aria-controls="invite-dialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>
+        </button>
+        <button id="game-sound" type="button" aria-label="Game sound" title="Game sound" aria-pressed="true" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="sound-waves" d="M16 9a5 5 0 0 1 0 6m2-8a7.25 7.25 0 0 1 0 10"/><path class="sound-muted" d="m16 10 4 4m0-4-4 4"/></svg>
+        </button>
+        <button id="game-send" type="button" aria-label="Send tokens to a player" title="Send tokens to a player" aria-haspopup="dialog" aria-controls="game-send-dialog" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17V4m-5 5 5-5 5 5M4 17v3h16v-3"/></svg>
+        </button>
+        <button id="game-receive" type="button" aria-label="Receive tokens" title="Receive tokens" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v13m-5-5 5 5 5-5M4 17v3h16v-3"/></svg>
+        </button>
+        </div>
+        <button id="game-notifications" type="button" aria-label="Game guide and wallet" title="Game guide and wallet" aria-haspopup="dialog" aria-controls="game-guide">
+          <img class="game-hub-wizard" src="/wizard.svg" alt="">
+          <img src="/mina-gem.svg" alt="">
+          <span id="game-notification-indicator" class="visually-hidden" hidden>Unread wallet notification</span>
+        </button>
+        <button id="game-crafting" type="button" aria-label="Craft a MINA pickaxe with 2 MINA" title="Craft a MINA pickaxe with 2 MINA" hidden>
+          <img src="/mina-pickaxe.svg" alt="">
+        </button>
+        <button id="game-fullscreen" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fullscreen-expand" d="M4 9V4h5m6 0h5v5M20 15v5h-5M9 20H4v-5"/><path class="fullscreen-collapse" d="M4 9h5V4m6 0v5h5m0 6h-5v5m-6 0v-5H4"/></svg>
+        </button>
+      </div>
+    </div>
+    </div>
+
       <div id="wizard-dialog" class="wizard-dialog" hidden>
         <strong id="wizard-title"></strong>
         <p id="wizard-message" aria-live="polite"></p>
+        <div id="wallet-help">
+          <p>New here? Create or restore a browser wallet in the connection dialog, or connect a compatible wallet below. Back up your recovery phrase and never share it.</p>
+          <div class="wallet-options" role="group" aria-label="Choose your wallet">
+            <button type="button" class="wallet-choice" data-wallet-choice="selene"><img class="wallet-icon" src="https://raw.githubusercontent.com/fyookball/selene3/3049d71ca26caf744e4d349ddb727a9e71a57a2b/icons/icon-96.webp" alt="" referrerpolicy="no-referrer"><span class="wallet-icon-fallback" aria-hidden="true">☾</span> <span>Selene</span></button>
+            <button type="button" class="wallet-choice" data-wallet-choice="cashonize"><img class="wallet-icon" src="https://raw.githubusercontent.com/cashonize/cashonize-wallet/ff731f9dacdc9b6ae0194292fa144da248f620b3/public/images/cashonize-icon.png" alt="" referrerpolicy="no-referrer"> <span>Cashonize</span></button>
+            <button type="button" class="wallet-choice" data-wallet-choice="paytaca"><img class="wallet-icon" src="https://raw.githubusercontent.com/paytaca/paytaca-app/f12d121932e98c41520ce0df37727bf826dd955d/public/icons/paytaca_logo.png" alt="" referrerpolicy="no-referrer"> <span>Paytaca</span></button>
+          </div>
+          <details class="wallet-install">
+            <summary>Need to install a wallet?</summary>
+            <p><a href="https://selene.cash" target="_blank" rel="noopener noreferrer">selene.cash ↗</a> · <a href="https://cashonize.com" target="_blank" rel="noopener noreferrer">cashonize.com ↗</a> · <a href="https://www.paytaca.com" target="_blank" rel="noopener noreferrer">paytaca.com ↗</a></p>
+          </details>
+          <p>Pick your wallet to start pairing, then approve the connection there and return to this browser. Use a wallet on the same network shown above.</p>
+          <details class="wizard-game-help">
+            <summary>Game controls, rewards and crafting</summary>
+            <ul>
+              <li><strong>Dice button</strong>: choose a game.</li>
+              <li><strong>Joystick (touch)</strong>: move; the four-way arrow shows the direction pad.</li>
+              <li><strong>Mine</strong> (hold): break blocks. <strong>Build</strong>: place the selected block. <strong>Jump</strong>: jump.</li>
+              <li><strong>Block selection</strong>: scroll the mouse wheel, or drag up or down on the right edge of the screen on touch devices.</li>
+              <li><strong>Rewards</strong>: mining MINA ore pays MINA-linked CashTokens. Redstone, gold and lapis ores pay separate token categories when the operator configures them.</li>
+              <li><strong>Crafting</strong>: mine 10 MINA ore blocks for 1 MINA, add your 1 welcome MINA, then craft the green pickaxe from 7 wood and 2 MINA gems.</li>
+            </ul>
+          </details>
+        </div>
         <div class="wizard-controls">
+          <button id="wizard-close" class="small-button" type="button">Close</button>
           <button id="wizard-prev" class="small-button" type="button">Back</button>
           <span id="wizard-progress"></span>
           <button id="wizard-next" class="small-button" type="button">Next</button>
         </div>
       </div>
-    </aside>
 
-    <section class="grid">
-      <article id="connection-section" class="panel">
-        <div class="heading">
-          <div>
-            <p class="eyebrow">WALLET SESSION</p>
-            <h2>Connection</h2>
-          </div>
-          <span id="dot" class="dot"></span>
-        </div>
-
-        <p id="status" class="status">Not connected</p>
-
-        <div id="pairing" class="pairing hidden">
-          <canvas id="qr"></canvas>
-          <p class="pair-title">Scan with your WizardConnect wallet</p>
-          <p class="muted">
-            Open the wallet’s WizardConnect scanner, scan the code, then approve
-            the connection in the wallet.
-          </p>
-          <a id="open-wallet" class="button secondary wallet-link">Open in wallet <span aria-hidden="true">↗</span></a>
-          <details>
-            <summary>Show pairing URI</summary>
-            <div class="uri-line">
-              <code id="pair-uri"></code>
-              <button id="copy-uri" class="small-button">Copy</button>
-            </div>
-          </details>
-        </div>
-
-        <button id="connect" class="button primary">
-          Connect / reconnect wallet <span>↗</span>
-        </button>
-        <button id="forget" class="button secondary">
-          Forget saved session and pair again
-        </button>
-        <button id="refresh" class="button secondary" disabled>
-          Refresh balances
-        </button>
-      </article>
-
-      <article id="balance-section" class="panel">
+    <div class="dashboard">
+      <div class="landing-welcome panel">
+        <p class="eyebrow">BITCOIN CASH · CASHTOKENS</p>
+        <h2 class="mina-label">Explore, build and mine MINA together.</h2>
+        <p class="muted">Join the multiplayer voxel world with your Bitcoin Cash wallet, or create a browser wallet to play.</p>
+        <button id="landing-connect" class="button primary" type="button">Connect wallet <span aria-hidden="true">→</span></button>
+        <ul class="landing-features">
+          <li><strong>Multiplayer</strong><span>Explore and build together in a shared world.</span></li>
+          <li><strong class="mina-label">Mine MINA</strong><span>Discover MINA ore and receive CashToken rewards when payouts succeed.</span></li>
+          <li><strong>Your wallet</strong><span>Connect a wallet or create an encrypted browser wallet.</span></li>
+          <li><strong>Crafting table</strong><span>Manage and share your CashTokens.</span></li>
+        </ul>
+        <p class="swap-note">Have BTC? You can swap it for BCH with <a href="https://sideshift.ai" target="_blank" rel="noopener noreferrer">SideShift ↗</a>. This independent service uses mainnet; check the rate, fees and recipient address.</p>
+      </div>
+      <article id="balance-section" class="panel" data-wallet-panel hidden>
         <div class="heading">
           <div>
             <p class="eyebrow">NATIVE BALANCE</p>
             <h2>Bitcoin Cash</h2>
           </div>
-          <span class="coin">₿</span>
+          <img class="balance-bch-logo" src="/bitcoin-cash-official.svg" alt="Bitcoin Cash">
         </div>
 
         <p id="bch" class="balance">— <small>BCH</small></p>
         <p id="usd" class="muted">USD value —</p>
-
+        <div class="balance-extras">
+          <p>CashTokens <strong id="tokens-usd">USD value unavailable</strong></p>
+          <p><img class="mina-gem" src="/mina-gem.svg" alt=""> MINA <strong id="mina-balance">Unavailable</strong></p>
+        </div>
         <div class="divider"></div>
 
         <p class="eyebrow">FIRST RECEIVE ADDRESS</p>
@@ -197,21 +232,44 @@
           <button id="copy-address" class="small-button" disabled>Copy</button>
         </div>
       </article>
-    </section>
 
-    <section id="transfer-section" class="panel section transfer-panel">
+    <section id="earn-section" class="panel section" data-wallet-panel hidden>
       <div class="heading">
         <div>
-          <p class="eyebrow">TRANSFER</p>
+          <p class="eyebrow">PORTFOLIO</p>
           <h2>Tokens</h2>
         </div>
-        <span class="arrow" aria-hidden="true">↗</span>
+      </div>
+      <p id="token-count" class="muted">—</p>
+      <label id="show-nfts-control" class="nft-toggle"><input id="show-nfts" type="checkbox"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM7 16l3-3 2 2 3-4 2 2M8 8h.01"/></svg><span>Show NFTs</span></label>
+      <div id="tokens" class="token-list">
+        <div class="empty">Connect your wallet to load balances.</div>
+      </div>
+      <p id="portfolio-empty-filter" class="muted" hidden>No fungible tokens found. Show NFTs to view your collectibles.</p>
+      <div id="portfolio-pagination" class="portfolio-pagination" hidden>
+        <button id="portfolio-prev" class="small-button" type="button">Previous</button>
+        <span id="portfolio-page" aria-live="polite"></span>
+        <button id="portfolio-next" class="small-button" type="button">Next</button>
+      </div>
+      <details id="portfolio-chart" class="portfolio-chart" hidden>
+        <summary>Portfolio allocation</summary>
+        <p class="fine">Indicative Cauldron pool spot values in BCH; excludes tokens without a price and does not account for fees or price impact.</p>
+        <div id="portfolio-chart-content" aria-live="polite">Connect a wallet to view allocation.</div>
+      </details>
+    </section>
+
+    <section id="transfer-section" class="panel section transfer-panel" data-wallet-panel hidden>
+      <div class="heading">
+        <div>
+          <p class="eyebrow">CASHTOKENS</p>
+          <h2>Crafting table</h2>
+        </div>
       </div>
 
       <div class="transfer-tabs" role="tablist" aria-label="Token transfer">
         <button
           id="send-tab"
-          class="transfer-tab active"
+          class="transfer-tab"
           type="button"
           role="tab"
           aria-selected="true"
@@ -232,51 +290,63 @@
       </div>
 
       <div id="send-panel" class="tab-panel" role="tabpanel" aria-labelledby="send-tab">
+        <p class="swap-note cauldron-link"><a href="https://cauldron.quest/" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">🧪✨</span> Swap tokens on Cauldron ↗</a> · independent service; check rates and fees.</p>
         <div class="form">
           <div>
-            <div id="category-selector">
-            <label for="category-select">Available tokens</label>
-            <select id="category-select" aria-label="Choose an available token" disabled>
-              <option value="">Enter a category ID manually</option>
-            </select>
-            </div>
             <label for="category">Token category ID</label>
-            <input
-              id="category"
-              placeholder="64-character category ID"
-              autocomplete="off"
-              spellcheck="false"
-            >
+            <div class="category-field">
+              <span id="category-icon" class="token-icon category-input-icon" aria-hidden="true" hidden>◆</span>
+              <input
+                id="category"
+                placeholder="64-character category ID"
+                autocomplete="off"
+                spellcheck="false"
+              >
+              <div id="category-selector">
+                <select id="category-select" aria-label="Choose an available token" hidden disabled>
+                  <option value="">Enter a category ID manually</option>
+                </select>
+                <details id="token-options" class="token-options" hidden>
+                  <summary aria-label="Choose an available token" title="Choose an available token">▾</summary>
+                  <div id="token-options-list"></div>
+                </details>
+              </div>
+            </div>
           </div>
 
           <label>
             Amount
             <input
               id="amount"
+              type="text"
               inputmode="numeric"
+              name="send-token-units"
               placeholder="Whole token units"
               autocomplete="off"
             >
+            <span id="amount-help" class="fine">Enter whole base units. Select a token to see its decimals and available balance.</span>
           </label>
           <label class="full">
             Recipient token-aware CashAddr
             <input
               id="recipient"
-              placeholder="bchtest:z… or bitcoincash:z…"
+              placeholder="bitcoincash:z…"
               autocomplete="off"
               spellcheck="false"
             >
           </label>
         </div>
 
+        <p id="crafting-note" class="swap-note" hidden></p>
+        <div id="pickaxe-recovery" hidden>
+          <label for="pickaxe-transaction">Pickaxe payment transaction ID</label>
+          <input id="pickaxe-transaction" autocomplete="off" maxlength="64">
+          <button id="pickaxe-retry" class="small-button" type="button">Retry pickaxe verification</button>
+        </div>
         <button id="send" class="button primary send">
           Review and approve in wallet <span aria-hidden="true">→</span>
         </button>
 
-        <p class="fine">
-          This demo sends whole token base units only. Review the transaction
-          details in your wallet before approving.
-        </p>
       </div>
 
       <div
@@ -290,120 +360,519 @@
           Create a payment link and QR code for someone to send tokens to your wallet.
         </p>
 
-        <label class="receive-address-label">
-          Your receive address
+        <div class="receive-address-label">
+          <label for="receive-address">Your receive address</label>
           <div class="address-line">
-            <code id="receive-address">Connect wallet to load your address</code>
+            <button id="edit-receive-address" class="edit-field" type="button" aria-label="Edit receive address" aria-controls="receive-address"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4-.8L20 7l-3-3L5 16zm10-13 3 3"/></svg></button>
+            <input id="receive-address" placeholder="bitcoincash:z…" autocomplete="off" spellcheck="false" readonly>
             <button id="copy-receive-address" class="small-button" type="button" disabled>
               Copy
             </button>
           </div>
-        </label>
+        </div>
 
         <div class="form receive-form">
-          <label>
-            Token category ID
+          <div>
+            <details id="receive-ore-picker" class="receive-ore-picker" hidden>
+              <summary id="receive-ore-selection">Choose a MINA category</summary>
+              <div id="receive-ore-options" class="receive-ore-options"></div>
+            </details>
+            <div id="receive-custom-category">
+            <label for="receive-category">Token category ID</label>
+            <div class="receive-category-field">
+            <button id="edit-receive-category" class="edit-field" type="button" aria-label="Edit token category" aria-controls="receive-category"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4-.8L20 7l-3-3L5 16zm10-13 3 3"/></svg></button>
+            <span id="receive-category-icon" class="token-icon category-input-icon" aria-hidden="true" hidden>◆</span>
             <input
               id="receive-category"
               placeholder="64-character category ID"
               autocomplete="off"
               spellcheck="false"
+              readonly
             >
-          </label>
+            <span id="receive-pusd" class="receive-token" hidden>ParyonUSD</span>
+            </div>
+            <span class="fine">Mainnet defaults to ParyonUSD (PUSD); you can enter another category.</span>
+            </div>
+          </div>
 
           <label>
             Amount
             <input
               id="receive-amount"
+              type="text"
               inputmode="numeric"
+              name="receive-token-units"
               placeholder="Whole token units"
               autocomplete="off"
+              value="1"
             >
+            <span class="fine">Enter whole base units.<span id="receive-pusd-units"> 100 base units equal 1 PUSD.</span></span>
           </label>
           <label class="full">
-            Note (optional)
-            <input id="receive-note" maxlength="160" placeholder="What is this payment for?" autocomplete="off">
+            Sharing note (optional)
+            <textarea id="receive-note" rows="2" maxlength="280" placeholder="Add a note to the shared image"></textarea>
           </label>
         </div>
 
-        <button id="generate-payment" class="button primary send" type="button" disabled>
+        <button id="generate-payment" class="button primary send" type="button">
           Generate payment QR <span aria-hidden="true">⌁</span>
         </button>
+        <p id="payment-input-status" class="fine" role="status"></p>
 
         <div id="payment-result" class="payment-result hidden">
+          <p class="pair-title">Scan to open the payment link</p>
           <div class="qr-frame">
             <canvas id="payment-qr" aria-label="Token payment URL QR code"></canvas>
           </div>
-          <button id="download-payment-qr" class="small-button icon-button" type="button" aria-label="Download QR code" title="Download QR code">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3"/></svg>
-            <span>Download QR</span>
-          </button>
-          <button id="share-payment-qr" class="small-button icon-button" type="button" aria-label="Share QR code" title="Share QR code">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M5 14v6h14v-6"/></svg>
-            <span>Share QR</span>
-          </button>
-
-          <p class="pair-title">Scan to open the payment link</p>
+          <div class="qr-actions">
+            <button id="share-payment-qr" class="small-button icon-button" type="button" aria-label="Share" title="Share" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>
+              <span>Share</span>
+            </button>
+            <button id="download-payment-qr" class="small-button icon-button" type="button" aria-label="Download QR code" title="Download QR code" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3"/></svg>
+              <span>Download QR</span>
+            </button>
+          </div>
           <div class="payment-token">
-            <span class="token-icon" aria-hidden="true">◆</span>
+            <span id="payment-token-icon" class="token-icon" aria-hidden="true">◆</span>
             <div><strong id="payment-amount"></strong><code id="payment-category"></code></div>
           </div>
-          <p id="payment-note" class="payment-note" hidden></p>
-          <p id="payment-logo-status" class="payment-logo-status" role="status"></p>
-          <p class="payment-logo-status">If your scanner cannot read a light-on-dark QR code, use Copy link instead.</p>
+          <p id="payment-note" class="fine" hidden></p>
+          <p id="payment-logo-status" class="fine" aria-live="polite"></p>
+          <p id="payment-price" class="fine" aria-live="polite"></p>
 
           <div class="payment-url-line">
             <code id="payment-url"></code>
             <button id="copy-payment-url" class="small-button" type="button">
-              Copy link
+              Copy original link
             </button>
           </div>
+
+          <fieldset class="short-link-box">
+            <legend>Short link</legend>
+            <div class="short-link-options">
+              <label>Link type
+                <select id="short-link-type">
+                  <option value="persistent">Persistent</option>
+                  <option value="one-time">One-time (deleted after first open)</option>
+                </select>
+              </label>
+              <label>Remove after
+                <select id="short-link-expiry">
+                  <option value="1d">1 day</option>
+                  <option value="1w" selected>1 week</option>
+                  <option value="1m">1 month</option>
+                </select>
+              </label>
+            </div>
+            <p id="one-time-expiry-hint" class="fine" hidden>One-time links are deleted on first open, or after 1 week if unused.</p>
+            <button id="create-short-link" class="small-button" type="button">Create short link</button>
+            <div id="short-link-result" class="payment-url-line" hidden>
+              <code id="short-link-url"></code>
+              <button id="copy-short-link" class="small-button" type="button">Copy link</button>
+            </div>
+            <p class="fine">After creating a short link, the QR, Share and Download QR use it.</p>
+            <p id="short-link-status" class="fine" role="status"></p>
+          </fieldset>
         </div>
 
         <p class="fine">
           The QR code contains a link to this site with the receive address,
-          category ID, requested amount, and optional note. Notes are public to anyone with the link.
+          category ID, and requested amount.
         </p>
+        <p class="fine">The sharing note appears in the shared image and message. Short links also keep it on our server until they expire or, for one-time links, are first opened.</p>
       </div>
     </section>
 
-    <section id="earn-section" class="panel section">
+    </div>
+    <dialog id="token-qr-dialog" class="notifications-dialog" aria-labelledby="token-qr-title">
+      <div class="notifications-heading">
+        <h2 id="token-qr-title">Token QR</h2>
+        <button id="token-qr-close" class="small-button close-notifications" type="button" aria-label="Close token QR">×</button>
+      </div>
+      <p id="token-qr-hint" class="fine"></p>
+      <div id="token-qr-image" class="qr-frame" hidden></div>
+      <div class="address-line"><code id="token-qr-value"></code></div>
+      <div class="qr-actions">
+        <button id="token-qr-copy" class="small-button" type="button">Copy</button>
+        <button id="token-qr-continue" class="small-button" type="button">Continue</button>
+      </div>
+      <p id="token-qr-status" class="fine" role="status"></p>
+    </dialog>
+
+    <dialog id="connection-dialog" class="notifications-dialog connection-dialog" aria-labelledby="connection-title">
+    <article id="connection-section" class="panel">
       <div class="heading">
         <div>
-          <p class="eyebrow">PORTFOLIO</p>
-          <h2>Tokens</h2>
+          <p class="eyebrow">WALLET SESSION</p>
+          <h2 id="connection-title">Connection</h2>
         </div>
-        <span id="token-count" class="muted">—</span>
+        <span id="dot" class="dot"></span>
+        <button id="connection-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
       </div>
-      <div id="tokens" class="token-list">
-        <div class="empty">Connect your wallet to load balances.</div>
+      <p id="game-wallet-notice" class="notification-message" hidden>Connect or create a wallet to receive a MINA welcome reward and mining rewards.</p>
+
+      <p id="status" class="status" role="status">Not connected</p>
+      <label for="connection-language">Language</label>
+      <select id="connection-language" data-language-select>
+        <option value="en">English</option><option value="es">Español</option>
+        <option value="fr">Français</option><option value="de">Deutsch</option>
+      </select>
+      <div id="connection-loading" class="connection-loading" role="status" hidden><span class="connection-spinner" aria-hidden="true"></span><span>Finishing wallet setup…</span></div>
+
+      <div id="pairing" class="pairing hidden">
+        <span class="pairing-qr">
+          <canvas id="qr" role="img" aria-label="WizardConnect pairing QR code"></canvas>
+          <img class="pairing-qr-logo" src="/wizardconnect-icon.png" alt="" aria-hidden="true">
+        </span>
+        <p class="pair-title">Connect your wallet</p>
+        <p class="muted">
+          On another device, scan this code with your wallet’s WizardConnect scanner.
+        </p>
+        <details>
+          <summary>Show pairing URI</summary>
+          <div class="uri-line">
+            <code id="pair-uri"></code>
+            <button id="copy-uri" class="small-button">Copy</button>
+          </div>
+        </details>
+        <button id="pairing-reminder-enable" class="small-button pairing-reminder-button" type="button" hidden>Enable pairing reminder</button>
+        <p id="pairing-reminder-status" class="fine" role="status"></p>
       </div>
-      <p class="fine">
-        Scans the first 50 receive and 50 change addresses. NFT balances are not included.
-      </p>
-    </section>
 
-    <section class="learn-section" aria-labelledby="learn-title">
-      <p class="eyebrow">YOUR FIRST STEPS</p>
-      <h2 id="learn-title">A simpler way to explore digital money</h2>
-      <p>Bitcoin Cash is peer-to-peer electronic cash: you can send it directly to another wallet without relying on a payment intermediary. Its fixed supply is one reason supporters describe it as sound money.</p>
-      <p>CashTokens are digital tokens on Bitcoin Cash. To get started, connect a compatible wallet, check the token category and amount, and approve payments in your wallet. Keep your recovery phrase private and verify the details before sending.</p>
-    </section>
+      <button id="connect" class="button primary">
+        Connect wallet <span>↗</span>
+      </button>
+      <button id="open-wallet" class="button secondary wallet-link" type="button" disabled>
+        Open in wallet <span aria-hidden="true">↗</span>
+      </button>
+      <p id="pairing-help" class="fine">Choose Connect wallet, then open your wallet and approve the connection. Return to this browser to continue.</p>
+      <details id="browser-wallet-section">
+        <summary>Browser wallet: create, restore or unlock</summary>
+        <p class="fine">Create a browser wallet if you don't have a WizardConnect wallet, or restore your existing phrase. Back up the recovery phrase offline; anyone with it can spend your funds. The unlocked account key stays in this tab across refreshes until you disconnect or close the tab. Anyone with access to this tab or browser can spend while it is unlocked.</p>
+        <div class="browser-wallet-actions">
+          <button id="browser-wallet-create" class="small-button" type="button">Create wallet</button>
+          <button id="browser-wallet-restore" class="small-button" type="button">Restore from phrase</button>
+          <button id="browser-wallet-unlock" class="small-button" type="button" hidden>Unlock wallet</button>
+          <button id="browser-wallet-backup" class="small-button" type="button" hidden>Show recovery phrase</button>
+          <button id="browser-wallet-remove" class="small-button" type="button" hidden>Remove local wallet</button>
+        </div>
+        <form id="browser-wallet-form" hidden>
+          <p id="browser-wallet-instructions" class="fine"></p>
+          <label id="browser-wallet-phrase-label" hidden>Recovery phrase
+            <textarea id="browser-wallet-phrase" rows="3" autocomplete="off" spellcheck="false"></textarea>
+          </label>
+          <button id="browser-wallet-copy" class="small-button" type="button" hidden>Copy recovery phrase</button>
+          <label id="browser-wallet-confirm-label" hidden>Re-enter your recovery phrase to confirm your backup
+            <textarea id="browser-wallet-confirm" rows="3" autocomplete="off" spellcheck="false"></textarea>
+          </label>
+          <label id="browser-wallet-password-label">Password
+            <input id="browser-wallet-password" type="password" autocomplete="new-password" minlength="12">
+          </label>
+          <label id="browser-wallet-password-confirm-label">Confirm password
+            <input id="browser-wallet-password-confirm" type="password" autocomplete="new-password" minlength="12">
+          </label>
+          <div class="browser-wallet-actions">
+            <button id="browser-wallet-submit" class="small-button" type="submit">Continue</button>
+            <button id="browser-wallet-cancel" class="small-button" type="button">Cancel</button>
+          </div>
+        </form>
+        <p id="browser-wallet-status" class="fine" role="status"></p>
+      </details>
+      <button id="disconnect" class="button secondary plain" type="button" hidden>Disconnect</button>
+      <button id="forget" class="button secondary" hidden>
+        Forget saved session and pair again
+      </button>
+      <div id="advanced-settings" hidden>
+        <button id="refresh" class="button secondary" disabled>Refresh balances</button>
+        <label for="scan-count">Addresses per receive and change path</label>
+        <input id="scan-count" name="scan-address-count" type="number" inputmode="numeric" autocomplete="off" min="1" max="1000" step="1" value="50">
+        <p class="fine">Refreshing scans this many addresses from index 0 on each path. Higher limits take longer.</p>
+      </div>
+    </article>
+    </dialog>
 
+    <pre id="log" role="status"></pre>
+    <p id="game-status" class="game-toast fine" role="status"></p>
+    <aside id="media-gallery" class="media-gallery" aria-label="Bitcoin Cash media">
+      <details id="media-gallery-disclosure" open>
+      <summary class="media-gallery-heading">
+        <div><p class="eyebrow">BCH COMMUNITY</p><h2>Explore the artwork</h2></div>
+      </summary>
+      <div class="media-strip" id="media-strip">
+        <article class="media-slide">
+          <a class="media-image" href="https://bch.now/media/private-shadow" target="_blank" rel="noopener noreferrer"><img src="https://pub-0dcd642e0e954a94b4fd240efe006ed9.r2.dev/private-shadow/7971982929/thumb.webp" alt="Stencil on a peeling wall: CCTV camera beam lights two silhouettes handing a green coin through a torn hole in the wall." width="480" height="480" loading="lazy" decoding="async"><span class="media-unavailable" hidden>Image unavailable</span></a>
+          <div class="media-caption"><strong>Private Shadow</strong><span>Privacy</span></div>
+        </article>
+        <article class="media-slide">
+          <a class="media-image" href="https://bch.now/media/get-bch-now-level-clear" target="_blank" rel="noopener noreferrer"><img src="https://pub-0dcd642e0e954a94b4fd240efe006ed9.r2.dev/get-bch-now-level-clear/2716f97815/thumb.webp" alt="Pixel plumber collects green BCH coins and climbs a flagpole with a BCH flag." width="480" height="480" loading="lazy" decoding="async"><span class="media-unavailable" hidden>Image unavailable</span></a>
+          <div class="media-caption"><strong>Get BCH Now: Level Clear</strong><span>Markets &amp; memes</span></div>
+        </article>
+        <article class="media-slide">
+          <a class="media-image" href="https://bch.now/media/ask-again-nicely" target="_blank" rel="noopener noreferrer"><img src="https://pub-0dcd642e0e954a94b4fd240efe006ed9.r2.dev/ask-again-nicely/27315605af/thumb.webp" alt="Stencil art: a man begs at a bank cashier desk while a woman hands him a sign saying Ask Again Nicely." width="480" height="480" loading="lazy" decoding="async"><span class="media-unavailable" hidden>Image unavailable</span></a>
+          <div class="media-caption"><strong>Ask Again Nicely</strong><span>Banks &amp; power</span></div>
+        </article>
+      </div>
+      <div class="media-rails">
+        <div class="media-rail media-rail-left"><div id="media-rail-left" class="media-rail-track"></div></div>
+        <div class="media-rail media-rail-right"><div id="media-rail-right" class="media-rail-track"></div></div>
+      </div>
+      <p class="media-credit">Artwork from <a href="https://bch.now" target="_blank" rel="noopener noreferrer">bch.now ↗</a></p>
+      </details>
+      <p class="swap-note" data-wallet-panel hidden>Have BTC? You can swap it for BCH with <a href="https://sideshift.ai" target="_blank" rel="noopener noreferrer">SideShift ↗</a>. This independent service uses mainnet; check the rate, fees and recipient address.</p>
+    </aside>
     <footer>
       <span>PRIVATE KEYS REMAIN IN YOUR WALLET</span>
       <span>CTF · CASH</span>
     </footer>
 
-    <pre id="log" role="status"></pre>
   </main>
+
+  <dialog id="game-dialog" class="notifications-dialog game-dialog" aria-label="CashCraft game">
+    <nav class="game-switcher" aria-label="Choose a game" hidden>
+      <button id="switch-netcraft" class="small-button" type="button" aria-pressed="false">⛏️ CashCraft</button>
+      <button id="switch-pk2" class="small-button" type="button" aria-pressed="false">🐔 Pekka Kana 2</button>
+    </nav>
+    <p id="game-dialog-status" class="fine" role="status"></p>
+    <div id="game-stage" class="game-stage">
+      <div id="game-fullscreen-toolbar" class="game-fullscreen-toolbar"></div>
+      <iframe id="game-frame" title="Game" sandbox="allow-scripts allow-pointer-lock" allow="autoplay *; fullscreen; gamepad *" allowfullscreen></iframe>
+      <div id="game-payment-bubble" class="game-payment-bubble" hidden>
+        <p id="game-payment-speaker" aria-live="polite"></p>
+        <img id="game-payment-qr" width="128" height="128" alt="Payment request QR code">
+        <a id="game-payment-link">Open payment request</a>
+        <p id="game-payment-status" class="fine" role="status"></p>
+        <button id="game-payment-dismiss" class="small-button" type="button" aria-label="Dismiss payment request">×</button>
+      </div>
+      <div id="game-wizard-speech" class="game-wizard-speech" hidden>
+        <img class="game-wizard-avatar" src="/wizard.svg" alt="">
+        <div class="game-wizard-card">
+          <div role="status" aria-live="polite">
+            <strong id="game-wizard-step" class="game-wizard-step" hidden></strong>
+            <p id="game-wizard-message"></p>
+          </div>
+          <div id="game-wizard-ores" class="ore-stats" hidden></div>
+          <img id="game-wizard-table" src="/mining-table.svg" alt="" width="64" height="64" hidden>
+          <div id="game-wizard-actions" class="game-wizard-actions" hidden>
+            <button id="game-wizard-wallet" class="small-button" type="button" hidden>Pair with WizardConnect</button>
+            <button id="game-wizard-craft" class="small-button" type="button" hidden>Open crafting table</button>
+            <button id="game-wizard-next" class="small-button" type="button">Next</button>
+            <button id="game-wizard-skip" class="small-button" type="button">Keep playing</button>
+          </div>
+        </div>
+      </div>
+      <nav id="game-wallet-actions" class="game-wallet-actions" aria-label="Wallet actions" data-wallet-panel hidden></nav>
+      <dialog id="game-receive-dialog" class="notifications-dialog game-receive-dialog" aria-labelledby="game-receive-title">
+        <div class="notifications-heading">
+          <h2 id="game-receive-title">Receive</h2>
+          <button id="game-receive-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
+        </div>
+      </dialog>
+      <dialog id="game-send-dialog" class="notifications-dialog" aria-labelledby="game-send-title">
+        <form id="game-send-form">
+          <h2 id="game-send-title">Send tokens to a player</h2>
+          <label for="game-send-name">Online player name</label>
+          <input id="game-send-name" required maxlength="24" pattern="[A-Za-z0-9_]+" autocomplete="off" spellcheck="false">
+          <div class="browser-wallet-actions">
+            <button class="small-button" type="submit">Find player</button>
+            <button id="game-send-cancel" class="small-button" type="button">Cancel</button>
+          </div>
+        </form>
+      </dialog>
+      <dialog id="game-guide" class="game-guide" aria-labelledby="game-guide-title">
+        <div class="game-guide-body">
+          <div class="notifications-heading">
+            <strong id="game-guide-title"><img class="game-wizard-art" src="/wizard.svg" alt=""> Game guide and wallet</strong>
+            <button id="game-guide-close" class="small-button" type="button" aria-label="Close guide">×</button>
+          </div>
+          <div class="browser-wallet-actions">
+            <button id="game-guide-wallet" class="button primary" type="button">Connect wallet</button>
+            <button id="game-verify-wallet" class="small-button" type="button" hidden>Verify wallet</button>
+            <button id="game-guide-open" class="small-button" type="button" aria-controls="game-wizard-speech">Start wizard tutorial</button>
+            <button id="game-guide-done" class="small-button" type="button">Play</button>
+          </div>
+          <div class="game-guide-copy" tabindex="0">
+            <p>Explore and mine 10 naturally generated green MINA ore blocks online to earn 1 MINA. Connect a wallet to receive it.</p>
+            <p>Set up a token-aware wallet to receive your earned MINA. Your mining progress and unclaimed rewards stay with this browser. A new wallet is also queued 1 welcome MINA. Rewards depend on the payout service.</p>
+            <p>Clearing this browser's site data will lose access to unclaimed rewards.</p>
+            <p id="game-guide-progress" role="status" aria-live="polite"></p>
+            <p>Use the wizard for tutorial tips. Mine 10 MINA ore blocks, add your welcome MINA, then craft the green pickaxe from 7 wood and 2 MINA gems.</p>
+            <p>Use WASD to move, space to jump, left click to mine and right click to build. On mobile, use the joystick and the jump, mine and build buttons. Scroll to choose blocks.</p>
+          </div>
+        </div>
+      </dialog>
+      <dialog id="craft-recipe" class="game-guide craft-recipe" aria-labelledby="craft-recipe-title">
+        <div class="game-guide-body">
+          <div class="notifications-heading">
+            <strong id="craft-recipe-title"><img class="game-wizard-art" src="/mining-table.svg" alt=""> Crafting table</strong>
+            <button id="craft-recipe-close" class="small-button" type="button" aria-label="Close crafting table">×</button>
+          </div>
+          <div class="craft-recipe-art" role="img" aria-label="Recipe: 7 wood and 2 MINA gems make a green MINA pickaxe">
+            <div class="craft-grid" aria-hidden="true">
+              <img src="/wood.svg" alt=""><img src="/wood.svg" alt=""><img src="/wood.svg" alt="">
+              <img src="/wood.svg" alt=""><img src="/mina-gem.svg" alt=""><img src="/wood.svg" alt="">
+              <img src="/wood.svg" alt=""><img src="/mina-gem.svg" alt=""><img src="/wood.svg" alt="">
+            </div>
+            <span class="craft-arrow" aria-hidden="true">→</span>
+            <img class="craft-result" src="/mina-pickaxe.svg" alt="" aria-hidden="true">
+          </div>
+          <p>Craft the green MINA pickaxe from 7 wood and 2 MINA gems. Mine 10 MINA ore blocks to earn 1 MINA; your welcome MINA is the second one.</p>
+          <div class="browser-wallet-actions">
+            <button id="craft-recipe-open" class="button primary" type="button">Open crafting table</button>
+            <button id="craft-recipe-later" class="small-button" type="button">Keep playing</button>
+          </div>
+        </div>
+      </dialog>
+      <dialog id="mining-prompt" class="game-guide mining-prompt" aria-labelledby="mining-prompt-title">
+        <div class="notifications-heading"><strong id="mining-prompt-title">Your next step</strong><button id="mining-prompt-close" class="small-button" type="button" aria-label="Close">×</button></div>
+        <div class="browser-wallet-actions"><button id="mining-prompt-wallet" class="small-button" type="button">Connect wallet</button><button id="mining-prompt-later" class="small-button" type="button">Keep playing</button></div>
+        <div class="mining-art" aria-hidden="true"><img src="/mining-table.svg" alt=""><img src="/mina-gem.svg" alt=""></div>
+        <div class="crypto-mesh"><img src="/bitcoin-cash-official.svg" alt="Bitcoin Cash"><img src="/mina-gem.svg" alt="MINA"><span>BCH × MINA</span></div>
+        <p id="mining-prompt-message"></p>
+        <p>Mine 10 natural MINA ore blocks for 1 MINA; with your 1 welcome MINA you can craft the pickaxe (7 wood and 2 MINA gems). Rewards depend on the payout service.</p>
+        <button id="mining-prompt-craft" class="small-button" type="button" hidden>Open crafting table</button>
+        <p>MINA CashTokens are received in a Bitcoin Cash transaction. Connect or set up a wallet to claim them.</p>
+        <p>Need BCH? <a href="https://sideshift.ai" target="_blank" rel="noopener noreferrer">SideShift.ai</a> is an independent swap service on mainnet. Check network, rates and fees.</p>
+        <div class="crypto-icons" aria-label="Bitcoin Cash, Bitcoin and Ethereum"><img src="/bitcoin-cash-official.svg" alt="Bitcoin Cash"><img src="/bitcoin-official.png" alt="Bitcoin"><img src="/ethereum-official.png" alt="Ethereum"></div>
+      </dialog>
+    </div>
+  </dialog>
+  <dialog id="ranking-dialog" class="notifications-dialog ranking-dialog" aria-labelledby="ranking-title">
+    <div class="notifications-heading">
+      <h2 id="ranking-title">Challenges and rankings</h2>
+      <button id="ranking-close" class="small-button close-notifications" type="button" aria-label="Close challenges and rankings">×</button>
+    </div>
+    <p class="fine">Practice rounds only. Do not send BCH for these challenges.</p>
+    <label>Challenge <select id="challenge-mode">
+      <option value="ctf">Capture the Flag</option>
+      <option value="pvp">Survival (PvP)</option>
+      <option value="pve">Survival (PvE)</option>
+      <option value="mining">Most mined before the next BCH block</option>
+    </select></label>
+    <details>
+      <summary>Invite connected players</summary>
+      <fieldset id="challenge-invitees"><legend>Select up to eight players</legend></fieldset>
+    </details>
+    <button id="challenge-create" type="button" disabled>Create invitation</button>
+    <button id="challenge-refresh" type="button">Refresh connected players</button>
+    <div id="challenge-invitations"></div>
+    <p id="challenge-status" role="status"></p>
+    <label>Connected-player rankings <select id="ranking-category">
+      <option value="mined">Most natural blocks mined</option>
+      <option value="total">Most natural ore mined</option>
+      <option value="green">MINA ore</option>
+      <option value="blue">Lapis ore</option>
+      <option value="red">Redstone ore</option>
+    </select></label>
+    <p id="ranking-status" role="status"></p>
+    <ol id="ranking-list" class="ranking-list" aria-label="Natural ore blocks mined by player"></ol>
+  </dialog>
+
+  <dialog id="invite-dialog" class="notifications-dialog" aria-labelledby="invite-title">
+    <div class="notifications-heading">
+      <h2 id="invite-title">Invite and support</h2>
+      <button id="invite-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
+    </div>
+    <p>Invite friends to explore CashCraft together, made with love.</p>
+    <code id="invite-url"></code>
+    <div class="browser-wallet-actions">
+      <button id="invite-share" class="small-button" type="button">Share invite</button>
+      <button id="invite-copy" class="small-button" type="button">Copy invite link</button>
+    </div>
+    <p>Support reward payouts and site hosting with a Bitcoin Cash donation. Thank you!</p>
+    <canvas id="donation-qr" aria-label="Bitcoin Cash donation request QR code" hidden></canvas>
+    <p><code id="donation-address"></code></p>
+    <p id="invite-status" class="fine" role="status"></p>
+  </dialog>
+
+  <dialog id="donate-dialog" class="notifications-dialog" aria-labelledby="donate-title">
+    <div class="notifications-heading">
+      <h2 id="donate-title">Support CashCraft</h2>
+      <button id="donate-close" class="small-button close-notifications" type="button" aria-label="Close donation dialog">×</button>
+    </div>
+    <p>Support reward payouts and site hosting with a Bitcoin Cash donation. Thank you!</p>
+    <canvas id="donate-qr" aria-label="Bitcoin Cash donation request QR code" hidden></canvas>
+    <p><code id="donate-address"></code></p>
+    <p id="donate-status" class="fine" role="status"></p>
+  </dialog>
+
+  <dialog id="wiki-dialog" class="notifications-dialog wiki-dialog" aria-labelledby="wiki-title">
+    <div class="notifications-heading">
+      <div class="wiki-heading"><h2 id="wiki-title">CashTokens wiki</h2><img class="wiki-bch-logo" src="/bitcoin-cash-official.svg" alt="Bitcoin Cash"></div>
+      <button id="wiki-close" class="small-button close-notifications" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="wiki-language">
+      <label for="wiki-language">Language</label>
+      <select id="wiki-language" data-language-select>
+        <option value="en" lang="en">English</option>
+        <option value="es" lang="es">Español</option>
+        <option value="fr" lang="fr">Français</option>
+        <option value="de" lang="de">Deutsch</option>
+      </select>
+    </div>
+    <div class="wiki-content">
+      <p class="wiki-glossary-intro">Tap a term for a quick explanation.</p>
+      <div class="wiki-glossary" aria-label="CashTokens glossary">
+        <details class="wiki-term"><summary>UTXO</summary><div class="wiki-term-popover">An unspent transaction output is a piece of BCH you can spend. It can also carry CashTokens.</div></details>
+        <details class="wiki-term"><summary>Category</summary><div class="wiki-term-popover">A category ID identifies a token family. Check the ID, not just the name or icon.</div></details>
+        <details class="wiki-term"><summary>Fungible</summary><div class="wiki-term-popover">Fungible tokens are interchangeable units of the same category, like identical coins.</div></details>
+        <details class="wiki-term"><summary>NFT</summary><div class="wiki-term-popover">An NFT is a non-fungible token. It can carry application-defined data and a capability.</div></details>
+        <details class="wiki-term"><summary>Covenant</summary><div class="wiki-term-popover">A covenant is a script that can place rules on how an output may be spent.</div></details>
+        <details class="wiki-term"><summary>Ore rewards</summary><div class="wiki-term-popover">In CashCraft, mining ore can pay separate CashToken categories. Each ore type uses its own category, so check the category ID before you treat a token as MINA-linked.</div></details>
+        <details class="wiki-term"><summary>Crafting</summary><div class="wiki-term-popover">The crafting button prepares a 2 MINA payment. Review and approve it in your wallet; the pickaxe unlocks after one confirmation.</div></details>
+        <details class="wiki-term"><summary>BCMR</summary><div class="wiki-term-popover">BCMR describes token metadata such as names and icons. It does not prove a token is authentic.</div></details>
+      </div>
+      <p>A practical guide to Bitcoin Cash tokens. This overview is not a consensus implementation; consult the <a href="https://cashtokens.org/" target="_blank" rel="noopener noreferrer">CashTokens specification ↗</a> and its test vectors for normative rules.</p>
+      <details open><summary>UTXOs and categories</summary>
+        <p>CashTokens are consensus-validated data on BCH outputs, not a separate ledger. An output contains satoshis, locking bytecode and optionally one token category, with fungible units, one NFT, or both. BCH pays transaction fees.</p>
+        <p>A category is identified by 32 bytes. Genesis is associated with spending output index 0 of an earlier transaction; that transaction's hash identifies the eligible category. Displayed IDs and wire bytes may use different byte order. Names and logos do not establish identity.</p>
+      </details>
+      <details><summary>Fungible amounts and burns</summary>
+        <p>Amounts are integer base units. An encoded amount must be positive and no greater than 2<sup>63</sup> − 1. Decimal places are metadata, not consensus.</p>
+        <p>For an existing category, outputs cannot exceed inputs. The difference is burned; genesis is the issuance exception. For example, 100 input units and 90 output units burn 10. Token-unaware spending can accidentally destroy tokens.</p>
+      </details>
+      <details><summary>NFTs, commitments and capabilities</summary>
+        <p>An NFT has a category, a capability and an application-defined commitment of up to 40 bytes. A commitment need not be unique or prove authenticity.</p>
+        <p><strong>None (immutable):</strong> ordinary continuation preserves the commitment. <strong>Mutable:</strong> a valid successor can change it. <strong>Minting:</strong> an input with minting authority can authorize new NFTs in its category. Whether authority is safe depends on who can spend it and on any covenant restrictions.</p>
+        <p>Validation accounts for all NFTs and authority in a category across the transaction; it is not a simple one-input-to-one-output rule. This wallet's advanced inspector is read-only and shows only scanned wallet outputs, not all authority in the category.</p>
+      </details>
+      <details><summary>Encoding and validation</summary>
+        <p>The token prefix encodes the category, a bitfield and optional commitment and amount. Invalid combinations, reserved capabilities, non-minimal encodings, zero encoded amounts and out-of-range values are rejected. Use the complete CHIP algorithm and test vectors for duplicate NFTs, mutable transitions, minting and genesis.</p>
+      </details>
+      <details><summary>Script, covenants and signing</summary>
+        <p>Token introspection lets BCH Script examine token data on inputs and outputs. A covenant can impose additional rules on destinations, amounts or state transitions; consensus validity alone does not establish an application's policy.</p>
+        <p>Token-aware signing must account for the assets and relevant transaction data. The specification includes signing-serialization changes such as SIGHASH_UTXOS. Always review the transaction in a token-aware wallet before signing.</p>
+      </details>
+      <details><summary>Metadata, supply and trust</summary>
+        <p>BCMR metadata can supply names, symbols, decimals, descriptions and icons, but these are not the consensus category ID and are not proof of an issuer's claims. Similar names can refer to different categories.</p>
+        <p>Supply figures depend on how extant, reserved and circulating units are defined. A minting NFT is authority to create NFTs, not fungible supply already issued. Consensus validity does not prove backing, redemption or value.</p>
+      </details>
+      <details><summary>History and checklist</summary>
+        <p>CashTokens are a consensus-level descendant of colored-coin ideas. Unlike application-layer conventions such as SLP, their core token rules are enforced by network nodes; indexers remain useful for discovery and presentation.</p>
+        <p>Check the exact category and genesis, current UTXOs, minting authority and its controller, NFT capability and commitment, covenant rules, metadata authenticity, wallet token handling, conformance tests and any economic claims independently.</p>
+      </details>
+      <details><summary>FAQ</summary>
+        <p><strong>Why do I need BCH?</strong> Token-bearing outputs hold satoshis, and transaction fees are paid in BCH.</p>
+        <p><strong>Does a minting NFT create fungible units?</strong> No. It authorizes NFT issuance in its category, not ordinary fungible inflation.</p>
+        <p><strong>Does this inspector show every minting authority?</strong> No. It describes only NFTs found in the scanned wallet addresses.</p>
+        <p><strong>Can I trust a token's name or icon?</strong> Not on its own. Check the exact category and independently verify issuer claims and controlling scripts.</p>
+      </details>
+    </div>
+  </dialog>
 
   <dialog id="notifications-dialog" class="notifications-dialog" aria-labelledby="notifications-title">
     <div class="notifications-heading">
-      <h2 id="notifications-title">Notifications</h2>
+      <h2 id="notifications-title">Wallet &amp; notifications</h2>
       <button id="notifications-close" class="small-button close-notifications" type="button" aria-label="Close notifications" autofocus>×</button>
     </div>
+    <div id="wallet-notification-summary" class="wallet-notification-summary" hidden>
+      <p>Bitcoin Cash: <strong id="notification-bch">—</strong></p>
+      <p><img class="mina-gem" src="/mina-gem.svg" alt=""> MINA balance: <strong id="notification-mina">—</strong></p>
+      <details id="mina-receipt-history" hidden><summary id="mina-receipt-count"></summary><div id="mina-receipt-transactions"></div></details>
+    </div>
     <p id="notifications-empty" class="muted">No notifications yet.</p>
+    <div id="token-receipt-notifications" aria-live="polite"></div>
     <div id="shared-link-preview" class="shared-link-preview hidden">
       <p class="eyebrow">SHARED PAYMENT LINK</p>
       <p class="notification-message">You received a payment request.</p>
@@ -417,6 +886,20 @@
     </div>
   </dialog>
 
+  <dialog id="funding-dialog" class="notifications-dialog" aria-labelledby="funding-title">
+    <div class="notifications-heading"><h2 id="funding-title">Get ready to send</h2><button id="funding-close" class="small-button close-notifications" type="button" aria-label="Close">×</button></div>
+    <p id="funding-message"></p>
+    <p class="muted">You can explore BCH at bch.now or use SideShift to swap. These independent services use mainnet, not chipnet. Check the network, fees and recipient address before proceeding.</p>
+    <div class="funding-actions"><a class="button secondary" href="https://bch.now" target="_blank" rel="noopener noreferrer">bch.now ↗</a><a class="button secondary" href="https://sideshift.ai" target="_blank" rel="noopener noreferrer">SideShift ↗</a><button id="funding-connect" class="button primary" type="button">Connect wallet</button></div>
+  </dialog>
+
+  <div class="market-strip market-strip-bottom" aria-label="Cryptocurrency prices">
+    <div class="crystal-scene" aria-hidden="true">
+      <div class="crystal"><i></i><i></i><i></i><i></i></div>
+    </div>
+    <span class="market-label">MARKET / USD</span>
+    <div id="market-ticker" class="market-ticker" role="region" tabindex="0" aria-label="Top cryptocurrencies by market capitalization">Loading market prices…</div>
+  </div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

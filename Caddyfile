@@ -1,7 +1,60 @@
 :8080 {
-  root * /srv
   encode gzip
-  templates
-  try_files {path} /index.html
-  file_server
+  handle /craftws {
+    reverse_proxy netcraft-websockify:4081
+  }
+  handle /api/craft-preview.png {
+    reverse_proxy auth:3000 {
+      @preview_unavailable status 5xx
+      handle_response @preview_unavailable {
+        root * /srv
+        rewrite * /craft-preview-fallback.png
+        header Cache-Control "public, max-age=30"
+        file_server {
+          status 200
+        }
+      }
+    }
+  }
+  handle /api/* {
+    reverse_proxy auth:3000 {
+      header_up X-Preview-Origin {scheme}://{host}
+    }
+  }
+  handle /games/* {
+    root * /srv
+    header Access-Control-Allow-Origin *
+    file_server
+  }
+  @unfurler {
+    header_regexp ua User-Agent (?i)(telegrambot|twitterbot|facebookexternalhit|whatsapp|discordbot|slackbot|linkedinbot|skypeuripreview)
+    expression `{path}.startsWith("/s/") || {query}.contains("addr=")`
+  }
+  handle @unfurler {
+    rewrite * /api/preview
+    reverse_proxy auth:3000 {
+      header_up X-Original-URI {http.request.orig_uri}
+      header_up X-Preview-Origin {scheme}://{host}
+    }
+  }
+  handle {
+    root * /srv
+    templates
+    try_files {path} /index.html
+    file_server
+  }
+  handle_errors {
+    @preview_error path /api/craft-preview.png
+    handle @preview_error {
+      root * /srv
+      rewrite * /craft-preview-fallback.png
+      header Cache-Control "public, max-age=30"
+      file_server {
+        status 200
+      }
+    }
+    handle {
+      respond "{http.error.status_text}" {http.error.status_code}
+    }
+  }
 }

@@ -1,0 +1,5301 @@
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+#ifndef __EMSCRIPTEN__
+#include <curl/curl.h>
+#endif
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#endif
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <time.h>
+#include <libgen.h>
+#include "inventory.h"
+#include <unistd.h>
+#include "auth.h"
+#include "animals.h"
+#include "chunk.h"
+#include "client.h"
+#include "config.h"
+#include "cube.h"
+#include "db.h"
+#include "item.h"
+#include "map.h"
+#include "matrix.h"
+#include "noise.h"
+#include "player.h"
+#include "rendering.h"
+#include "sign.h"
+#include "state.h"
+#include "swimming.h"
+#include "tinycthread.h"
+#include "util.h"
+#include "worldgen/world.h"
+#include "mining.h"
+#include "pickaxe.h"
+#include "vr.h"
+#include "joy.h"
+#include "touch.h"
+#include "fullscreen.h"
+#include "miniz.h"
+#include "gamemode.h"
+#include "inventory.h"
+#include "accel.h"
+
+//#include <math.h>
+//
+//#define CHUNK_LOAD_RADIUS 3
+//
+//static int last_chunk_p = 0;
+//static int last_chunk_q = 0;
+//static int have_last_chunk = 0;
+//
+//static int world_to_chunk(double position) {
+//    return (int)floor(position / CHUNK_SIZE);
+//}
+//
+//static void update_chunk_requests(double x, double z) {
+//    int center_p = world_to_chunk(x);
+//    int center_q = world_to_chunk(z);
+//
+//    if (have_last_chunk &&
+//        center_p == last_chunk_p &&
+//        center_q == last_chunk_q) {
+//        return;
+//    }
+//
+//    last_chunk_p = center_p;
+//    last_chunk_q = center_q;
+//    have_last_chunk = 1;
+//
+//    // Request from nearest to farthest. The square radius covers the
+//    // surrounding view area; skip chunks already loaded or being fetched.
+//    for (int radius = 0; radius <= CHUNK_LOAD_RADIUS; ++radius) {
+//        for (int dq = -radius; dq <= radius; ++dq) {
+//            for (int dp = -radius; dp <= radius; ++dp) {
+//                if (abs(dp) != radius && abs(dq) != radius) {
+//                    continue; // Only request this ring.
+//                }
+//
+//                int p = center_p + dp;
+//                int q = center_q + dq;
+//
+//	        request_chunk(p, q);
+//            }
+//        }
+//    }
+//}
+
+#define CHUNK_REQUEST_CAPACITY 4096
+#define CHUNK_REQUESTS_PER_FRAME 10
+#define CHUNK_REQUEST_RETRY_SECONDS 2.0
+
+#define MAX_CHUNKS 20000
+#define MAX_PLAYERS 128
+#define WORKERS 8
+#define MAX_TEXT_LENGTH 256
+#define MAX_NAME_LENGTH 32
+#define MAX_NAME_LENGTH_FORMAT "31"
+#define MAX_PATH_LENGTH 256
+#define MAX_ADDR_LENGTH 256
+
+#define ALIGN_LEFT 0
+#define ALIGN_CENTER 1
+#define ALIGN_RIGHT 2
+#define PLAYER_LIVES 10
+
+#define MODE_OFFLINE 0
+#define MODE_ONLINE 1
+
+#ifdef __EMSCRIPTEN__
+static bool online_ready = false;
+static bool connecting = false;
+static double reconnect_at = 0;
+static double connect_started = 0;
+static int reconnect_delay = 1;
+static bool has_connected = false;
+static bool preserve_position = false;
+#endif
+
+#define WORKER_IDLE 0
+#define WORKER_BUSY 1
+#define WORKER_DONE 2
+
+//typedef struct {
+//    Map map;
+//    Map lights;
+//    SignList signs;
+//    int p;
+//    int q;
+//    int faces;
+//    int sign_faces;
+//    bool dirty;
+//    int miny;
+//    int maxy;
+//    GLuint buffer;
+//    GLuint sign_buffer;
+//} Chunk;
+
+typedef struct {
+    int p;
+    int q;
+    bool load;
+    Map *block_maps[3][3];
+    Map *light_maps[3][3];
+    int miny;
+    int maxy;
+    int faces;
+    GLfloat *data;
+} WorkerItem;
+
+typedef struct {
+    int index;
+    int state;
+    thrd_t thrd;
+    mtx_t mtx;
+    cnd_t cnd;
+    WorkerItem item;
+} Worker;
+
+typedef struct {
+    int x;
+    int y;
+    int z;
+    int w;
+} Block;
+
+//typedef struct {
+//    float x;
+//    float y;
+//    float z;
+//    float rx;
+//    float ry;
+//    float t;
+//} State;
+
+//typedef struct {
+//    int id;
+//    char name[MAX_NAME_LENGTH];
+//    State state;
+//    State state1;
+//    State state2;
+//    GLuint buffer;
+//} Player;
+//
+//typedef struct {
+//    GLuint program;
+//    GLuint position;
+//    GLuint normal;
+//    GLuint uv;
+//    GLuint matrix;
+//    GLuint sampler;
+//    GLuint camera;
+//    GLuint timer;
+//    GLuint extra1;
+//    GLuint extra2;
+//    GLuint extra3;
+//    GLuint extra4;
+//} Attrib;
+
+
+typedef struct {
+    bool running;
+    bool shutdown;
+    bool initialized;
+    double last_commit;
+    double last_update;
+    double previous_iter_timestamp;
+    FPS fps;
+    GLFWwindow *window;
+    Worker workers[WORKERS];
+    Chunk chunks[MAX_CHUNKS];
+    int chunk_count;
+    int create_radius;
+    int render_radius;
+    int delete_radius;
+    int sign_radius;
+    Player players[MAX_PLAYERS];
+    int player_count;
+    bool typing;
+    bool just_clicked;
+    char typing_buffer[MAX_TEXT_LENGTH];
+    int message_index;
+    int message_view_index;
+    char messages[MAX_MESSAGES][MAX_TEXT_LENGTH];
+    double message_times[MAX_MESSAGES];
+    int ore_progress[3];
+    int lives;
+    double lava_exposure;
+    bool zombies_active;
+#ifdef __EMSCRIPTEN__
+    double next_zombie_sound;
+#endif
+    int width;
+    int height;
+    int observe1;
+    int observe2;
+    bool flying;
+    bool admin_tools;
+    double admin_jump_at;
+    int item_index;
+    int scale;
+    int ortho;
+    float ortho_zoom;
+    float fov;
+    bool suppress_char;
+    int mode;
+    bool mode_changed;
+    char db_path[MAX_PATH_LENGTH];
+    char server_addr[MAX_ADDR_LENGTH];
+    int server_port;
+    int day_length;
+    bool time_changed;
+    Block block0;
+    Block block1;
+    Block copy0;
+    Block copy1;
+    bool show_info_text;
+    bool show_ui;
+    bool show_vr;
+    bool take_screenshot;
+    bool noclip;
+    bool crouching;
+    Inventory inventory;
+} Model;
+
+static Model model;
+static Model *g = &model;
+static struct {
+    bool active;
+    int x, y, z, item;
+} pending_placement;
+
+int chunked(float x) {
+    return floorf(roundf(x) / CHUNK_SIZE);
+}
+
+float time_of_day() {
+    if (g->day_length <= 0) {
+        return 0.5;
+    }
+    float t;
+    t = glfwGetTime();
+    t = t / g->day_length;
+    t = t - (int)t;
+    return t;
+}
+
+float get_daylight() {
+    float timer = time_of_day();
+    if (timer < 0.5) {
+        float t = (timer - 0.25) * 100;
+        return 1 / (1 + powf(2, -t));
+    }
+    else {
+        float t = (timer - 0.85) * 100;
+        return 1 - 1 / (1 + powf(2, -t));
+    }
+}
+
+int get_scale_factor(GLFWwindow *window) {
+    int window_width, window_height;
+    int buffer_width, buffer_height;
+    glfwGetWindowSize(window, &window_width, &window_height);
+    if (window_width <= 0 || window_height <= 0) {
+        return 1;
+    }
+    glfwGetFramebufferSize(window, &buffer_width, &buffer_height);
+    int result = buffer_width / window_width;
+    result = MAX(1, result);
+    result = MIN(2, result);
+    return result;
+}
+
+void get_sight_vector(float rx, float ry, float *vx, float *vy, float *vz) {
+    float m = cosf(ry);
+    *vx = cosf(rx - RADIANS(90)) * m;
+    *vy = sinf(ry);
+    *vz = sinf(rx - RADIANS(90)) * m;
+}
+
+void get_motion_vector(bool flying, double sz, double sx, double rx, float ry,
+    float *vx, float *vy, float *vz) {
+    *vx = 0; *vy = 0; *vz = 0;
+    if (!sz && !sx) {
+        return;
+    }
+    float strafe = atan2f(sz, sx);
+    if (flying) {
+        float m = cosf(ry);
+        float y = sinf(ry);
+        if (sx) {
+            if (!sz) {
+                y = 0;
+            }
+            m = 1;
+        }
+        if (sz > 0) {
+            y = -y;
+        }
+        *vx = cosf(rx + strafe) * m;
+        *vy = y;
+        *vz = sinf(rx + strafe) * m;
+    }
+    else {
+        *vx = cosf(rx + strafe);
+        *vy = 0;
+        *vz = sinf(rx + strafe);
+    }
+}
+
+static GLuint gen_crosshair_buffer(void) {
+    int x = g->width / 2;
+    int y = g->height / 2;
+    int p = 10 * g->scale;
+    float data[] = {
+        x, y - p, x, y + p,
+        x - p, y, x + p, y
+    };
+    return gen_buffer(sizeof(data), data);
+}
+
+GLuint gen_wireframe_buffer(float x, float y, float z, float n) {
+    float data[72];
+    make_cube_wireframe(data, x, y, z, n);
+    return gen_buffer(sizeof(data), data);
+}
+
+GLuint gen_sky_buffer() {
+    float data[12288];
+    make_sphere(data, 1, 3);
+    return gen_buffer(sizeof(data), data);
+}
+
+// Generate a cube buffer textured with block type w
+GLuint gen_cube_buffer(float x, float y, float z, float n, int w) {
+    GLfloat *data = malloc_faces(10, 6);
+    float ao[6][4] = {{0}};
+    float light[6][4] = {
+        {0.5, 0.5, 0.5, 0.5},
+        {0.5, 0.5, 0.5, 0.5},
+        {0.5, 0.5, 0.5, 0.5},
+        {0.5, 0.5, 0.5, 0.5},
+        {0.5, 0.5, 0.5, 0.5},
+        {0.5, 0.5, 0.5, 0.5}
+    };
+    make_cube(data, ao, light, 1, 1, 1, 1, 1, 1, x, y, z, n, w);
+    return gen_faces(10, 6, data);
+}
+
+// Generate a cube buffer textured with given texture indices on each face
+GLuint gen_cube_buffer_faces(float x, float y, float z, float n,
+    int wleft, int wright, int wtop, int wbottom, int wfront, int wback) {
+    GLfloat *data = malloc_faces(10, 6);
+    float ao[6][4] = {{0}};
+    float light[6][4] = {
+        {0.5, 0.5, 0.5, 0.5},
+        {0.5, 0.5, 0.5, 0.5},
+        {0.5, 0.5, 0.5, 0.5},
+        {0.5, 0.5, 0.5, 0.5},
+        {0.5, 0.5, 0.5, 0.5},
+        {0.5, 0.5, 0.5, 0.5}
+    };
+    make_cube_faces(data, ao, light, 1, 1, 1, 1, 1, 1,
+        wleft, wright, wtop, wbottom, wfront, wback,
+        x, y, z, n);
+    return gen_faces(10, 6, data);
+}
+
+//GLuint gen_plant_buffer(float x, float y, float z, float n, int w) {
+//    GLfloat *data = malloc_faces(10, 4);
+//    float ao = 0;
+//    float light = 1;
+//    make_plant(data, ao, light, x, y, z, n, w, 45);
+//    return gen_faces(10, 4, data);
+//}
+//
+//GLuint gen_player_buffer(float x, float y, float z, float rx, float ry) {
+//    GLfloat *data = malloc_faces(10, 6);
+//    make_player(data, x, y, z, rx, ry);
+//    return gen_faces(10, 6, data);
+//}
+//
+//GLuint gen_text_buffer(float x, float y, float n, char *text) {
+//    int length = strlen(text);
+//    GLfloat *data = malloc_faces(4, length);
+//    for (int i = 0; i < length; i++) {
+//        make_character(data + i * 24, x, y, n / 2, n, text[i]);
+//        x += n;
+//    }
+//    return gen_faces(4, length, data);
+//}
+//
+//void draw_triangles_3d_ao(Attrib *attrib, GLuint buffer, int count) {
+//    if (count == 0) return;
+//    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+//    glEnableVertexAttribArray(attrib->position);
+//    glEnableVertexAttribArray(attrib->uv);
+//    glVertexAttribPointer(attrib->position, 3, GL_FLOAT, GL_FALSE,
+//        sizeof(GLfloat) * 10, 0);
+//    glVertexAttribPointer(attrib->uv, 4, GL_FLOAT, GL_FALSE,
+//        sizeof(GLfloat) * 10, (GLvoid *)(sizeof(GLfloat) * 6));
+//    glDrawArrays(GL_TRIANGLES, 0, count);
+//    glDisableVertexAttribArray(attrib->position);
+//    glDisableVertexAttribArray(attrib->uv);
+//    glBindBuffer(GL_ARRAY_BUFFER, 0);
+//}
+//
+//void draw_triangles_3d_text(Attrib *attrib, GLuint buffer, int count) {
+//    if (count == 0) return;
+//    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+//    glEnableVertexAttribArray(attrib->position);
+//    glEnableVertexAttribArray(attrib->uv);
+//    glVertexAttribPointer(attrib->position, 3, GL_FLOAT, GL_FALSE,
+//        sizeof(GLfloat) * 5, 0);
+//    glVertexAttribPointer(attrib->uv, 2, GL_FLOAT, GL_FALSE,
+//        sizeof(GLfloat) * 5, (GLvoid *)(sizeof(GLfloat) * 3));
+//    glDrawArrays(GL_TRIANGLES, 0, count);
+//    glDisableVertexAttribArray(attrib->position);
+//    glDisableVertexAttribArray(attrib->uv);
+//    glBindBuffer(GL_ARRAY_BUFFER, 0);
+//}
+//
+void draw_triangles_3d_sky(Attrib *attrib, GLuint buffer, int count) {
+    if (count == 0) return;
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    glEnableVertexAttribArray(attrib->position);
+    glEnableVertexAttribArray(attrib->uv);
+    glVertexAttribPointer(attrib->position, 3, GL_FLOAT, GL_FALSE,
+        sizeof(GLfloat) * 8, 0);
+    glVertexAttribPointer(attrib->uv, 2, GL_FLOAT, GL_FALSE,
+        sizeof(GLfloat) * 8, (GLvoid *)(sizeof(GLfloat) * 6));
+    glDrawArrays(GL_TRIANGLES, 0, count);
+    glDisableVertexAttribArray(attrib->position);
+    glDisableVertexAttribArray(attrib->uv);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+//
+//void draw_triangles_2d(Attrib *attrib, GLuint buffer, int count) {
+//    if (count == 0) return;
+//    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+//    glEnableVertexAttribArray(attrib->position);
+//    glEnableVertexAttribArray(attrib->uv);
+//    glVertexAttribPointer(attrib->position, 2, GL_FLOAT, GL_FALSE,
+//        sizeof(GLfloat) * 4, 0);
+//    glVertexAttribPointer(attrib->uv, 2, GL_FLOAT, GL_FALSE,
+//        sizeof(GLfloat) * 4, (GLvoid *)(sizeof(GLfloat) * 2));
+//    glDrawArrays(GL_TRIANGLES, 0, count);
+//    glDisableVertexAttribArray(attrib->position);
+//    glDisableVertexAttribArray(attrib->uv);
+//    glBindBuffer(GL_ARRAY_BUFFER, 0);
+//}
+//
+//void draw_lines(Attrib *attrib, GLuint buffer, int components, int count) {
+//    if (count == 0) return;
+//    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+//    glEnableVertexAttribArray(attrib->position);
+//    glVertexAttribPointer(
+//        attrib->position, components, GL_FLOAT, GL_FALSE, 0, 0);
+//    glDrawArrays(GL_LINES, 0, count);
+//    glDisableVertexAttribArray(attrib->position);
+//    glBindBuffer(GL_ARRAY_BUFFER, 0);
+//}
+//
+//void draw_chunk(Attrib *attrib, Chunk *chunk) {
+//    draw_triangles_3d_ao(attrib, chunk->buffer, chunk->faces * 6);
+//}
+//
+//void draw_item(Attrib *attrib, GLuint buffer, int count) {
+//    draw_triangles_3d_ao(attrib, buffer, count);
+//}
+//
+//void draw_text(Attrib *attrib, GLuint buffer, int length) {
+//    glEnable(GL_BLEND);
+//    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+//    draw_triangles_2d(attrib, buffer, length * 6);
+//    glDisable(GL_BLEND);
+//}
+//
+//void draw_signs(Attrib *attrib, Chunk *chunk) {
+//    glEnable(GL_POLYGON_OFFSET_FILL);
+//    glPolygonOffset(-8, -1024);
+//    draw_triangles_3d_text(attrib, chunk->sign_buffer, chunk->sign_faces * 6);
+//    glDisable(GL_POLYGON_OFFSET_FILL);
+//}
+//
+//void draw_sign(Attrib *attrib, GLuint buffer, int length) {
+//    glEnable(GL_POLYGON_OFFSET_FILL);
+//    glPolygonOffset(-8, -1024);
+//    draw_triangles_3d_text(attrib, buffer, length * 6);
+//    glDisable(GL_POLYGON_OFFSET_FILL);
+//}
+//
+//void draw_cube(Attrib *attrib, GLuint buffer) {
+//    draw_item(attrib, buffer, 36);
+//}
+//
+//void draw_plant(Attrib *attrib, GLuint buffer) {
+//    draw_item(attrib, buffer, 24);
+//}
+//
+//void draw_player(Attrib *attrib, Player *player) {
+//    draw_cube(attrib, player->buffer);
+//}
+
+Player *find_player(int id) {
+    for (int i = 0; i < g->player_count; i++) {
+        Player *player = g->players + i;
+        if (player->id == id) {
+            return player;
+        }
+    }
+    return 0;
+}
+
+void update_player(Player *player,
+    float x, float y, float z, float rx, float ry, bool interpolate)
+{
+    if (interpolate) {
+        State *s1 = &player->state1;
+        State *s2 = &player->state2;
+        float previous_time = s2->t;
+        memcpy(s1, &player->state, sizeof(State));
+        s1->t = previous_time;
+        s2->x = x; s2->y = y; s2->z = z; s2->rx = rx; s2->ry = ry;
+        s2->t = glfwGetTime();
+        if (s2->rx - s1->rx > PI) {
+            s1->rx += 2 * PI;
+        }
+        if (s1->rx - s2->rx > PI) {
+            s1->rx -= 2 * PI;
+        }
+    }
+    else {
+        State *s = &player->state;
+        if (player->buffer && s->x == x && s->y == y && s->z == z &&
+            s->rx == rx && s->ry == ry) return;
+        s->x = x; s->y = y; s->z = z; s->rx = rx; s->ry = ry;
+        player->buffer = update_player_buffer(player->buffer, s->x, s->y, s->z, s->rx, s->ry);
+    }
+}
+
+void interpolate_player(Player *player) {
+    State *s1 = &player->state1;
+    State *s2 = &player->state2;
+    float t1 = s2->t - s1->t;
+    float t2 = glfwGetTime() - s2->t;
+    t1 = MIN(t1, 0.15);
+    t1 = MAX(t1, 0.05);
+    float p = MIN(t2 / t1, 1);
+    update_player(
+        player,
+        s1->x + (s2->x - s1->x) * p,
+        s1->y + (s2->y - s1->y) * p,
+        s1->z + (s2->z - s1->z) * p,
+        s1->rx + (s2->rx - s1->rx) * p,
+        s1->ry + (s2->ry - s1->ry) * p,
+        false);
+}
+
+void delete_player(int id) {
+    Player *player = find_player(id);
+    if (!player) {
+        return;
+    }
+    int count = g->player_count;
+    del_buffer(player->buffer);
+    Player *other = g->players + (--count);
+    memcpy(player, other, sizeof(Player));
+    g->player_count = count;
+}
+
+void delete_all_players() {
+    for (int i = 0; i < g->player_count; i++) {
+        Player *player = g->players + i;
+        del_buffer(player->buffer);
+    }
+    g->player_count = 0;
+}
+
+float player_player_distance(Player *p1, Player *p2) {
+    State *s1 = &p1->state;
+    State *s2 = &p2->state;
+    float x = s2->x - s1->x;
+    float y = s2->y - s1->y;
+    float z = s2->z - s1->z;
+    return sqrtf(x * x + y * y + z * z);
+}
+
+float player_crosshair_distance(Player *p1, Player *p2) {
+    State *s1 = &p1->state;
+    State *s2 = &p2->state;
+    float d = player_player_distance(p1, p2);
+    float vx, vy, vz;
+    get_sight_vector(s1->rx, s1->ry, &vx, &vy, &vz);
+    vx *= d; vy *= d; vz *= d;
+    float px, py, pz;
+    px = s1->x + vx; py = s1->y + vy; pz = s1->z + vz;
+    float x = s2->x - px;
+    float y = s2->y - py;
+    float z = s2->z - pz;
+    return sqrtf(x * x + y * y + z * z);
+}
+
+Player *player_crosshair(Player *player) {
+    Player *result = 0;
+    float threshold = RADIANS(5);
+    float best = 0;
+    for (int i = 0; i < g->player_count; i++) {
+        Player *other = g->players + i;
+        if (other == player) {
+            continue;
+        }
+        float p = player_crosshair_distance(player, other);
+        float d = player_player_distance(player, other);
+        if (d < PLAYER_NAME_DISTANCE && p / d < threshold) {
+            if (best == 0 || d < best) {
+                best = d;
+                result = other;
+            }
+        }
+    }
+    return result;
+}
+
+Chunk *find_chunk(int p, int q) {
+    for (int i = 0; i < g->chunk_count; i++) {
+        Chunk *chunk = g->chunks + i;
+        if (chunk->p == p && chunk->q == q) {
+            return chunk;
+        }
+    }
+    return 0;
+}
+
+static bool chunk_is_ready(const Chunk *chunk) {
+#ifdef __EMSCRIPTEN__
+    return g->mode != MODE_ONLINE ||
+        (online_ready && !chunk->needs_resync && !chunk->sync_pending);
+#else
+    (void)chunk;
+    return true;
+#endif
+}
+
+#ifdef __EMSCRIPTEN__
+static int syncing_chunk_count(void) {
+    int count = 0;
+    for (int i = 0; i < g->chunk_count; ++i) {
+        count += g->chunks[i].sync_pending != 0;
+    }
+    return count;
+}
+#define MAX_SYNCING_CHUNKS 8
+#endif
+
+typedef struct {
+    int p;
+    int q;
+} PendingChunkRequest;
+
+static PendingChunkRequest pending_chunk_requests[MAX_CHUNKS];
+static int pending_chunk_request_count = 0;
+
+static int chunk_request_is_pending(int p, int q) {
+    for (int i = 0; i < pending_chunk_request_count; ++i) {
+        if (pending_chunk_requests[i].p == p &&
+            pending_chunk_requests[i].q == q) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void remove_completed_chunk_requests(void) {
+    int i = 0;
+    while (i < pending_chunk_request_count) {
+        PendingChunkRequest *request = &pending_chunk_requests[i];
+
+        if (find_chunk(request->p, request->q)) {
+            pending_chunk_requests[i] =
+                pending_chunk_requests[--pending_chunk_request_count];
+        } else {
+            ++i;
+        }
+    }
+}
+
+static void request_visible_chunks(float x, float z) {
+    if (g->mode != MODE_ONLINE || !get_client_enabled()) {
+        return;
+    }
+
+    remove_completed_chunk_requests();
+
+    int center_p = chunked(x);
+    int center_q = chunked(z);
+    int radius = MAX(0, g->render_radius);
+
+    for (int ring = 0; ring <= radius; ++ring) {
+        for (int dq = -ring; dq <= ring; ++dq) {
+            for (int dp = -ring; dp <= ring; ++dp) {
+                if (ABS(dp) != ring && ABS(dq) != ring) {
+                    continue;
+                }
+
+                int p = center_p + dp;
+                int q = center_q + dq;
+
+                if (find_chunk(p, q) || chunk_request_is_pending(p, q)) {
+                    continue;
+                }
+
+                if (pending_chunk_request_count >= MAX_CHUNKS) {
+                    return;
+                }
+
+                int key = db_get_key(p, q);
+                client_chunk(p, q, key);
+
+                PendingChunkRequest *request =
+                    &pending_chunk_requests[pending_chunk_request_count++];
+                request->p = p;
+                request->q = q;
+            }
+        }
+    }
+}
+
+
+int chunk_distance(Chunk *chunk, int p, int q) {
+    int dp = ABS(chunk->p - p);
+    int dq = ABS(chunk->q - q);
+    return MAX(dp, dq);
+}
+
+int chunk_visible(float planes[6][4], int p, int q, int miny, int maxy, int padding) {
+    int x = p * CHUNK_SIZE - 1 - padding;
+    int z = q * CHUNK_SIZE - 1 - padding;
+    int d = CHUNK_SIZE + 1 + 2 * padding;
+    float points[8][3] = {
+        {x + 0, miny, z + 0},
+        {x + d, miny, z + 0},
+        {x + 0, miny, z + d},
+        {x + d, miny, z + d},
+        {x + 0, maxy, z + 0},
+        {x + d, maxy, z + 0},
+        {x + 0, maxy, z + d},
+        {x + d, maxy, z + d}
+    };
+    int n = g->ortho ? 4 : 6;
+    for (int i = 0; i < n; i++) {
+        int in = 0;
+        int out = 0;
+        for (int j = 0; j < 8; j++) {
+            float d =
+                planes[i][0] * points[j][0] +
+                planes[i][1] * points[j][1] +
+                planes[i][2] * points[j][2] +
+                planes[i][3];
+            if (d < 0) {
+                out++;
+            }
+            else {
+                in++;
+            }
+            if (in && out) {
+                break;
+            }
+        }
+        if (in == 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int highest_block(float x, float z) {
+    int result = WORLD_MIN_Y - 1;
+    int nx = roundf(x);
+    int nz = roundf(z);
+    int p = chunked(x);
+    int q = chunked(z);
+    Chunk *chunk = find_chunk(p, q);
+    if (chunk) {
+        Map *map = &chunk->map;
+        MAP_FOR_EACH(map, ex, ey, ez, ew) {
+            if (is_obstacle(ew) && ex == nx && ez == nz) {
+                result = MAX(result, ey);
+            }
+        } END_MAP_FOR_EACH;
+    }
+    return result;
+}
+
+int _hit_test(
+    Map *map, float max_distance, bool previous,
+    float x, float y, float z,
+    float vx, float vy, float vz,
+    int *hx, int *hy, int *hz)
+{
+    int m = 32;
+    int px = roundf(x);
+    int py = roundf(y);
+    int pz = roundf(z);
+    // With noclip, the block containing the camera is not a mining target.
+    bool noclip = g->noclip && (g->mode != MODE_ONLINE || g->admin_tools);
+    for (int i = 0; i < max_distance * m; i++) {
+        int nx = roundf(x);
+        int ny = roundf(y);
+        int nz = roundf(z);
+        if ((i == 0 && !noclip) || nx != px || ny != py || nz != pz) {
+            int hw = map_get(map, nx, ny, nz);
+            if (hw > 0) {
+                if (previous) {
+                    *hx = px; *hy = py; *hz = pz;
+                }
+                else {
+                    *hx = nx; *hy = ny; *hz = nz;
+                }
+                return hw;
+            }
+            px = nx; py = ny; pz = nz;
+        }
+        x += vx / m; y += vy / m; z += vz / m;
+    }
+    return 0;
+}
+
+int hit_test(
+    bool previous, float x, float y, float z, float rx, float ry,
+    int *bx, int *by, int *bz)
+{
+    int result = 0;
+    float best = 0;
+    int p = chunked(x);
+    int q = chunked(z);
+    float vx, vy, vz;
+    get_sight_vector(rx, ry, &vx, &vy, &vz);
+    for (int i = 0; i < g->chunk_count; i++) {
+        Chunk *chunk = g->chunks + i;
+        if (!chunk_is_ready(chunk)) {
+            continue;
+        }
+        if (chunk_distance(chunk, p, q) > 1) {
+            continue;
+        }
+        int hx, hy, hz;
+        int hw = _hit_test(&chunk->map, 8, previous,
+            x, y, z, vx, vy, vz, &hx, &hy, &hz);
+        if (hw > 0) {
+            float d = sqrtf(
+                powf(hx - x, 2) + powf(hy - y, 2) + powf(hz - z, 2));
+            if (best == 0 || d < best) {
+                best = d;
+                *bx = hx; *by = hy; *bz = hz;
+                result = hw;
+            }
+        }
+    }
+    return result;
+}
+
+int hit_test_face(Player *player, int *x, int *y, int *z, int *face, int *nx, int *ny, int *nz) {
+    State *s = &player->state;
+    int w = hit_test(false, s->x, s->y, s->z, s->rx, s->ry, x, y, z);
+    if (!w) return 0;
+
+    int hx, hy, hz;
+    if (!hit_test(true, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz)) return 0;
+    *nx = hx - *x;
+    *ny = hy - *y;
+    *nz = hz - *z;
+
+    if (*nx == -1 && *ny == 0 && *nz == 0) {
+        *face = 0; return w;
+    }
+    if (*nx == 1 && *ny == 0 && *nz == 0) {
+        *face = 1; return w;
+    }
+    if (*nx == 0 && *ny == 0 && *nz == -1) {
+        *face = 2; return w;
+    }
+    if (*nx == 0 && *ny == 0 && *nz == 1) {
+        *face = 3; return w;
+    }
+    if (*nx == 0 && *ny == 1 && *nz == 0) {
+        *face = 4; return w;
+    }
+    if (*nx == 0 && *ny == -1 && *nz == 0) {
+        *face = 5; return w;
+    }
+
+    return 0;
+}
+
+bool hit_test_face_rotation(Player *player, int *x, int *y, int *z, int *face, int *rotation) {
+    State *s = &player->state;
+    int dx, dy, dz;
+    int w = hit_test_face(player, x, y, z, face, &dx, &dy, &dz);
+
+    // Only allowed to write signs on solid obstacle blocks
+    if (is_obstacle(w)) {
+        if (*face == 4 || *face == 5) {
+            // Sign text on top (or bottom) should be rotated to face towards player writing it
+            int degrees = roundf(DEGREES(atan2f(s->x - dx - *x, s->z - dz - *z)));
+            if (degrees < 0) {
+                degrees += 360;
+            }
+            *rotation = ((degrees + 45) / 90) % 4;
+        } else {
+            *rotation = 0;
+        }
+        return true;
+    }
+    return false;
+}
+
+bool collide(int height, float *x, float *y, float *z) {
+    bool result = false;
+    int p = chunked(*x);
+    int q = chunked(*z);
+    Chunk *chunk = find_chunk(p, q);
+    if (!chunk) {
+        return result;
+    }
+    Map *map = &chunk->map;
+    int nx = roundf(*x);
+    int ny = roundf(*y);
+    int nz = roundf(*z);
+    float px = *x - nx;
+    float py = *y - ny;
+    float pz = *z - nz;
+    float pad = 0.25;
+    for (int dy = 0; dy < height; dy++) {
+        if (px < -pad && is_obstacle(map_get(map, nx - 1, ny - dy, nz))) {
+            *x = nx - pad;
+        }
+        if (px > pad && is_obstacle(map_get(map, nx + 1, ny - dy, nz))) {
+            *x = nx + pad;
+        }
+        if (py < -pad && is_obstacle(map_get(map, nx, ny - dy - 1, nz))) {
+            *y = ny - pad;
+            result = true;
+        }
+        if (py > pad && is_obstacle(map_get(map, nx, ny - dy + 1, nz))) {
+            *y = ny + pad;
+            result = true;
+        }
+        if (pz < -pad && is_obstacle(map_get(map, nx, ny - dy, nz - 1))) {
+            *z = nz - pad;
+        }
+        if (pz > pad && is_obstacle(map_get(map, nx, ny - dy, nz + 1))) {
+            *z = nz + pad;
+        }
+    }
+    return result;
+}
+
+bool player_intersects_block(
+    int height,
+    float x, float y, float z,
+    int hx, int hy, int hz)
+{
+    int nx = roundf(x);
+    int ny = roundf(y);
+    int nz = roundf(z);
+    for (int i = 0; i < height; i++) {
+        if (nx == hx && ny - i == hy && nz == hz) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int _gen_sign_buffer(
+    GLfloat *data, float x, float y, float z, int face, int rotation, const char *text)
+{
+    static const int glyph_dx[8] = {0, 0, -1, 1, 1, 0, -1, 0};
+    static const int glyph_dz[8] = {1, -1, 0, 0, 0, -1, 0, 1};
+    static const int line_dx[8] = {0, 0, 0, 0, 0, 1, 0, -1};
+    static const int line_dy[8] = {-1, -1, -1, -1, 0, 0, 0, 0};
+    static const int line_dz[8] = {0, 0, 0, 0, 1, 0, -1, 0};
+    if (face < 0 || face >= 5) {
+        // TODO: support writing on bottom of a block (face 5)
+        return 0;
+    }
+    if (face == 4) face += rotation;
+    int count = 0;
+    float max_width = 64;
+    float line_height = 1.25;
+    char lines[1024];
+    int rows = wrap(text, max_width, lines, 1024);
+    rows = MIN(rows, 5);
+    int dx = glyph_dx[face];
+    int dz = glyph_dz[face];
+    int ldx = line_dx[face];
+    int ldy = line_dy[face];
+    int ldz = line_dz[face];
+    float n = 1.0 / (max_width / 10);
+    float sx = x - n * (rows - 1) * (line_height / 2) * ldx;
+    float sy = y - n * (rows - 1) * (line_height / 2) * ldy;
+    float sz = z - n * (rows - 1) * (line_height / 2) * ldz;
+    char *key;
+    char *line = tokenize(lines, "\n", &key);
+    while (line) {
+        int length = strlen(line);
+        int line_width = string_width(line);
+        line_width = MIN(line_width, max_width);
+        float rx = sx - dx * line_width / max_width / 2;
+        float ry = sy;
+        float rz = sz - dz * line_width / max_width / 2;
+        for (int i = 0; i < length; i++) {
+            int width = char_width(line[i]);
+            line_width -= width;
+            if (line_width < 0) {
+                break;
+            }
+            rx += dx * width / max_width / 2;
+            rz += dz * width / max_width / 2;
+            if (line[i] != ' ') {
+                make_character_3d(
+                    data + count * 30, rx, ry, rz, n / 2, face, line[i]);
+                count++;
+            }
+            rx += dx * width / max_width / 2;
+            rz += dz * width / max_width / 2;
+        }
+        sx += n * line_height * ldx;
+        sy += n * line_height * ldy;
+        sz += n * line_height * ldz;
+        line = tokenize(NULL, "\n", &key);
+        rows--;
+        if (rows <= 0) {
+            break;
+        }
+    }
+    return count;
+}
+
+void gen_sign_buffer(Chunk *chunk) {
+    SignList *signs = &chunk->signs;
+
+    // first pass - count characters
+    int max_faces = 0;
+    for (int i = 0; i < signs->size; i++) {
+        Sign *e = signs->data + i;
+        max_faces += strlen(e->text);
+    }
+
+    // second pass - generate geometry
+    GLfloat *data = malloc_faces(5, max_faces);
+    int faces = 0;
+    for (int i = 0; i < signs->size; i++) {
+        Sign *e = signs->data + i;
+        faces += _gen_sign_buffer(
+            data + faces * 30, e->x, e->y, e->z, e->face, e->rotation, e->text);
+    }
+
+    del_buffer(chunk->sign_buffer);
+    chunk->sign_buffer = gen_faces(5, faces, data);
+    chunk->sign_faces = faces;
+}
+
+bool has_lights(Chunk *chunk) {
+    if (!SHOW_LIGHTS) {
+        return false;
+    }
+    for (int dp = -1; dp <= 1; dp++) {
+        for (int dq = -1; dq <= 1; dq++) {
+            Chunk *other = chunk;
+            if (dp || dq) {
+                other = find_chunk(chunk->p + dp, chunk->q + dq);
+            }
+            if (!other) {
+                continue;
+            }
+            Map *map = &other->lights;
+            if (map->size) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void dirty_chunk(Chunk *chunk) {
+    chunk->dirty = true;
+    if (has_lights(chunk)) {
+        for (int dp = -1; dp <= 1; dp++) {
+            for (int dq = -1; dq <= 1; dq++) {
+                Chunk *other = find_chunk(chunk->p + dp, chunk->q + dq);
+                if (other) {
+                    other->dirty = true;
+                }
+            }
+        }
+    }
+}
+
+void occlusion(
+    char neighbors[27], char lights[27], float shades[27],
+    float ao[6][4], float light[6][4])
+{
+    static const int lookup3[6][4][3] = {
+        {{0, 1, 3}, {2, 1, 5}, {6, 3, 7}, {8, 5, 7}},
+        {{18, 19, 21}, {20, 19, 23}, {24, 21, 25}, {26, 23, 25}},
+        {{6, 7, 15}, {8, 7, 17}, {24, 15, 25}, {26, 17, 25}},
+        {{0, 1, 9}, {2, 1, 11}, {18, 9, 19}, {20, 11, 19}},
+        {{0, 3, 9}, {6, 3, 15}, {18, 9, 21}, {24, 15, 21}},
+        {{2, 5, 11}, {8, 5, 17}, {20, 11, 23}, {26, 17, 23}}
+    };
+   static const int lookup4[6][4][4] = {
+        {{0, 1, 3, 4}, {1, 2, 4, 5}, {3, 4, 6, 7}, {4, 5, 7, 8}},
+        {{18, 19, 21, 22}, {19, 20, 22, 23}, {21, 22, 24, 25}, {22, 23, 25, 26}},
+        {{6, 7, 15, 16}, {7, 8, 16, 17}, {15, 16, 24, 25}, {16, 17, 25, 26}},
+        {{0, 1, 9, 10}, {1, 2, 10, 11}, {9, 10, 18, 19}, {10, 11, 19, 20}},
+        {{0, 3, 9, 12}, {3, 6, 12, 15}, {9, 12, 18, 21}, {12, 15, 21, 24}},
+        {{2, 5, 11, 14}, {5, 8, 14, 17}, {11, 14, 20, 23}, {14, 17, 23, 26}}
+    };
+    static const float curve[4] = {0.0, 0.25, 0.5, 0.75};
+    for (int i = 0; i < 6; i++) {
+        for (int j = 0; j < 4; j++) {
+            int corner = neighbors[lookup3[i][j][0]];
+            int side1 = neighbors[lookup3[i][j][1]];
+            int side2 = neighbors[lookup3[i][j][2]];
+            int value = side1 && side2 ? 3 : corner + side1 + side2;
+            float shade_sum = 0;
+            float light_sum = 0;
+            int is_light = lights[13] == 15;
+            for (int k = 0; k < 4; k++) {
+                shade_sum += shades[lookup4[i][j][k]];
+                light_sum += lights[lookup4[i][j][k]];
+            }
+            if (is_light) {
+                light_sum = 15 * 4 * 10;
+            }
+            float total = curve[value] + shade_sum / 4.0;
+            ao[i][j] = MIN(total, 1.0);
+            light[i][j] = light_sum / 15.0 / 4.0;
+        }
+    }
+}
+
+#define XZ_SIZE (CHUNK_SIZE * 3 + 2)
+#define XZ_LO (CHUNK_SIZE)
+#define XZ_HI (CHUNK_SIZE * 2 + 1)
+#define Y_SIZE (WORLD_MAX_Y - WORLD_MIN_Y + 3)
+#define XYZ(x, y, z) ((y) * XZ_SIZE * XZ_SIZE + (x) * XZ_SIZE + (z))
+#define XZ(x, z) ((x) * XZ_SIZE + (z))
+
+void light_fill(
+    char *opaque, char *light,
+    int x, int y, int z, int w, int force)
+{
+    if (x + w < XZ_LO || z + w < XZ_LO) {
+        return;
+    }
+    if (x - w > XZ_HI || z - w > XZ_HI) {
+        return;
+    }
+    if (y < 0 || y >= Y_SIZE) {
+        return;
+    }
+    if (light[XYZ(x, y, z)] >= w) {
+        return;
+    }
+    if (!force && opaque[XYZ(x, y, z)]) {
+        return;
+    }
+    light[XYZ(x, y, z)] = w--;
+    light_fill(opaque, light, x - 1, y, z, w, 0);
+    light_fill(opaque, light, x + 1, y, z, w, 0);
+    light_fill(opaque, light, x, y - 1, z, w, 0);
+    light_fill(opaque, light, x, y + 1, z, w, 0);
+    light_fill(opaque, light, x, y, z - 1, w, 0);
+    light_fill(opaque, light, x, y, z + 1, w, 0);
+}
+
+void compute_chunk(WorkerItem *item) {
+    char *opaque = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
+    char *water = (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char));
+    short *highest = (short *)calloc(XZ_SIZE * XZ_SIZE, sizeof(short));
+
+    int ox = item->p * CHUNK_SIZE - CHUNK_SIZE - 1;
+    int oy = WORLD_MIN_Y - 1;
+    int oz = item->q * CHUNK_SIZE - CHUNK_SIZE - 1;
+
+    // check for lights
+    int has_light = 0;
+    if (SHOW_LIGHTS) {
+        for (int a = 0; a < 3; a++) {
+            for (int b = 0; b < 3; b++) {
+                Map *map = item->light_maps[a][b];
+                if (map && map->size) {
+                    has_light = 1;
+                }
+            }
+        }
+    }
+    char *light = has_light ? (char *)calloc(XZ_SIZE * XZ_SIZE * Y_SIZE, sizeof(char)) : NULL;
+
+    // populate opaque array
+    for (int a = 0; a < 3; a++) {
+        for (int b = 0; b < 3; b++) {
+            Map *map = item->block_maps[a][b];
+            if (!map) {
+                continue;
+            }
+            MAP_FOR_EACH(map, ex, ey, ez, ew) {
+                if (ew <= 0) {
+                    int owner_a = chunked(ex) - item->p + 1;
+                    int owner_b = chunked(ez) - item->q + 1;
+                    if (owner_a >= 0 && owner_a < 3 && owner_b >= 0 && owner_b < 3 &&
+                            (owner_a != a || owner_b != b) &&
+                            item->block_maps[owner_a][owner_b]) {
+                        continue;
+                    }
+                }
+                int x = ex - ox;
+                int y = ey - oy;
+                int z = ez - oz;
+                int w = ew;
+                // TODO: this should be unnecessary
+                if (x < 0 || y < 0 || z < 0) {
+                    continue;
+                }
+                if (x >= XZ_SIZE || y >= Y_SIZE || z >= XZ_SIZE) {
+                    continue;
+                }
+                // END TODO
+                opaque[XYZ(x, y, z)] = !is_transparent(w);
+                water[XYZ(x, y, z)] = abs(w) == Item_WATER;
+                if (opaque[XYZ(x, y, z)]) {
+                    highest[XZ(x, z)] = MAX(highest[XZ(x, z)], y);
+                }
+            } END_MAP_FOR_EACH;
+        }
+    }
+
+    // flood fill light intensities
+    if (has_light) {
+        for (int a = 0; a < 3; a++) {
+            for (int b = 0; b < 3; b++) {
+                Map *map = item->light_maps[a][b];
+                if (!map) {
+                    continue;
+                }
+                MAP_FOR_EACH(map, ex, ey, ez, ew) {
+                    int x = ex - ox;
+                    int y = ey - oy;
+                    int z = ez - oz;
+                    light_fill(opaque, light, x, y, z, ew, 1);
+                } END_MAP_FOR_EACH;
+            }
+        }
+    }
+
+    Map *map = item->block_maps[1][1];
+
+    // count exposed faces
+    int miny = 256;
+    int maxy = WORLD_MIN_Y;
+    int faces = 0;
+    MAP_FOR_EACH(map, ex, ey, ez, ew) {
+        if (ew <= 0) {
+            continue;
+        }
+        int x = ex - ox;
+        int y = ey - oy;
+        int z = ez - oz;
+        int f1 = !opaque[XYZ(x - 1, y, z)] && (ew != Item_WATER || !water[XYZ(x - 1, y, z)]);
+        int f2 = !opaque[XYZ(x + 1, y, z)] && (ew != Item_WATER || !water[XYZ(x + 1, y, z)]);
+        int f3 = !opaque[XYZ(x, y + 1, z)] && (ew != Item_WATER || !water[XYZ(x, y + 1, z)]);
+        int f4 = !opaque[XYZ(x, y - 1, z)] && (ew != Item_WATER || !water[XYZ(x, y - 1, z)]);
+        int f5 = !opaque[XYZ(x, y, z - 1)] && (ew != Item_WATER || !water[XYZ(x, y, z - 1)]);
+        int f6 = !opaque[XYZ(x, y, z + 1)] && (ew != Item_WATER || !water[XYZ(x, y, z + 1)]);
+        int total = f1 + f2 + f3 + f4 + f5 + f6;
+        if (total == 0) {
+            continue;
+        }
+        if (is_plant(ew)) {
+            total = 4;
+        }
+        miny = MIN(miny, ey);
+        maxy = MAX(maxy, ey);
+        faces += total;
+    } END_MAP_FOR_EACH;
+
+    // generate geometry
+    GLfloat *data = malloc_faces(10, faces);
+    int offset = 0;
+    MAP_FOR_EACH(map, ex, ey, ez, ew) {
+        if (ew <= 0) {
+            continue;
+        }
+        int x = ex - ox;
+        int y = ey - oy;
+        int z = ez - oz;
+        int f1 = !opaque[XYZ(x - 1, y, z)] && (ew != Item_WATER || !water[XYZ(x - 1, y, z)]);
+        int f2 = !opaque[XYZ(x + 1, y, z)] && (ew != Item_WATER || !water[XYZ(x + 1, y, z)]);
+        int f3 = !opaque[XYZ(x, y + 1, z)] && (ew != Item_WATER || !water[XYZ(x, y + 1, z)]);
+        int f4 = !opaque[XYZ(x, y - 1, z)] && (ew != Item_WATER || !water[XYZ(x, y - 1, z)]);
+        int f5 = !opaque[XYZ(x, y, z - 1)] && (ew != Item_WATER || !water[XYZ(x, y, z - 1)]);
+        int f6 = !opaque[XYZ(x, y, z + 1)] && (ew != Item_WATER || !water[XYZ(x, y, z + 1)]);
+        int total = f1 + f2 + f3 + f4 + f5 + f6;
+        if (total == 0) {
+            continue;
+        }
+        char neighbors[27] = {0};
+        char lights[27] = {0};
+        float shades[27] = {0};
+        int index = 0;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    neighbors[index] = opaque[XYZ(x + dx, y + dy, z + dz)];
+                    lights[index] = has_light ? light[XYZ(x + dx, y + dy, z + dz)] : 0;
+                    shades[index] = 0;
+                    if (y + dy <= highest[XZ(x + dx, z + dz)]) {
+                        for (int oy = 0; oy < 8 && y + dy + oy < Y_SIZE; oy++) {
+                            if (opaque[XYZ(x + dx, y + dy + oy, z + dz)]) {
+                                shades[index] = 1.0 - oy * 0.125;
+                                break;
+                            }
+                        }
+                    }
+                    index++;
+                }
+            }
+        }
+        float ao[6][4];
+        float light[6][4];
+        occlusion(neighbors, lights, shades, ao, light);
+        if (is_plant(ew)) {
+            total = 4;
+            float min_ao = 1;
+            float max_light = 0;
+            for (int a = 0; a < 6; a++) {
+                for (int b = 0; b < 4; b++) {
+                    min_ao = MIN(min_ao, ao[a][b]);
+                    max_light = MAX(max_light, light[a][b]);
+                }
+            }
+            float rotation = simplex2(ex, ez, 4, 0.5, 2) * 360;
+            make_plant(
+                data + offset, min_ao, max_light,
+                ex, ey, ez, 0.5, ew, rotation);
+        }
+        else {
+            make_cube(
+                data + offset, ao, light,
+                f1, f2, f3, f4, f5, f6,
+                ex, ey, ez, 0.5, ew);
+        }
+        offset += total * 60;
+    } END_MAP_FOR_EACH;
+
+    free(opaque);
+    free(water);
+    free(light);
+    free(highest);
+
+    item->miny = miny;
+    item->maxy = maxy;
+    item->faces = faces;
+    item->data = data;
+}
+
+void generate_chunk(Chunk *chunk, WorkerItem *item) {
+    chunk->miny = item->miny;
+    chunk->maxy = item->maxy;
+    chunk->faces = item->faces;
+    del_buffer(chunk->buffer);
+    chunk->buffer = gen_faces(10, item->faces, item->data);
+    gen_sign_buffer(chunk);
+}
+
+void gen_chunk_buffer(Chunk *chunk) {
+    WorkerItem _item;
+    WorkerItem *item = &_item;
+    item->p = chunk->p;
+    item->q = chunk->q;
+    for (int dp = -1; dp <= 1; dp++) {
+        for (int dq = -1; dq <= 1; dq++) {
+            Chunk *other = chunk;
+            if (dp || dq) {
+                other = find_chunk(chunk->p + dp, chunk->q + dq);
+            }
+            if (other) {
+                item->block_maps[dp + 1][dq + 1] = &other->map;
+                item->light_maps[dp + 1][dq + 1] = &other->lights;
+            }
+            else {
+                item->block_maps[dp + 1][dq + 1] = 0;
+                item->light_maps[dp + 1][dq + 1] = 0;
+            }
+        }
+    }
+    compute_chunk(item);
+    generate_chunk(chunk, item);
+    chunk->dirty = false;
+}
+
+void map_set_func(int x, int y, int z, int w, void *arg) {
+    Map *map = (Map *)arg;
+    map_set(map, x, y, z, w);
+}
+
+
+void load_chunk(WorkerItem *item) {
+    int p = item->p;
+    int q = item->q;
+    Map *block_map = item->block_maps[1][1];
+    Map *light_map = item->light_maps[1][1];
+    create_world(p, q, map_set_func, block_map);
+    db_load_blocks(block_map, p, q);
+    db_load_lights(light_map, p, q);
+}
+
+void request_chunk(int p, int q) {
+    int key = db_get_key(p, q);
+    client_chunk(p, q, key ? key : -1);
+}
+
+void init_chunk(Chunk *chunk, int p, int q) {
+    chunk->p = p;
+    chunk->q = q;
+#ifdef __EMSCRIPTEN__
+    chunk->needs_resync = 0;
+    chunk->sync_pending = 0;
+#endif
+    chunk->faces = 0;
+    chunk->sign_faces = 0;
+    chunk->buffer = 0;
+    chunk->sign_buffer = 0;
+    dirty_chunk(chunk);
+    SignList *signs = &chunk->signs;
+    sign_list_alloc(signs, 16);
+    db_load_signs(signs, p, q);
+    Map *block_map = &chunk->map;
+    Map *light_map = &chunk->lights;
+    int dx = p * CHUNK_SIZE - 1;
+    int dy = WORLD_MIN_Y;
+    int dz = q * CHUNK_SIZE - 1;
+    map_alloc(block_map, dx, dy, dz, 0x7fff);
+    map_alloc(light_map, dx, dy, dz, 0xf);
+}
+
+void create_chunk(Chunk *chunk, int p, int q) {
+    init_chunk(chunk, p, q);
+
+#ifdef __EMSCRIPTEN__
+    if (online_ready) {
+        WorkerItem item = {0};
+        item.p = p;
+        item.q = q;
+        item.block_maps[1][1] = &chunk->map;
+        item.light_maps[1][1] = &chunk->lights;
+        load_chunk(&item);
+        chunk->sync_pending = 1;
+        request_chunk(p, q);
+    } else {
+        WorkerItem item = {0};
+        item.p = chunk->p;
+        item.q = chunk->q;
+        item.block_maps[1][1] = &chunk->map;
+        item.light_maps[1][1] = &chunk->lights;
+        load_chunk(&item);
+    }
+#else
+    WorkerItem item = {0};
+    item.p = chunk->p;
+    item.q = chunk->q;
+    item.block_maps[1][1] = &chunk->map;
+    item.light_maps[1][1] = &chunk->lights;
+    load_chunk(&item);
+#endif
+}
+
+
+void delete_chunks() {
+    int count = g->chunk_count;
+    State *s1 = &g->players->state;
+    State *s2 = &(g->players + g->observe1)->state;
+    State *s3 = &(g->players + g->observe2)->state;
+    State *states[3] = {s1, s2, s3};
+    for (int i = 0; i < count; i++) {
+        Chunk *chunk = g->chunks + i;
+#ifdef __EMSCRIPTEN__
+        if (online_ready && chunk->sync_pending) {
+            continue;
+        }
+#endif
+        int delete = 1;
+        for (int j = 0; j < 3; j++) {
+            State *s = states[j];
+            int p = chunked(s->x);
+            int q = chunked(s->z);
+            if (chunk_distance(chunk, p, q) < g->delete_radius) {
+                delete = 0;
+                break;
+            }
+        }
+        if (delete) {
+            map_free(&chunk->map);
+            map_free(&chunk->lights);
+            sign_list_free(&chunk->signs);
+            del_buffer(chunk->buffer);
+            del_buffer(chunk->sign_buffer);
+            Chunk *other = g->chunks + (--count);
+            memcpy(chunk, other, sizeof(Chunk));
+        }
+    }
+    g->chunk_count = count;
+}
+
+void delete_all_chunks() {
+    for (int i = 0; i < g->chunk_count; i++) {
+        Chunk *chunk = g->chunks + i;
+        map_free(&chunk->map);
+        map_free(&chunk->lights);
+        sign_list_free(&chunk->signs);
+        del_buffer(chunk->buffer);
+        del_buffer(chunk->sign_buffer);
+    }
+    g->chunk_count = 0;
+}
+
+void check_workers() {
+    for (int i = 0; i < WORKERS; i++) {
+        Worker *worker = g->workers + i;
+        mtx_lock(&worker->mtx);
+        if (worker->state == WORKER_DONE) {
+            WorkerItem *item = &worker->item;
+            Chunk *chunk = find_chunk(item->p, item->q);
+            if (chunk) {
+                if (item->load) {
+                    Map *block_map = item->block_maps[1][1];
+                    Map *light_map = item->light_maps[1][1];
+                    map_free(&chunk->map);
+                    map_free(&chunk->lights);
+                    map_copy(&chunk->map, block_map);
+                    map_copy(&chunk->lights, light_map);
+                    request_chunk(item->p, item->q);
+                }
+                generate_chunk(chunk, item);
+            }
+            for (int a = 0; a < 3; a++) {
+                for (int b = 0; b < 3; b++) {
+                    Map *block_map = item->block_maps[a][b];
+                    Map *light_map = item->light_maps[a][b];
+                    if (block_map) {
+                        map_free(block_map);
+                        free(block_map);
+                    }
+                    if (light_map) {
+                        map_free(light_map);
+                        free(light_map);
+                    }
+                }
+            }
+            worker->state = WORKER_IDLE;
+        }
+        mtx_unlock(&worker->mtx);
+    }
+}
+
+#include <math.h>
+
+#define NEAR_RADIUS             2
+#define AHEAD_DISTANCE          6
+#define AHEAD_HALF_WIDTH        2
+#ifdef __EMSCRIPTEN__
+#define MAX_NEW_CHUNKS_FRAME    1
+#else
+#define MAX_NEW_CHUNKS_FRAME    8
+#endif
+#define MAX_CANDIDATE_CHUNKS    256
+
+typedef struct {
+    int p;
+    int q;
+    float priority;
+} ChunkCandidate;
+
+/*
+ * Add a coordinate once. Lower priority values are processed first.
+ * The bounded list is ample for the configured radii.
+ */
+static void add_chunk_candidate(
+    ChunkCandidate *items,
+    int *count,
+    int p,
+    int q,
+    float priority
+) {
+    for (int i = 0; i < *count; ++i) {
+        if (items[i].p == p && items[i].q == q) {
+            if (priority < items[i].priority) {
+                items[i].priority = priority;
+            }
+            return;
+        }
+    }
+
+    if (*count >= MAX_CANDIDATE_CHUNKS) {
+        return;
+    }
+
+    items[*count].p = p;
+    items[*count].q = q;
+    items[*count].priority = priority;
+    ++(*count);
+}
+
+/* Insertion sort is efficient for this small, fixed-size candidate list. */
+static void sort_chunk_candidates(ChunkCandidate *items, int count) {
+    for (int i = 1; i < count; ++i) {
+        ChunkCandidate current = items[i];
+        int j = i - 1;
+
+        while (j >= 0 && items[j].priority > current.priority) {
+            items[j + 1] = items[j];
+            --j;
+        }
+        items[j + 1] = current;
+    }
+}
+
+/*
+ * Call every frame for the local player.
+ * Existing chunks are reused; up to MAX_NEW_CHUNKS_FRAME missing chunks
+ * are created per call, in priority order.
+ */
+void force_chunks(Player *player) {
+    State *s = &player->state;
+    const int center_p = chunked(s->x);
+    const int center_q = chunked(s->z);
+
+#ifdef __EMSCRIPTEN__
+    static ChunkCandidate candidates[MAX_CANDIDATE_CHUNKS];
+    static int candidate_count = 0;
+    static int last_p, last_q, last_radius, last_heading;
+    static bool candidates_valid = false;
+    int heading = (int)floorf((s->rx + PI / 16) / (PI / 8));
+    bool rebuild_candidates = !candidates_valid || center_p != last_p ||
+        center_q != last_q || g->create_radius != last_radius || heading != last_heading;
+    if (rebuild_candidates) {
+        candidate_count = 0;
+        candidates_valid = true;
+        last_p = center_p; last_q = center_q;
+        last_radius = g->create_radius; last_heading = heading;
+#else
+    ChunkCandidate candidates[MAX_CANDIDATE_CHUNKS];
+    int candidate_count = 0;
+#endif
+
+    float sight_x, sight_y, sight_z;
+    get_sight_vector(s->rx, s->ry, &sight_x, &sight_y, &sight_z);
+
+    const float horizontal_length =
+        sqrtf(sight_x * sight_x + sight_z * sight_z);
+
+    float forward_x = 0.0f;
+    float forward_z = 0.0f;
+
+    if (horizontal_length > 0.0001f) {
+        forward_x = sight_x / horizontal_length;
+        forward_z = sight_z / horizontal_length;
+    }
+
+    /*
+     * First add the immediate area. The center and close neighbors get
+     * highest priority, so the player is not left waiting for distant chunks.
+     */
+    for (int dp = -NEAR_RADIUS; dp <= NEAR_RADIUS; ++dp) {
+        for (int dq = -NEAR_RADIUS; dq <= NEAR_RADIUS; ++dq) {
+            const float distance = sqrtf((float)(dp * dp + dq * dq));
+            add_chunk_candidate(
+                candidates, &candidate_count,
+                center_p + dp, center_q + dq,
+                distance
+            );
+        }
+    }
+
+#ifdef __EMSCRIPTEN__
+    /* Browser builds do not use pthread workers; fill the rest incrementally. */
+    for (int dp = -g->create_radius; dp <= g->create_radius; ++dp) {
+        for (int dq = -g->create_radius; dq <= g->create_radius; ++dq) {
+            add_chunk_candidate(candidates, &candidate_count,
+                center_p + dp, center_q + dq,
+                sqrtf((float)(dp * dp + dq * dq)));
+        }
+    }
+#endif
+
+    /*
+     * Add chunks ahead of the crosshair. The small forward bias makes
+     * forward chunks load before equally distant side/rear chunks.
+     */
+    if (horizontal_length > 0.0001f) {
+        const int side_p = (int)lroundf(-forward_z);
+        const int side_q = (int)lroundf(forward_x);
+
+        for (int distance = 1; distance <= AHEAD_DISTANCE; ++distance) {
+            const int ahead_p =
+                center_p + (int)lroundf(forward_x * distance);
+            const int ahead_q =
+                center_q + (int)lroundf(forward_z * distance);
+
+            for (int side = -AHEAD_HALF_WIDTH;
+                 side <= AHEAD_HALF_WIDTH;
+                 ++side) {
+                const int p = ahead_p + side_p * side;
+                const int q = ahead_q + side_q * side;
+
+#ifdef __EMSCRIPTEN__
+                if (ABS(p - center_p) > g->create_radius ||
+                    ABS(q - center_q) > g->create_radius) continue;
+#endif
+                /*
+                 * Slightly penalize side chunks; centerline chunks ahead
+                 * should be requested first.
+                 */
+                const float priority =
+                    (float)distance + 0.35f * (float)(side < 0 ? -side : side);
+
+                add_chunk_candidate(
+                    candidates, &candidate_count, p, q, priority
+                );
+            }
+        }
+    }
+
+    sort_chunk_candidates(candidates, candidate_count);
+#ifdef __EMSCRIPTEN__
+    }
+#endif
+
+    int created = 0;
+
+#ifdef __EMSCRIPTEN__
+    /* Finish visible edits before spending a frame on resynchronization. */
+    for (int i = 0; i < candidate_count && created < MAX_NEW_CHUNKS_FRAME; ++i) {
+        Chunk *chunk = find_chunk(candidates[i].p, candidates[i].q);
+        if (chunk && chunk->dirty && chunk_is_ready(chunk)) {
+            gen_chunk_buffer(chunk);
+            ++created;
+        }
+    }
+
+    for (int i = 0; i < candidate_count && created < MAX_NEW_CHUNKS_FRAME; ++i) {
+        Chunk *chunk = find_chunk(candidates[i].p, candidates[i].q);
+        if (chunk && chunk->needs_resync && online_ready &&
+            syncing_chunk_count() < MAX_SYNCING_CHUNKS) {
+            chunk->needs_resync = 0;
+            map_free(&chunk->map);
+            map_free(&chunk->lights);
+            sign_list_free(&chunk->signs);
+            sign_list_alloc(&chunk->signs, 16);
+            map_alloc(&chunk->map, chunk->p * CHUNK_SIZE - 1, WORLD_MIN_Y,
+                chunk->q * CHUNK_SIZE - 1, 0x7fff);
+            map_alloc(&chunk->lights, chunk->p * CHUNK_SIZE - 1, WORLD_MIN_Y,
+                chunk->q * CHUNK_SIZE - 1, 0xf);
+            WorkerItem item = {0};
+            item.p = chunk->p; item.q = chunk->q;
+            item.block_maps[1][1] = &chunk->map;
+            item.light_maps[1][1] = &chunk->lights;
+            load_chunk(&item);
+            dirty_chunk(chunk);
+            chunk->sync_pending = 1;
+            client_chunk(chunk->p, chunk->q, -1);
+            ++created;
+        }
+    }
+
+#endif
+
+    for (int i = 0; i < candidate_count; ++i) {
+        const int p = candidates[i].p;
+        const int q = candidates[i].q;
+        Chunk *chunk = find_chunk(p, q);
+
+        if (chunk != NULL) {
+            /*
+             * Rebuild only when necessary. If gen_chunk_buffer() is costly,
+             * do this when a chunk becomes visible or dirty rather than
+             * rebuilding every frame.
+             */
+            if (chunk->dirty && chunk_is_ready(chunk) && created < MAX_NEW_CHUNKS_FRAME) {
+                gen_chunk_buffer(chunk);
+                ++created;
+            }
+            continue;
+        }
+
+        if (created >= MAX_NEW_CHUNKS_FRAME ||
+            g->chunk_count >= MAX_CHUNKS) {
+            break;
+        }
+#ifdef __EMSCRIPTEN__
+        if (g->mode == MODE_ONLINE && online_ready &&
+            syncing_chunk_count() >= MAX_SYNCING_CHUNKS) break;
+#endif
+
+        chunk = g->chunks + g->chunk_count++;
+        create_chunk(chunk, p, q);
+
+        /*
+         * If create_chunk() already builds the buffer, remove this call.
+         * For asynchronous generation, build only after data is ready.
+         */
+        if (chunk_is_ready(chunk)) gen_chunk_buffer(chunk);
+        ++created;
+    }
+}
+
+void ensure_chunks_worker(Player *player, Worker *worker) {
+    State *s = &player->state;
+
+    float matrix[16];
+    set_matrix_3d(
+        matrix, g->width, g->height,
+        s->x, s->y, s->z, s->rx, s->ry,
+        g->fov, g->ortho, g->ortho_zoom, g->render_radius
+    );
+
+    float planes[6][4];
+    frustum_planes(planes, g->render_radius, matrix);
+
+    const int p = chunked(s->x);
+    const int q = chunked(s->z);
+    const int r = g->create_radius;
+
+    int best_a = 0;
+    int best_b = 0;
+    int best_score = 0x0fffffff;
+    bool found = false;
+
+    for (int dp = -r; dp <= r; ++dp) {
+        for (int dq = -r; dq <= r; ++dq) {
+            const int a = p + dp;
+            const int b = q + dq;
+
+            /* Keep work distributed across workers. */
+            const int index = (ABS(a) ^ ABS(b)) % WORKERS;
+            if (index != worker->index) {
+                continue;
+            }
+
+            Chunk *chunk = find_chunk(a, b);
+
+            if (chunk != NULL && !chunk->dirty) {
+                continue;
+            }
+
+            const int distance = MAX(ABS(dp), ABS(dq));
+            const int invisible = !chunk_visible(planes, a, b, WORLD_MIN_Y, WORLD_MAX_Y, 0);
+
+            /*
+             * Lower scores run first: visible, nearby chunks are preferred.
+             * Dirty chunks with an existing buffer get a small priority
+             * boost so they can be refreshed promptly.
+             */
+            const int dirty_with_buffer =
+                chunk != NULL && chunk->buffer != 0 && chunk->dirty;
+
+            const int score =
+                (invisible << 24) |
+                ((1 - dirty_with_buffer) << 16) |
+                distance;
+
+            if (!found || score < best_score) {
+                found = true;
+                best_score = score;
+                best_a = a;
+                best_b = b;
+            }
+        }
+    }
+
+    if (!found) {
+        return;
+    }
+
+    Chunk *chunk = find_chunk(best_a, best_b);
+    bool load = false;
+
+    if (chunk == NULL) {
+        if (g->chunk_count >= MAX_CHUNKS) {
+            return;
+        }
+
+        chunk = g->chunks + g->chunk_count++;
+        init_chunk(chunk, best_a, best_b);
+
+#ifdef __EMSCRIPTEN__
+        if (get_client_enabled()) {
+            /*
+             * Online: ask the server for this chunk. Do not run load_chunk()
+             * or compute an empty chunk before the response arrives.
+             */
+            load = true;
+        } else {
+            load = true;
+        }
+#else
+        load = true;
+#endif
+    }
+
+    WorkerItem *item = &worker->item;
+    item->p = chunk->p;
+    item->q = chunk->q;
+    item->load = load;
+
+    for (int dp = -1; dp <= 1; ++dp) {
+        for (int dq = -1; dq <= 1; ++dq) {
+            Chunk *other = chunk;
+
+            if (dp != 0 || dq != 0) {
+                other = find_chunk(chunk->p + dp, chunk->q + dq);
+            }
+
+            if (other != NULL) {
+                Map *block_map = malloc(sizeof(*block_map));
+                Map *light_map = malloc(sizeof(*light_map));
+
+                if (block_map == NULL || light_map == NULL) {
+                    free(block_map);
+                    free(light_map);
+
+                    /* Release any maps already allocated for this item. */
+                    for (int i = 0; i < 3; ++i) {
+                        for (int j = 0; j < 3; ++j) {
+                            free(item->block_maps[i][j]);
+                            free(item->light_maps[i][j]);
+                            item->block_maps[i][j] = NULL;
+                            item->light_maps[i][j] = NULL;
+                        }
+                    }
+                    return;
+                }
+
+                map_copy(block_map, &other->map);
+                map_copy(light_map, &other->lights);
+
+                item->block_maps[dp + 1][dq + 1] = block_map;
+                item->light_maps[dp + 1][dq + 1] = light_map;
+            } else {
+                item->block_maps[dp + 1][dq + 1] = NULL;
+                item->light_maps[dp + 1][dq + 1] = NULL;
+            }
+        }
+    }
+
+    chunk->dirty = false;
+    worker->state = WORKER_BUSY;
+    cnd_signal(&worker->cnd);
+}
+
+
+void ensure_chunks(Player *player) {
+    if (player == NULL || g == NULL) {
+        return;
+    }
+
+#ifndef __EMSCRIPTEN__
+    /* Finish completed jobs before selecting or scheduling more chunks. */
+    check_workers();
+#endif
+
+    /* Update the desired nearby and crosshair-forward chunk set. */
+    force_chunks(player);
+
+#ifndef __EMSCRIPTEN__
+    /* Dispatch available work to idle workers. */
+    for (int i = 0; i < WORKERS; ++i) {
+        Worker *worker = g->workers + i;
+
+        mtx_lock(&worker->mtx);
+        if (worker->state == WORKER_IDLE) {
+            ensure_chunks_worker(player, worker);
+        }
+        mtx_unlock(&worker->mtx);
+    }
+#endif
+}
+
+
+int worker_run(void *arg) {
+    Worker *worker = (Worker *)arg;
+    bool running = true;
+    while (running) {
+        mtx_lock(&worker->mtx);
+        while (worker->state != WORKER_BUSY) {
+            cnd_wait(&worker->cnd, &worker->mtx);
+        }
+        mtx_unlock(&worker->mtx);
+        WorkerItem *item = &worker->item;
+        if (item->load) {
+            load_chunk(item);
+        }
+        compute_chunk(item);
+        mtx_lock(&worker->mtx);
+        worker->state = WORKER_DONE;
+        mtx_unlock(&worker->mtx);
+    }
+    return 0;
+}
+
+void unset_sign(int x, int y, int z) {
+    int p = chunked(x);
+    int q = chunked(z);
+    Chunk *chunk = find_chunk(p, q);
+    if (chunk) {
+        SignList *signs = &chunk->signs;
+        if (sign_list_remove_all(signs, x, y, z)) {
+            chunk->dirty = true;
+            db_delete_signs(x, y, z);
+        }
+    }
+    else {
+        db_delete_signs(x, y, z);
+    }
+}
+
+void unset_sign_face(int x, int y, int z, int face) {
+    int p = chunked(x);
+    int q = chunked(z);
+    Chunk *chunk = find_chunk(p, q);
+    if (chunk) {
+        SignList *signs = &chunk->signs;
+        if (sign_list_remove(signs, x, y, z, face)) {
+            chunk->dirty = true;
+            db_delete_sign(x, y, z, face);
+        }
+    }
+    else {
+        db_delete_sign(x, y, z, face);
+    }
+}
+
+void _set_sign(
+    int p, int q, int x, int y, int z, int face, int rotation, const char *text, bool dirty)
+{
+    if (strlen(text) == 0) {
+        unset_sign_face(x, y, z, face);
+        return;
+    }
+    Chunk *chunk = find_chunk(p, q);
+    if (chunk) {
+        SignList *signs = &chunk->signs;
+        sign_list_add(signs, x, y, z, face, rotation, text);
+        if (dirty) {
+            chunk->dirty = true;
+        }
+    }
+    db_insert_sign(p, q, x, y, z, face + rotation, text);
+}
+
+void set_sign(int x, int y, int z, int face, int rotation, const char *text) {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
+    int p = chunked(x);
+    int q = chunked(z);
+    _set_sign(p, q, x, y, z, face, rotation, text, true);
+    client_sign(x, y, z, face, text);
+}
+
+void toggle_light(int x, int y, int z) {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
+    int p = chunked(x);
+    int q = chunked(z);
+    Chunk *chunk = find_chunk(p, q);
+    if (chunk) {
+        Map *map = &chunk->lights;
+        int w = map_get(map, x, y, z) ? 0 : 15;
+        map_set(map, x, y, z, w);
+        db_insert_light(p, q, x, y, z, w);
+        client_light(x, y, z, w);
+        dirty_chunk(chunk);
+    }
+}
+
+void set_light(int p, int q, int x, int y, int z, int w) {
+    Chunk *chunk = find_chunk(p, q);
+    if (chunk) {
+        Map *map = &chunk->lights;
+        if (map_set(map, x, y, z, w)) {
+            dirty_chunk(chunk);
+            db_insert_light(p, q, x, y, z, w);
+        }
+    }
+    else {
+        db_insert_light(p, q, x, y, z, w);
+    }
+}
+
+void _set_block(int p, int q, int x, int y, int z, int w, bool dirty) {
+    Chunk *chunk = find_chunk(p, q);
+    if (chunk) {
+        Map *map = &chunk->map;
+        if (map_set(map, x, y, z, w)) {
+            if (dirty) {
+                dirty_chunk(chunk);
+            }
+            db_insert_block(p, q, x, y, z, w);
+        }
+    }
+    else {
+        db_insert_block(p, q, x, y, z, w);
+    }
+    if (w == 0 && chunked(x) == p && chunked(z) == q) {
+        unset_sign(x, y, z);
+        set_light(p, q, x, y, z, 0);
+    }
+}
+
+void set_block(int x, int y, int z, int w) {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
+    int p = chunked(x);
+    int q = chunked(z);
+#ifdef __EMSCRIPTEN__
+    Chunk *target = find_chunk(p, q);
+    if (g->mode == MODE_ONLINE && (!target || !chunk_is_ready(target))) return;
+#endif
+    _set_block(p, q, x, y, z, w, true);
+    for (int dx = -1; dx <= 1; dx++) {
+        for (int dz = -1; dz <= 1; dz++) {
+            if (dx == 0 && dz == 0) {
+                continue;
+            }
+            if (dx && chunked(x + dx) == p) {
+                continue;
+            }
+            if (dz && chunked(z + dz) == q) {
+                continue;
+            }
+            _set_block(p + dx, q + dz, x, y, z, -w, true);
+        }
+    }
+    client_block(x, y, z, w);
+    int l = is_illuminated(w);
+    if (l) set_light(p, q, x, y, z, l);
+}
+
+void record_block(int x, int y, int z, int w) {
+    memcpy(&g->block1, &g->block0, sizeof(Block));
+    g->block0.x = x;
+    g->block0.y = y;
+    g->block0.z = z;
+    g->block0.w = w;
+}
+
+int get_block(int x, int y, int z) {
+    int p = chunked(x);
+    int q = chunked(z);
+    Chunk *chunk = find_chunk(p, q);
+    if (chunk) {
+        Map *map = &chunk->map;
+        return map_get(map, x, y, z);
+    }
+    return 0;
+}
+
+static bool water_at_player(const State *s, float offset) {
+    return abs(get_block(roundf(s->x), roundf(s->y + offset), roundf(s->z))) == Item_WATER;
+}
+
+static bool player_in_water(const State *s) {
+    return water_at_player(s, 0) || water_at_player(s, -1);
+}
+
+void builder_block(int x, int y, int z, int w) {
+    if (y <= DEEP_BEDROCK_Y || y > WORLD_MAX_Y || get_block(x, y, z) == Item_BEDROCK) {
+        return;
+    }
+    if (is_destructable(get_block(x, y, z))) {
+        set_block(x, y, z, 0);
+    }
+    if (w) {
+        set_block(x, y, z, w);
+    }
+}
+
+int render_chunks(Attrib *attrib, Player *player) {
+    int result = 0;
+    State *s = &player->state;
+    ensure_chunks(player);
+    int p = chunked(s->x);
+    int q = chunked(s->z);
+    float light = get_daylight();
+    float matrix[16];
+    set_matrix_3d(
+        matrix, g->width, g->height,
+        s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->ortho_zoom, g->render_radius);
+    float planes[6][4];
+    frustum_planes(planes, g->render_radius, matrix);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glUniform3f(attrib->camera, s->x, s->y, s->z);
+    glUniform1i(attrib->sampler, 0);
+    glUniform1i(attrib->extra1, 2);
+    glUniform1f(attrib->extra2, light);
+    glUniform1f(attrib->extra3, g->render_radius * CHUNK_SIZE);
+    glUniform1i(attrib->extra4, g->ortho);
+    glUniform1f(attrib->timer, time_of_day());
+    double now = glfwGetTime();
+    glUniform1f(attrib->extra5, fmod(now, 20.0));
+    const int drift = 12;
+    glUniform2f(attrib->cloud_offset, drift * sin(now / 48.0), drift * cos(now / 48.0));
+    for (int i = 0; i < g->chunk_count; i++) {
+        Chunk *chunk = g->chunks + i;
+#ifdef __EMSCRIPTEN__
+        if (!chunk->buffer) continue;
+#endif
+        if (chunk_distance(chunk, p, q) > g->render_radius) {
+            continue;
+        }
+        if (!chunk_visible(
+            planes, chunk->p, chunk->q, chunk->miny, chunk->maxy, chunk->maxy >= 128 ? drift : 0))
+        {
+            continue;
+        }
+        draw_chunk(attrib, chunk);
+        result += chunk->faces;
+    }
+    return result;
+}
+
+void render_signs(Attrib *attrib, Player *player) {
+    State *s = &player->state;
+    int p = chunked(s->x);
+    int q = chunked(s->z);
+    float matrix[16];
+    set_matrix_3d(
+        matrix, g->width, g->height,
+        s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->ortho_zoom, g->render_radius);
+    float planes[6][4];
+    frustum_planes(planes, g->render_radius, matrix);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glUniform1i(attrib->sampler, 3);
+    glUniform1i(attrib->extra1, 1);
+    for (int i = 0; i < g->chunk_count; i++) {
+        Chunk *chunk = g->chunks + i;
+#ifdef __EMSCRIPTEN__
+        if (!chunk->buffer) continue;
+#endif
+        if (chunk_distance(chunk, p, q) > g->sign_radius) {
+            continue;
+        }
+        if (!chunk_visible(
+            planes, chunk->p, chunk->q, chunk->miny, chunk->maxy, 0))
+        {
+            continue;
+        }
+        draw_signs(attrib, chunk);
+    }
+}
+
+void render_sign(Attrib *attrib, Player *player) {
+    if (!g->typing || g->typing_buffer[0] != CRAFT_KEY_SIGN) {
+        return;
+    }
+    int x, y, z, face, rotation;
+    if (!hit_test_face_rotation(player, &x, &y, &z, &face, &rotation)) {
+        return;
+    }
+    State *s = &player->state;
+    float matrix[16];
+    set_matrix_3d(
+        matrix, g->width, g->height,
+        s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->ortho_zoom, g->render_radius);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glUniform1i(attrib->sampler, 3);
+    glUniform1i(attrib->extra1, 1);
+    char text[MAX_SIGN_LENGTH];
+    strncpy(text, g->typing_buffer + 1, MAX_SIGN_LENGTH);
+    text[MAX_SIGN_LENGTH - 1] = '\0';
+    GLfloat *data = malloc_faces(5, strlen(text));
+    int length = _gen_sign_buffer(data, x, y, z, face, rotation, text);
+    GLuint buffer = gen_faces(5, length, data);
+    draw_sign(attrib, buffer, length);
+    del_buffer(buffer);
+}
+
+void render_players(Attrib *attrib, Attrib *names, Player *player) {
+    State *s = &player->state;
+    float matrix[16];
+    set_matrix_3d(
+        matrix, g->width, g->height,
+        s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->ortho_zoom, g->render_radius);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glUniform3f(attrib->camera, s->x, s->y, s->z);
+    glUniform1i(attrib->sampler, 0);
+    glUniform1f(attrib->timer, time_of_day());
+    for (int i = 0; i < g->player_count; i++) {
+        Player *other = g->players + i;
+        float dx = other->state.x - s->x;
+        float dz = other->state.z - s->z;
+        float distance = g->render_radius * CHUNK_SIZE;
+        if (other != player && dx * dx + dz * dz <= distance * distance) {
+            draw_player(attrib, other);
+        }
+    }
+    animals_render(attrib, matrix, s->x, s->y, s->z, g->render_radius, g->zombies_active);
+    if (g->show_ui) {
+        animals_render_names(names, matrix, s->x, s->y, s->z, g->zombies_active);
+    }
+}
+
+void render_sky(Attrib *attrib, Player *player, GLuint buffer) {
+    State *s = &player->state;
+    float matrix[16];
+    set_matrix_3d(
+        matrix, g->width, g->height,
+        0, 0, 0, s->rx, s->ry, g->fov, 0, 0, g->render_radius);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glUniform1i(attrib->sampler, 2);
+    glUniform1f(attrib->timer, time_of_day());
+    draw_triangles_3d_sky(attrib, buffer, 512 * 3);
+}
+
+void render_wireframe(Attrib *attrib, Player *player) {
+    State *s = &player->state;
+    float matrix[16];
+    set_matrix_3d(
+        matrix, g->width, g->height,
+        s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->ortho_zoom, g->render_radius);
+    if (is_obstacle(target_w)) {
+        glUseProgram(attrib->program);
+        glLineWidth(1);
+#ifndef __EMSCRIPTEN__
+        glEnable(GL_COLOR_LOGIC_OP);
+#endif
+        glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+        GLuint wireframe_buffer = gen_wireframe_buffer(target_x, target_y, target_z, 0.53);
+        draw_lines(attrib, wireframe_buffer, 3, 24);
+        del_buffer(wireframe_buffer);
+#ifndef __EMSCRIPTEN__
+        glDisable(GL_COLOR_LOGIC_OP);
+#endif
+    }
+}
+
+void render_cover(Attrib *attrib, Player *player) {
+    float matrix[16];
+    State *s = &player->state;
+    set_matrix_3d(
+        matrix, g->width, g->height,
+        s->x, s->y, s->z, s->rx, s->ry, g->fov, g->ortho, g->ortho_zoom, g->render_radius);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+
+    int w = RC(0, 0) + mining_stage;
+
+    GLuint buffer = gen_cube_buffer_faces(target_x, target_y, target_z, 0.5, w, w, w, w, w, w);
+    glEnable(GL_BLEND);
+    glBlendFuncSeparate(GL_DST_COLOR, GL_ZERO, GL_ZERO, GL_ONE);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(-1, -1);
+    draw_cube(attrib, buffer);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    del_buffer(buffer);
+}
+
+static GLuint crosshair_buffer;
+static int crosshair_width, crosshair_height, crosshair_scale;
+static GLuint pickaxe_buffers[3];
+static int pickaxe_counts[3];
+static GLuint heart_buffers[2];
+static int heart_counts[2];
+
+void on_mining_swing(void) {
+#ifdef __EMSCRIPTEN__
+    if (g->mode != MODE_ONLINE || online_ready) {
+        EM_ASM(if (Module.playGameSound) Module.playGameSound('mine'););
+    }
+#endif
+}
+
+static void begin_hud_sprites(Attrib *attrib) {
+    float matrix[16];
+    set_matrix_2d(matrix, g->width, g->height);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glDisable(GL_DEPTH_TEST);
+    glEnableVertexAttribArray(attrib->position);
+    glEnableVertexAttribArray(attrib->extra1);
+}
+
+static void draw_hud_sprite(Attrib *attrib, GLuint buffer, int count,
+    float x, float y, float size, float angle)
+{
+    glUniform2f(attrib->extra2, x, y);
+    glUniform1f(attrib->extra3, size);
+    glUniform1f(attrib->extra4, angle);
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    glVertexAttribPointer(attrib->position, 2, GL_FLOAT, GL_FALSE,
+        PICKAXE_VERTEX_COMPONENTS * sizeof(float), 0);
+    glVertexAttribPointer(attrib->extra1, 3, GL_FLOAT, GL_FALSE,
+        PICKAXE_VERTEX_COMPONENTS * sizeof(float), (GLvoid *)(2 * sizeof(float)));
+    glDrawArrays(GL_TRIANGLES, 0, count);
+}
+
+static void end_hud_sprites(Attrib *attrib) {
+    glDisableVertexAttribArray(attrib->position);
+    glDisableVertexAttribArray(attrib->extra1);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glEnable(GL_DEPTH_TEST);
+}
+
+static void render_pickaxe(Attrib *attrib) {
+    int mina = g->admin_tools ? 2 : mining_has_pickaxe() ? 1 : 0;
+    if (!pickaxe_buffers[mina]) {
+        float vertices[PICKAXE_MAX_VERTICES * PICKAXE_VERTEX_COMPONENTS];
+        pickaxe_counts[mina] = mina == 2 ? admin_axe_vertices(vertices) : pickaxe_vertices(vertices, mina);
+        pickaxe_buffers[mina] = gen_buffer(
+            pickaxe_counts[mina] * PICKAXE_VERTEX_COMPONENTS * sizeof(float), vertices);
+    }
+
+    bool mining = mining_is_swinging();
+#ifdef __EMSCRIPTEN__
+    mining = mining && (g->mode != MODE_ONLINE || online_ready);
+#endif
+    PickaxePose pose = pickaxe_pose(g->width, g->height, mining, mining_swing_elapsed());
+    draw_hud_sprite(attrib, pickaxe_buffers[mina], pickaxe_counts[mina],
+        pose.x, pose.y, pose.size, pose.angle);
+}
+
+static GLuint make_heart_buffer(int filled, int *count) {
+    static const char pixels[9][10] = {
+        ".##...##.",
+        "#++#.#++#",
+        "#+oooooo#",
+        "#ooooooo#",
+        ".#ooooo#.",
+        "..#ooo#..",
+        "...#o#...",
+        "....#....",
+        ".........",
+    };
+    static const float colors[2][3][3] = {
+        {{.12f, .07f, .09f}, {.28f, .20f, .24f}, {.28f, .20f, .24f}},
+        {{.22f, .04f, .08f}, {.91f, .12f, .24f}, {1.0f, .60f, .65f}},
+    };
+    static const int corners[6][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
+    float vertices[9 * 9 * 6 * PICKAXE_VERTEX_COMPONENTS];
+    *count = 0;
+    for (int row = 0; row < 9; row++) {
+        for (int col = 0; col < 9; col++) {
+            char pixel = pixels[row][col];
+            if (pixel == '.') continue;
+            const float *color = colors[filled][pixel == '#' ? 0 : pixel == 'o' ? 1 : 2];
+            for (int i = 0; i < 6; i++) {
+                float *vertex = vertices + (*count)++ * PICKAXE_VERTEX_COMPONENTS;
+                vertex[0] = (col + corners[i][0]) / 9.0f;
+                vertex[1] = (8 - row + corners[i][1]) / 9.0f;
+                memcpy(vertex + 2, color, 3 * sizeof(float));
+            }
+        }
+    }
+    return gen_buffer(*count * PICKAXE_VERTEX_COMPONENTS * sizeof(float), vertices);
+}
+
+static void render_lives(Attrib *attrib) {
+    float size = fminf(20.0f * g->scale, g->width / 16.0f);
+    float spacing = size * 1.15f;
+    float x = (g->width - size - (PLAYER_LIVES - 1) * spacing) / 2.0f;
+    for (int i = 0; i < PLAYER_LIVES; i++) {
+        int filled = i < g->lives;
+        if (!heart_buffers[filled]) {
+            heart_buffers[filled] = make_heart_buffer(filled, &heart_counts[filled]);
+        }
+        draw_hud_sprite(attrib, heart_buffers[filled], heart_counts[filled],
+            x + i * spacing, 12.0f * g->scale, size, 0);
+    }
+}
+
+static void render_crosshairs(Attrib *attrib) {
+    float matrix[16];
+    set_matrix_2d(matrix, g->width, g->height);
+    glUseProgram(attrib->program);
+    glLineWidth(4 * g->scale);
+#ifndef __EMSCRIPTEN__ // invalid capability TODO: an alternative, see crosshair differences in https://github.com/satoshinm/NetCraft/pull/53
+    glEnable(GL_COLOR_LOGIC_OP);
+#endif
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    if (!crosshair_buffer || crosshair_width != g->width ||
+        crosshair_height != g->height || crosshair_scale != g->scale) {
+        if (crosshair_buffer) del_buffer(crosshair_buffer);
+        crosshair_buffer = gen_crosshair_buffer();
+        crosshair_width = g->width;
+        crosshair_height = g->height;
+        crosshair_scale = g->scale;
+    }
+    draw_lines(attrib, crosshair_buffer, 2, 4);
+#ifndef __EMSCRIPTEN__
+    glDisable(GL_COLOR_LOGIC_OP);
+#endif
+}
+
+static GLuint item_buffers[256];
+static int inventory_items[INVENTORY_COUNT_LEN];
+static int inventory_item_count;
+
+static void sync_inventory_items(void) {
+    int selected = inventory_item_count && g->item_index >= 0 &&
+        g->item_index < inventory_item_count ? inventory_items[g->item_index] : 0;
+    inventory_item_count = Inventory_items(&g->inventory, inventory_items);
+    g->item_index = 0;
+    for (int i = 0; i < inventory_item_count; i++) {
+        if (inventory_items[i] == selected) {
+            g->item_index = i;
+            break;
+        }
+    }
+}
+
+// Block HUD column: first slot centre (CSS px from top) and bottom space kept clear of touch buttons.
+#define HUD_ITEM_TOP 192.0f
+#define HUD_BOTTOM_RESERVE 392.0f
+
+static int visible_items(void) {
+    float spacing = 42.0f * g->scale;
+    int visible = 1 + (int)((g->height - HUD_BOTTOM_RESERVE * g->scale) / spacing);
+    if (visible < 1) visible = 1;
+    if (visible > NUM_INVENTORY_VISIBLE) visible = NUM_INVENTORY_VISIBLE;
+    if (visible > inventory_item_count) visible = inventory_item_count;
+    return visible;
+}
+
+void render_item(Attrib *attrib) {
+    if (inventory_item_count <= 0) return;
+    glUseProgram(attrib->program);
+    glUniform3f(attrib->camera, 0, 0, 5);
+    glUniform1i(attrib->sampler, 0);
+    glUniform1i(attrib->extra1, 2);
+    glUniform1f(attrib->extra2, 1);
+    glUniform1f(attrib->extra3, 100000);
+    glUniform1i(attrib->extra4, 0);
+    glUniform1f(attrib->timer, time_of_day());
+
+    float spacing = 42.0f * g->scale;
+    int visible = visible_items();
+    for (int i = 0; i < visible; i++) {
+        int w = inventory_items[(g->item_index + i) % inventory_item_count];
+        if (w <= 0 || w >= 256) continue;
+        if (!item_buffers[w]) {
+            item_buffers[w] = is_plant(w)
+                ? gen_plant_buffer(0, 0, 0, 0.5, w)
+                : gen_cube_buffer(0, 0, 0, 0.5, w);
+        }
+        float matrix[16];
+        set_matrix_item(matrix, g->width, g->height, g->scale);
+        if (i == 0) {
+            for (int j = 0; j < 12; j++) matrix[j] *= 1.2f;
+        }
+        matrix[12] = 1.0f - 80.0f * g->scale / g->width;
+        matrix[13] = 1.0f - 2.0f * (HUD_ITEM_TOP * g->scale + i * spacing) / g->height;
+        glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+        if (is_plant(w)) draw_plant(attrib, item_buffers[w]);
+        else draw_cube(attrib, item_buffers[w]);
+    }
+}
+
+static void render_text_opacity(
+    Attrib *attrib, int justify, float x, float y, float n, char *text, float opacity)
+{
+    float matrix[16];
+    set_matrix_2d(matrix, g->width, g->height);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glUniform1i(attrib->sampler, 1);
+    glUniform1i(attrib->extra1, 0);
+    glUniform1f(attrib->extra2, opacity);
+    int length = strlen(text);
+    x -= n * justify * (length - 1) / 2;
+    GLuint buffer = gen_text_buffer(x, y, n, text);
+    draw_text(attrib, buffer, length);
+    del_buffer(buffer);
+}
+
+static void render_text(
+    Attrib *attrib, int justify, float x, float y, float n, char *text)
+{
+    render_text_opacity(attrib, justify, x, y, n, text, 1.0f);
+}
+
+static bool printable_chat(const char *message) {
+    for (; *message; message++) {
+        unsigned char byte = (unsigned char)*message;
+        if (byte < 32 || byte > 126) return false;
+    }
+    return true;
+}
+
+static void render_chat_bubbles(Attrib *box, Attrib *text, Player *camera) {
+    enum { COLUMNS = 28 };
+    const float size = fminf(11.0f * g->scale, fminf(g->width / 34.0f, g->height / 30.0f));
+    const float pad = size * .6f;
+    const double now = glfwGetTime();
+    State *eye = &camera->state;
+    float view[16];
+    set_matrix_3d(view, g->width, g->height, eye->x, eye->y, eye->z,
+        eye->rx, eye->ry, g->fov, g->ortho, g->ortho_zoom, g->render_radius);
+
+    for (int i = 0; i < g->player_count; i++) {
+        Player *speaker = g->players + i;
+        double age = now - speaker->chat_time;
+        if (!speaker->chat[0] || age < 0 || age >= 7) continue;
+        float x = g->width * .5f, y = g->height * .32f;
+        if (speaker != camera) {
+            State *s = &speaker->state;
+            float dx = s->x - eye->x, dy = s->y + .45f - eye->y, dz = s->z - eye->z;
+            float distance = sqrtf(dx * dx + dy * dy + dz * dz);
+            if (!isfinite(distance) || distance > 24) continue;
+            float clip[4], anchor[4] = {s->x, s->y + .45f, s->z, 1};
+            mat_vec_multiply(clip, view, anchor);
+            if (clip[3] <= 0 || fabsf(clip[0]) > clip[3] ||
+                fabsf(clip[1]) > clip[3] || fabsf(clip[2]) > clip[3]) continue;
+            bool occluded = false;
+            for (float d = .25f; d < distance; d += .25f) {
+                float t = d / distance;
+                if (is_obstacle(get_block(roundf(eye->x + dx * t),
+                        roundf(eye->y + dy * t), roundf(eye->z + dz * t)))) {
+                    occluded = true;
+                    break;
+                }
+            }
+            if (occluded) continue;
+            x *= 1 + clip[0] / clip[3];
+            y = g->height * .5f * (1 + clip[1] / clip[3]);
+        }
+
+        char rows[MAX_CHAT_LENGTH / (COLUMNS / 2) + 2][COLUMNS + 1];
+        int count = 0, width = 0;
+        const char *next = speaker->chat;
+        size_t remaining = strlen(next);
+        while (remaining && count < (int)(sizeof(rows) / sizeof(*rows))) {
+            size_t n = remaining < COLUMNS ? remaining : COLUMNS;
+            if (remaining > COLUMNS && next[n] != ' ') {
+                size_t split = n;
+                while (split > COLUMNS / 2 && next[split] != ' ') split--;
+                if (next[split] == ' ') n = split;
+            }
+            memcpy(rows[count], next, n);
+            rows[count++][n] = '\0';
+            if ((int)n > width) width = n;
+            next += n;
+            remaining -= n;
+            while (remaining && *next == ' ') { next++; remaining--; }
+        }
+
+        float w = width * size + 2 * pad, h = count * size * 2 + 2 * pad;
+        float left = fmaxf(pad, fminf(x - w / 2, g->width - w - pad));
+        float bottom = fmaxf(pad, fminf(y + pad, g->height - h - pad));
+        float tail = fmaxf(pad, fminf(x - left, w - pad));
+#define CHAT_VERTEX(x, y) (x), (y), .055f, .13f, .10f
+        float vertices[] = {
+            CHAT_VERTEX(0, 0), CHAT_VERTEX(w, 0), CHAT_VERTEX(w, h),
+            CHAT_VERTEX(0, 0), CHAT_VERTEX(w, h), CHAT_VERTEX(0, h),
+            CHAT_VERTEX(tail - pad, 0), CHAT_VERTEX(tail, -pad), CHAT_VERTEX(tail + pad, 0),
+        };
+#undef CHAT_VERTEX
+        GLuint buffer = gen_buffer(sizeof(vertices), vertices);
+        begin_hud_sprites(box);
+        draw_hud_sprite(box, buffer, 9, left, bottom, 1, 0);
+        end_hud_sprites(box);
+        del_buffer(buffer);
+        glDisable(GL_DEPTH_TEST);
+        for (int row = 0; row < count; row++) {
+            render_text(text, ALIGN_LEFT, left + pad + size / 2,
+                bottom + h - pad - (2 * row + 1) * size, size, rows[row]);
+        }
+        glEnable(GL_DEPTH_TEST);
+    }
+}
+
+typedef struct {
+    GLuint buffer;
+    uint32_t count;
+    int item, width, height, scale, length;
+} ItemCountBuffer;
+static ItemCountBuffer item_count_buffers[NUM_INVENTORY_VISIBLE];
+
+static void render_item_counts(Attrib *attrib) {
+    if (inventory_item_count <= 0) return;
+    float matrix[16];
+    set_matrix_2d(matrix, g->width, g->height);
+    glUseProgram(attrib->program);
+    glUniformMatrix4fv(attrib->matrix, 1, GL_FALSE, matrix);
+    glUniform1i(attrib->sampler, 1);
+    glUniform1i(attrib->extra1, 0);
+    glUniform1f(attrib->extra2, 1.0f);
+    for (int i = 0; i < visible_items(); i++) {
+        int w = inventory_items[(g->item_index + i) % inventory_item_count];
+        uint32_t count = Inventory_getCount(&g->inventory, w);
+        ItemCountBuffer *cached = &item_count_buffers[i];
+        if (!cached->buffer || cached->count != count || cached->item != w ||
+            cached->width != g->width || cached->height != g->height || cached->scale != g->scale) {
+            if (cached->buffer) del_buffer(cached->buffer);
+            char text[24];
+            snprintf(text, sizeof(text), "%u", (unsigned)count);
+            cached->length = strlen(text);
+            float size = 10.0f * g->scale;
+            float x = g->width - 72.0f * g->scale - size * (cached->length - 1);
+            float y = g->height - (HUD_ITEM_TOP - 18.0f + i * 42.0f) * g->scale;
+            cached->buffer = gen_text_buffer(x, y, size, text);
+            cached->count = count;
+            cached->item = w;
+            cached->width = g->width;
+            cached->height = g->height;
+            cached->scale = g->scale;
+        }
+        draw_text(attrib, cached->buffer, cached->length);
+    }
+}
+
+void add_message(const char *text) {
+    printf("%s\n", text);
+    snprintf(
+        g->messages[g->message_index], MAX_TEXT_LENGTH, "%s", text);
+    g->message_times[g->message_index] = glfwGetTime();
+    g->message_index = (g->message_index + 1) % MAX_MESSAGES;
+
+    g->message_view_index = g->message_index - MAX_VISIBLE_MESSAGES;
+    if (g->message_view_index < 0) g->message_view_index += MAX_MESSAGES;
+}
+
+static char username[128] = {0};
+static char access_token[128] = {0};
+
+static void set_admin_tools(bool enabled) {
+    if (!enabled && g->mode == MODE_ONLINE) g->noclip = false;
+    g->admin_tools = enabled;
+    g->admin_jump_at = -1;
+    mining_set_admin(enabled);
+}
+
+#ifdef __EMSCRIPTEN__
+static char reward_address[128] = {0};
+static char guest_id[65] = {0};
+
+EMSCRIPTEN_KEEPALIVE int netcraft_world_map_tile(int x, int z) {
+    Biome biome;
+    int water;
+    int y = world_surface(x, z, &biome, &water);
+    return y * 8 + (water ? 4 : biome);
+}
+
+EMSCRIPTEN_KEEPALIVE void netcraft_challenge_command(const char *command) {
+    size_t length = strlen(command);
+    if (!online_ready || g->mode != MODE_ONLINE || !length || length > 128 ||
+        strspn(command, "abcdefghijklmnopqrstuvwxyz0123456789,-") != length) return;
+    char message[133];
+    snprintf(message, sizeof(message), "CG,%s\n", command);
+    client_send(message);
+}
+
+EMSCRIPTEN_KEEPALIVE void netcraft_wallet_proof(const char *signature) {
+    if (!online_ready || g->mode != MODE_ONLINE) return;
+    if (!signature[0]) {
+        client_send("WC\n");
+        return;
+    }
+    if (strlen(signature) != 88 || signature[87] != '=' ||
+        strspn(signature, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/") != 87) return;
+    char message[93];
+    snprintf(message, sizeof(message), "WV,%s\n", signature);
+    client_send(message);
+}
+
+EMSCRIPTEN_KEEPALIVE void netcraft_send_to_player(const char *name) {
+    size_t length = strlen(name);
+    if (!online_ready || g->mode != MODE_ONLINE) {
+        add_message("Connect to the game server before looking up a player.");
+        return;
+    }
+    if (!length || length > 24 ||
+        strspn(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_") != length) return;
+    char command[31];
+    snprintf(command, sizeof(command), "/send %s", name);
+    client_talk(command);
+}
+
+EMSCRIPTEN_KEEPALIVE void netcraft_share_payment(const char *link) {
+    if (!online_ready || g->mode != MODE_ONLINE) {
+        add_message("Connect to the game server before sharing a payment request.");
+        return;
+    }
+    size_t length = strlen(link);
+    if (length < 8 || length > 32 ||
+        strspn(link, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") != length) return;
+    char command[42];
+    snprintf(command, sizeof(command), "/request %s", link);
+    client_talk(command);
+}
+
+EMSCRIPTEN_KEEPALIVE void netcraft_set_guest_id(const char *id) {
+    if (strlen(id) != 64 || strspn(id, "0123456789abcdef") != 64) {
+        fprintf(stderr, "Invalid guest mining identity\n");
+        return;
+    }
+    if (strcmp(guest_id, id) == 0) return;
+    snprintf(guest_id, sizeof(guest_id), "%s", id);
+    if (online_ready) {
+        char message[68];
+        snprintf(message, sizeof(message), "G,%s\n", guest_id);
+        client_send(message);
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE void netcraft_set_reward_address(const char *address) {
+    size_t length = strlen(address);
+    if (length >= sizeof(reward_address) || strspn(address, "abcdefghijklmnopqrstuvwxyz0123456789:") != length) {
+        fprintf(stderr, "Invalid reward address update\n");
+        return;
+    }
+    if (strcmp(reward_address, address) == 0) return;
+    set_admin_tools(false);
+    snprintf(reward_address, sizeof(reward_address), "%s", address);
+    if (online_ready) {
+        char message[160];
+        snprintf(message, sizeof(message), "W,%s\n", reward_address);
+        client_send(message);
+    }
+}
+#endif
+static bool have_access_token = false;
+
+void set_access_token(char *username_in, char *access_token_in) {
+    strncpy(username, username_in, sizeof(username) - 1);
+    strncpy(access_token, access_token_in, sizeof(access_token) - 1);
+    have_access_token = true;
+}
+
+void login() {
+    if (have_access_token) {
+        printf("Logging in with provided access token for %s\n", username);
+        client_login(username, access_token);
+        return;
+    }
+
+    char identity_token[128] = {0};
+    if (db_auth_get_selected(username, 128, identity_token, 128)) {
+        printf("Contacting login server for username: %s\n", username);
+        if (get_access_token(
+            access_token, 128, username, identity_token))
+        {
+            printf("Successfully authenticated with the login server\n");
+            client_login(username, access_token);
+        }
+        else {
+            printf("Failed to authenticate with the login server\n");
+            client_login("", "");
+        }
+    }
+    else {
+        printf("Logging in anonymously\n");
+        client_login("", "");
+    }
+}
+
+void copy() {
+    memcpy(&g->copy0, &g->block0, sizeof(Block));
+    memcpy(&g->copy1, &g->block1, sizeof(Block));
+}
+
+void paste() {
+    Block *c1 = &g->copy1;
+    Block *c2 = &g->copy0;
+    Block *p1 = &g->block1;
+    Block *p2 = &g->block0;
+    int scx = SIGN(c2->x - c1->x);
+    int scz = SIGN(c2->z - c1->z);
+    int spx = SIGN(p2->x - p1->x);
+    int spz = SIGN(p2->z - p1->z);
+    int oy = p1->y - c1->y;
+    int dx = ABS(c2->x - c1->x);
+    int dz = ABS(c2->z - c1->z);
+    for (int y = WORLD_MIN_Y; y <= WORLD_MAX_Y; y++) {
+        for (int x = 0; x <= dx; x++) {
+            for (int z = 0; z <= dz; z++) {
+                int w = get_block(c1->x + x * scx, y, c1->z + z * scz);
+                builder_block(p1->x + x * spx, y + oy, p1->z + z * spz, w);
+            }
+        }
+    }
+}
+
+void array(Block *b1, Block *b2, int xc, int yc, int zc) {
+    if (b1->w != b2->w) {
+        return;
+    }
+    int w = b1->w;
+    int dx = b2->x - b1->x;
+    int dy = b2->y - b1->y;
+    int dz = b2->z - b1->z;
+    xc = dx ? xc : 1;
+    yc = dy ? yc : 1;
+    zc = dz ? zc : 1;
+    for (int i = 0; i < xc; i++) {
+        int x = b1->x + dx * i;
+        for (int j = 0; j < yc; j++) {
+            int y = b1->y + dy * j;
+            for (int k = 0; k < zc; k++) {
+                int z = b1->z + dz * k;
+                builder_block(x, y, z, w);
+            }
+        }
+    }
+}
+
+void cube(Block *b1, Block *b2, int fill) {
+    if (b1->w != b2->w) {
+        return;
+    }
+    int w = b1->w;
+    int x1 = MIN(b1->x, b2->x);
+    int y1 = MIN(b1->y, b2->y);
+    int z1 = MIN(b1->z, b2->z);
+    int x2 = MAX(b1->x, b2->x);
+    int y2 = MAX(b1->y, b2->y);
+    int z2 = MAX(b1->z, b2->z);
+    int a = (x1 == x2) + (y1 == y2) + (z1 == z2);
+    for (int x = x1; x <= x2; x++) {
+        for (int y = y1; y <= y2; y++) {
+            for (int z = z1; z <= z2; z++) {
+                if (!fill) {
+                    int n = 0;
+                    n += x == x1 || x == x2;
+                    n += y == y1 || y == y2;
+                    n += z == z1 || z == z2;
+                    if (n <= a) {
+                        continue;
+                    }
+                }
+                builder_block(x, y, z, w);
+            }
+        }
+    }
+}
+
+void sphere(Block *center, int radius, int fill, int fx, int fy, int fz) {
+    static const float offsets[8][3] = {
+        {-0.5, -0.5, -0.5},
+        {-0.5, -0.5, 0.5},
+        {-0.5, 0.5, -0.5},
+        {-0.5, 0.5, 0.5},
+        {0.5, -0.5, -0.5},
+        {0.5, -0.5, 0.5},
+        {0.5, 0.5, -0.5},
+        {0.5, 0.5, 0.5}
+    };
+    int cx = center->x;
+    int cy = center->y;
+    int cz = center->z;
+    int w = center->w;
+    for (int x = cx - radius; x <= cx + radius; x++) {
+        if (fx && x != cx) {
+            continue;
+        }
+        for (int y = cy - radius; y <= cy + radius; y++) {
+            if (fy && y != cy) {
+                continue;
+            }
+            for (int z = cz - radius; z <= cz + radius; z++) {
+                if (fz && z != cz) {
+                    continue;
+                }
+                int inside = 0;
+                int outside = fill;
+                for (int i = 0; i < 8; i++) {
+                    float dx = x + offsets[i][0] - cx;
+                    float dy = y + offsets[i][1] - cy;
+                    float dz = z + offsets[i][2] - cz;
+                    float d = sqrtf(dx * dx + dy * dy + dz * dz);
+                    if (d < radius) {
+                        inside = 1;
+                    }
+                    else {
+                        outside = 1;
+                    }
+                }
+                if (inside && outside) {
+                    builder_block(x, y, z, w);
+                }
+            }
+        }
+    }
+}
+
+void cylinder(Block *b1, Block *b2, int radius, int fill) {
+    if (b1->w != b2->w) {
+        return;
+    }
+    int w = b1->w;
+    int x1 = MIN(b1->x, b2->x);
+    int y1 = MIN(b1->y, b2->y);
+    int z1 = MIN(b1->z, b2->z);
+    int x2 = MAX(b1->x, b2->x);
+    int y2 = MAX(b1->y, b2->y);
+    int z2 = MAX(b1->z, b2->z);
+    int fx = x1 != x2;
+    int fy = y1 != y2;
+    int fz = z1 != z2;
+    if (fx + fy + fz != 1) {
+        return;
+    }
+    Block block = {x1, y1, z1, w};
+    if (fx) {
+        for (int x = x1; x <= x2; x++) {
+            block.x = x;
+            sphere(&block, radius, fill, 1, 0, 0);
+        }
+    }
+    if (fy) {
+        for (int y = y1; y <= y2; y++) {
+            block.y = y;
+            sphere(&block, radius, fill, 0, 1, 0);
+        }
+    }
+    if (fz) {
+        for (int z = z1; z <= z2; z++) {
+            block.z = z;
+            sphere(&block, radius, fill, 0, 0, 1);
+        }
+    }
+}
+
+void tree(Block *block) {
+    int bx = block->x;
+    int by = block->y;
+    int bz = block->z;
+    for (int y = by + 3; y < by + 8; y++) {
+        for (int dx = -3; dx <= 3; dx++) {
+            for (int dz = -3; dz <= 3; dz++) {
+                int dy = y - (by + 4);
+                int d = (dx * dx) + (dy * dy) + (dz * dz);
+                if (d < 11) {
+                    builder_block(bx + dx, y, bz + dz, 15);
+                }
+            }
+        }
+    }
+    for (int y = by; y < by + 7; y++) {
+        builder_block(bx, y, bz, 5);
+    }
+}
+
+void set_db_path() {
+    snprintf(g->db_path, MAX_PATH_LENGTH,
+        "cache.%s.%d.db", g->server_addr, g->server_port);
+
+#ifdef __EMSCRIPTEN__
+    // WebSocket URLs contain characters unsuitable for filenames; transliterate
+    for (int i = 0; i < strlen(g->db_path); ++i) {
+        if (g->db_path[i] == '/') g->db_path[i] = '_';
+        if (g->db_path[i] == ':') g->db_path[i] = '-';
+    }
+#endif
+}
+
+void parse_command(const char *buffer, bool forward) {
+    char username[128] = {0};
+    char token[128] = {0};
+    char server_addr[MAX_ADDR_LENGTH];
+    int server_port = DEFAULT_PORT;
+    char filename[MAX_PATH_LENGTH];
+    int radius, count, xc, yc, zc;
+    float elapsed;
+    if (sscanf(buffer, "/identity %127s %127s", username, token) == 2) {
+        db_auth_set(username, token);
+        add_message("Successfully imported identity token!");
+        login();
+    }
+    else if (strcmp(buffer, "/logout") == 0) {
+        db_auth_select_none();
+        login();
+    }
+    else if (sscanf(buffer, "/login %127s", username) == 1) {
+        if (db_auth_select(username)) {
+            login();
+        }
+        else {
+            add_message("Unknown username.");
+        }
+    }
+    else if (sscanf(buffer,
+        "/online %128s %d", server_addr, &server_port) >= 1)
+    {
+        g->mode_changed = true;
+        g->mode = MODE_ONLINE;
+        strncpy(g->server_addr, server_addr, MAX_ADDR_LENGTH);
+        g->server_port = server_port;
+        set_db_path();
+    }
+    else if (sscanf(buffer, "/offline %128s", filename) == 1) {
+        g->mode_changed = true;
+        g->mode = MODE_OFFLINE;
+        snprintf(g->db_path, MAX_PATH_LENGTH, "%s.db", filename);
+    }
+    else if (strcmp(buffer, "/offline") == 0) {
+        g->mode_changed = true;
+        g->mode = MODE_OFFLINE;
+        snprintf(g->db_path, MAX_PATH_LENGTH, "%s", DB_PATH);
+    }
+    else if (sscanf(buffer, "/view %d", &radius) == 1) {
+        if (radius >= 1 && radius <= 24) {
+            g->create_radius = radius;
+            g->render_radius = radius;
+            g->delete_radius = radius + 4;
+        }
+        else {
+            add_message("Viewing distance must be between 1 and 24.");
+        }
+    }
+    else if (strcmp(buffer, "/copy") == 0) {
+        copy();
+    }
+    else if (strcmp(buffer, "/paste") == 0) {
+        paste();
+    }
+    else if (strcmp(buffer, "/tree") == 0) {
+        tree(&g->block0);
+    }
+    else if (sscanf(buffer, "/array %d %d %d", &xc, &yc, &zc) == 3) {
+        array(&g->block1, &g->block0, xc, yc, zc);
+    }
+    else if (sscanf(buffer, "/array %d", &count) == 1) {
+        array(&g->block1, &g->block0, count, count, count);
+    }
+    else if (strcmp(buffer, "/fcube") == 0) {
+        cube(&g->block0, &g->block1, 1);
+    }
+    else if (strcmp(buffer, "/cube") == 0) {
+        cube(&g->block0, &g->block1, 0);
+    }
+    else if (sscanf(buffer, "/fsphere %d", &radius) == 1) {
+        sphere(&g->block0, radius, 1, 0, 0, 0);
+    }
+    else if (sscanf(buffer, "/sphere %d", &radius) == 1) {
+        sphere(&g->block0, radius, 0, 0, 0, 0);
+    }
+    else if (sscanf(buffer, "/fcirclex %d", &radius) == 1) {
+        sphere(&g->block0, radius, 1, 1, 0, 0);
+    }
+    else if (sscanf(buffer, "/circlex %d", &radius) == 1) {
+        sphere(&g->block0, radius, 0, 1, 0, 0);
+    }
+    else if (sscanf(buffer, "/fcircley %d", &radius) == 1) {
+        sphere(&g->block0, radius, 1, 0, 1, 0);
+    }
+    else if (sscanf(buffer, "/circley %d", &radius) == 1) {
+        sphere(&g->block0, radius, 0, 0, 1, 0);
+    }
+    else if (sscanf(buffer, "/fcirclez %d", &radius) == 1) {
+        sphere(&g->block0, radius, 1, 0, 0, 1);
+    }
+    else if (sscanf(buffer, "/circlez %d", &radius) == 1) {
+        sphere(&g->block0, radius, 0, 0, 0, 1);
+    }
+    else if (sscanf(buffer, "/fcylinder %d", &radius) == 1) {
+        cylinder(&g->block0, &g->block1, radius, 1);
+    }
+    else if (sscanf(buffer, "/cylinder %d", &radius) == 1) {
+        cylinder(&g->block0, &g->block1, radius, 0);
+    }
+    else if (strcmp(buffer, "/noclip") == 0) {
+        if (g->mode == MODE_ONLINE && !g->admin_tools) {
+            g->noclip = false;
+            add_message("Verify the NetCraft admin wallet to use noclip online.");
+        } else {
+            g->noclip = !g->noclip;
+        }
+    }
+    else if (strcmp(buffer, "/survival") == 0) {
+        set_survival_gamemode();
+        add_message("Game mode set to survival");
+    }
+    else if (strcmp(buffer, "/creative") == 0) {
+        set_creative_gamemode();
+        add_message("Game mode set to creative");
+    }
+    else if (sscanf(buffer, "/time %g", &elapsed) == 1) {
+        glfwSetTime(elapsed / 24 * g->day_length);
+        g->time_changed = true;
+    }
+    else if (sscanf(buffer, "/daylength %d", &count) == 1) {
+        g->day_length = count;
+        g->time_changed = true;
+    }
+    else if (strcmp(buffer, "/receive") == 0) {
+#ifdef __EMSCRIPTEN__
+        EM_ASM(parent.postMessage({type: 'netcraft-wallet-receive'}, '*'););
+#else
+        add_message("The token wallet is available in the browser game.");
+#endif
+    }
+    else if (strcmp(buffer, "/list") == 0) {
+        char buf[256] = {0};
+
+        for (int i = 0; i < g->player_count; i++) {
+            Player *player = g->players + i;
+            if (player->name[0]) {
+                strncat(buf, player->name, sizeof(buf) - 1);
+            } else {
+                // TODO: show id if no name
+                strncat(buf, "(null)", sizeof(buf) - 1);
+            }
+            printf("%d = %s(%d)\n", i, player->name, player->id);
+            if (i < g->player_count - 1) {
+                strncat(buf, ", ", sizeof(buf) - 1);
+            }
+            // TODO: if exceeds line length, start new line (or wrap)
+        }
+        add_message(buf);
+
+        snprintf(buf, sizeof(buf), "%d player(s) listed", g->player_count);
+        add_message(buf);
+    }
+    else if (forward) {
+        client_talk(buffer);
+    }
+}
+
+void on_light() {
+    State *s = &g->players->state;
+    int hx, hy, hz;
+    int hw = hit_test(false, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
+    if (hy > DEEP_BEDROCK_Y && hy <= WORLD_MAX_Y && is_destructable(hw)) {
+        toggle_light(hx, hy, hz);
+    }
+}
+
+int get_targeted_block(int *x, int *y, int *z, int *face) {
+    int nx, ny, nz;
+    *face = -1;
+    int block = hit_test_face(g->players, x, y, z, face, &nx, &ny, &nz);
+    if (block) return block;
+    // Mining needs a block, not a placement face.
+    State *s = &g->players->state;
+    return hit_test(false, s->x, s->y, s->z, s->rx, s->ry, x, y, z);
+}
+
+bool on_pickaxe_attack(void) {
+    if (g->mode != MODE_ONLINE) return false;
+#ifdef __EMSCRIPTEN__
+    if (!online_ready) return false;
+#endif
+    State *s = &g->players->state;
+    Player *target = player_crosshair(g->players);
+    static double last_challenge_attack = -1;
+    double challenge_now = glfwGetTime();
+    if (target && player_player_distance(g->players, target) <= 4 &&
+        (last_challenge_attack < 0 || challenge_now < last_challenge_attack ||
+            challenge_now - last_challenge_attack >= .5)) {
+        last_challenge_attack = challenge_now;
+        char message[32];
+        snprintf(message, sizeof(message), "CA,%d\n", target->id);
+        client_send(message);
+    }
+    if (!g->zombies_active) return false;
+    float vx, vy, vz, distance;
+    get_sight_vector(s->rx, s->ry, &vx, &vy, &vz);
+    unsigned int id = animals_target(s->x, s->y, s->z, vx, vy, vz, &distance);
+    if (!id) return false;
+    for (float d = 0; d < distance; d += 1.0f / 32.0f) {
+        if (get_block(roundf(s->x + vx * d), roundf(s->y + vy * d),
+                roundf(s->z + vz * d)) > 0) return false;
+    }
+    static double last_attack = -1;
+    double now = glfwGetTime();
+    if (last_attack < 0 || now < last_attack || now - last_attack >= .3) {
+        last_attack = now;
+        client_position(s->x, s->y, s->z, s->rx, s->ry, g->flying);
+        char message[32];
+        snprintf(message, sizeof(message), "ZA,%u\n", id);
+        client_send(message);
+    }
+    return true;
+}
+
+void on_mining_target(int x, int y, int z) {
+    if (g->mode != MODE_ONLINE) return;
+#ifdef __EMSCRIPTEN__
+    if (!online_ready) return;
+#endif
+    State *s = &g->players->state;
+    client_position(s->x, s->y, s->z, s->rx, s->ry, g->flying);
+    char message[64];
+    snprintf(message, sizeof(message), "MB,%d,%d,%d\n", x, y, z);
+    client_send(message);
+}
+
+void on_mine() {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
+    int hx, hy, hz, face;
+    int hw = get_targeted_block(&hx, &hy, &hz, &face);
+    if (hw && hy > DEEP_BEDROCK_Y && hy <= WORLD_MAX_Y && is_destructable(hw)) {
+        if (g->admin_tools && g->mode == MODE_ONLINE) {
+            State *s = &g->players->state;
+            client_position(s->x, s->y, s->z, s->rx, s->ry, g->flying);
+            char message[64];
+            snprintf(message, sizeof(message), "AB,%d,%d,%d\n", hx, hy, hz);
+            client_send(message);
+            return;
+        }
+        set_block(hx, hy, hz, 0);
+        if (g->mode != MODE_ONLINE) {
+            Inventory_collect(&g->inventory, hw);
+            sync_inventory_items();
+        }
+#ifdef __EMSCRIPTEN__
+        if (g->mode != MODE_ONLINE) EM_ASM_ARGS({
+            if (Module.playBlockSound) Module.playBlockSound(0);
+            parent.postMessage({ type: 'netcraft-block-mined', block: $0 }, '*');
+        }, hw);
+#endif
+
+        //struct ItemStack stack = { .type = hw, .count = 1 };
+        //inventory_add(hotbar, HOTBAR_INVENTORY_SIZE, &stack);
+
+        record_block(hx, hy, hz, 0);
+        if (is_plant(get_block(hx, hy + 1, hz))) {
+            on_mining_target(hx, hy + 1, hz);
+            set_block(hx, hy + 1, hz, 0);
+        }
+    }
+}
+
+void on_build() {
+#ifdef __EMSCRIPTEN__
+    if (g->mode == MODE_ONLINE && !online_ready) return;
+#endif
+    State *s = &g->players->state;
+    int hx, hy, hz;
+    int hw = hit_test(true, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
+    if (hw && hy > WORLD_MIN_Y && hy <= WORLD_MAX_Y) {
+        if (!is_obstacle(hw)) {
+            hw = hit_test(false, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
+            if (!hw) return;
+        }
+
+        if (hy > DEEP_BEDROCK_Y && hy <= WORLD_MAX_Y && !player_intersects_block(2, s->x, s->y, s->z, hx, hy, hz)) {
+            if (!inventory_item_count) {
+                add_message("Mine a block before building.");
+                return;
+            }
+            int hw = inventory_items[g->item_index];
+
+#ifdef __EMSCRIPTEN__
+            Chunk *target = find_chunk(chunked(hx), chunked(hz));
+            if (g->mode == MODE_ONLINE && (!target || !chunk_is_ready(target))) return;
+#endif
+            if (g->mode == MODE_ONLINE && pending_placement.active) return;
+            if (!Inventory_use(&g->inventory, hw)) {
+                add_message("Mine this block type before building with it.");
+                return;
+            }
+            sync_inventory_items();
+            if (g->mode == MODE_ONLINE) {
+                pending_placement.active = true;
+                pending_placement.x = hx; pending_placement.y = hy;
+                pending_placement.z = hz; pending_placement.item = hw;
+            }
+            set_block(hx, hy, hz, hw);
+#ifdef __EMSCRIPTEN__
+            if (g->mode != MODE_ONLINE) EM_ASM(if (Module.playBlockSound) Module.playBlockSound(1););
+#endif
+            record_block(hx, hy, hz, hw);
+        }
+    }
+}
+
+void on_middle_click() {
+    State *s = &g->players->state;
+    int hx, hy, hz;
+    int hw = hit_test(false, s->x, s->y, s->z, s->rx, s->ry, &hx, &hy, &hz);
+    for (int i = 0; i < inventory_item_count; i++) {
+        if (inventory_items[i] == hw) {
+            g->item_index = i;
+            break;
+        }
+    }
+}
+
+void change_ortho_zoom(double ydelta) {
+    g->ortho_zoom += ydelta;
+
+    if (g->ortho_zoom > ORTHO_ZOOM_MAX) {
+        g->ortho_zoom = ORTHO_ZOOM_MAX;
+    } else if (g->ortho_zoom < ORTHO_ZOOM_MIN) {
+        g->ortho_zoom = ORTHO_ZOOM_MIN;
+    }
+}
+
+void start_typing(void);
+void on_key(GLFWwindow *window, int key, int scancode, int action, int mods) {
+    bool control = (mods & GLFW_MOD_CONTROL) != 0;
+    bool super = (mods & GLFW_MOD_SUPER) != 0;
+    if (window == NULL) window = g->window;
+    bool exclusive =
+        glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
+    if (action == GLFW_RELEASE) {
+        if (!g->typing) {
+            if (key == CRAFT_KEY_MINE) {
+                mining_stop();
+            }
+            else if (key == CRAFT_KEY_BUILD) {
+                building_stop();
+            }
+        }
+        if (key == CRAFT_KEY_CROUCH) g->crouching = false;
+        return;
+    }
+    if (g->typing) {
+        if (key == GLFW_KEY_BACKSPACE) {
+            int n = strlen(g->typing_buffer);
+            if (n > 0) {
+                g->typing_buffer[n - 1] = '\0';
+            }
+        }
+        if (key == GLFW_KEY_UP) {
+            int save = g->message_view_index;
+            g->message_view_index = (g->message_view_index - 1) % MAX_MESSAGES;
+            if (g->message_view_index < 0) g->message_view_index += MAX_MESSAGES;
+            if (g->message_view_index == g->message_index) g->message_view_index = save;
+            if (!g->messages[g->message_view_index]) g->message_view_index = save;
+        }
+        if (key == GLFW_KEY_DOWN) {
+            int save = g->message_view_index;
+            g->message_view_index = (g->message_view_index + 1) % MAX_MESSAGES;
+            if (g->message_view_index == g->message_index) g->message_view_index = save;
+            if (!g->messages[g->message_view_index]) g->message_view_index = save;
+        }
+    }
+    if (key == CRAFT_KEY_FULLSCREEN && action == GLFW_PRESS && !g->typing
+#ifdef __EMSCRIPTEN__
+        && !EM_ASM_INT(return window.parent !== window;)
+#endif
+    ) {
+        fullscreen_toggle();
+    }
+
+    if (action != GLFW_PRESS) {
+        return;
+    }
+    if (key == CRAFT_KEY_CROUCH && !g->typing) {
+        if (super) {
+            g->crouching = false;
+        } else {
+            g->crouching = true;
+        }
+    }
+    if (key == CRAFT_KEY_JUMP && !g->typing && g->mode == MODE_ONLINE) {
+        double now = glfwGetTime();
+        if (g->admin_jump_at >= 0 && now - g->admin_jump_at < JUMP_FLY_THRESHOLD) {
+            client_send("AF\n");
+            g->admin_jump_at = -1;
+        } else {
+            g->admin_jump_at = now;
+        }
+    }
+    if (key == GLFW_KEY_ESCAPE) {
+        if (g->typing) {
+            g->typing = false;
+        }
+        else if (exclusive) {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        }
+    }
+    if (key == CRAFT_KEY_DEBUG) {
+        g->show_info_text = !g->show_info_text;
+    }
+    if (key == CRAFT_KEY_UI) {
+        g->show_ui = !g->show_ui;
+    }
+    if (key == CRAFT_KEY_VR) {
+        if (mods & GLFW_MOD_SHIFT) {
+            vr_toggle_skip_barrel_distortion();
+        } else {
+            g->show_vr = !g->show_vr;
+            if (g->show_vr) init_vr(g->window);
+        }
+    }
+    if (key == CRAFT_KEY_SCREENSHOT) {
+        g->take_screenshot = true;
+    }
+    if (key == GLFW_KEY_ENTER) {
+        if (g->typing) {
+            if (mods & GLFW_MOD_SHIFT) {
+                int n = strlen(g->typing_buffer);
+                if (n < MAX_TEXT_LENGTH - 1) {
+                    g->typing_buffer[n] = '\r';
+                    g->typing_buffer[n + 1] = '\0';
+                }
+            }
+            else {
+                g->typing = false;
+                if (g->typing_buffer[0] == CRAFT_KEY_SIGN) {
+                    Player *player = g->players;
+                    int x, y, z, face, rotation;
+                    if (hit_test_face_rotation(player, &x, &y, &z, &face, &rotation)) {
+                        set_sign(x, y, z, face, rotation, g->typing_buffer + 1);
+                    }
+                }
+                else if (strcmp(g->typing_buffer, "/chat") == 0 && g->mode == MODE_ONLINE) {
+                    start_typing();
+                }
+                else if (g->typing_buffer[0] == '/') {
+                    parse_command(g->typing_buffer, true);
+                }
+                else {
+                    client_talk(g->typing_buffer);
+                }
+            }
+        }
+        else {
+            start_typing();
+        }
+    }
+    if (key == CRAFT_KEY_MINE) {
+        mining_start();
+    }
+    if (key == CRAFT_KEY_BUILD) {
+        building_start();
+    }
+    if (control && key == 'V') {
+        const char *buffer = glfwGetClipboardString(window);
+        if (g->typing) {
+            g->suppress_char = true;
+            strncat(g->typing_buffer, buffer,
+                MAX_TEXT_LENGTH - strlen(g->typing_buffer) - 1);
+        }
+        else {
+            parse_command(buffer, false);
+        }
+    }
+    if (!g->typing) {
+        if (key >= '1' && key <= '9' && key - '1' < inventory_item_count) {
+            g->item_index = key - '1';
+        }
+        if (key == '0' && inventory_item_count > 9) {
+            g->item_index = 9;
+        }
+        if (key == CRAFT_KEY_ITEM_NEXT && inventory_item_count) {
+            g->item_index = (g->item_index + 1) % inventory_item_count;
+        }
+        if (key == CRAFT_KEY_ITEM_PREV && inventory_item_count) {
+            g->item_index--;
+            if (g->item_index < 0) {
+                g->item_index = inventory_item_count - 1;
+            }
+        }
+        if (key == CRAFT_KEY_OBSERVE) {
+            g->observe1 = (g->observe1 + 1) % g->player_count;
+        }
+        if (key == CRAFT_KEY_OBSERVE_INSET) {
+            g->observe2 = (g->observe2 + 1) % g->player_count;
+        }
+    }
+    if (g->ortho) {
+        if (key == '-') {
+            change_ortho_zoom(-1.0);
+        }
+
+        else if (key == '=' || key == '+') {
+            change_ortho_zoom(1.0);
+        }
+    }
+}
+
+bool is_typing() {
+    return g->typing;
+}
+
+void start_typing() {
+    g->typing = true;
+    g->typing_buffer[0] = '\0';
+}
+
+void on_char(GLFWwindow *window, unsigned int u) {
+    if (g->suppress_char) {
+        g->suppress_char = false;
+        return;
+    }
+    if (g->typing) {
+        if (u >= 32 && u < 128) {
+            char c = (char)u;
+            int n = strlen(g->typing_buffer);
+            if (n < MAX_TEXT_LENGTH - 1) {
+                g->typing_buffer[n] = c;
+                g->typing_buffer[n + 1] = '\0';
+            }
+        }
+    }
+    else {
+        if (u == CRAFT_KEY_CHAT) {
+            start_typing();
+        }
+        if (u == CRAFT_KEY_COMMAND) {
+            start_typing();
+            g->typing_buffer[0] = '/';
+            g->typing_buffer[1] = '\0';
+        }
+        if (u == CRAFT_KEY_SIGN) {
+            start_typing();
+            g->typing_buffer[0] = CRAFT_KEY_SIGN;
+            g->typing_buffer[1] = '\0';
+        }
+    }
+}
+
+void _on_scroll_blockselect(double ydelta, bool wheel) {
+    static double wheel_offset = 0;
+    static double last_wheel_step = -SCROLL_ITEM_INTERVAL;
+    if (!inventory_item_count) {
+        wheel_offset = 0;
+        return;
+    }
+    if (!ydelta) return;
+    if (wheel) {
+        double now = glfwGetTime();
+        if (now < last_wheel_step) last_wheel_step = now - SCROLL_ITEM_INTERVAL;
+        if (now - last_wheel_step < SCROLL_ITEM_INTERVAL) return;
+        if ((wheel_offset < 0) != (ydelta < 0)) wheel_offset = 0;
+        wheel_offset += ydelta;
+        if (fabs(wheel_offset) < SCROLL_THRESHOLD) {
+            return;
+        }
+        last_wheel_step = now;
+    }
+    wheel_offset = 0;
+    int step = ydelta < 0 ? 1 : -1;
+    g->item_index = (g->item_index + step + inventory_item_count) % inventory_item_count;
+}
+
+void on_scroll(GLFWwindow *window, double xdelta, double ydelta) {
+    if (g->ortho) {
+        change_ortho_zoom(ydelta);
+    } else {
+#if SCROLL_BLOCK_SELECT
+        _on_scroll_blockselect(ydelta, window != NULL);
+#endif
+    }
+}
+
+void set_just_clicked() {
+    g->just_clicked = true;
+}
+
+void on_mouse_button(GLFWwindow *window, int button, int action, int mods) {
+    g->just_clicked = true;
+    int control = mods & GLFW_MOD_CONTROL;
+    int exclusive =
+        glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
+
+    if (action == GLFW_RELEASE) {
+        if (button == GLFW_MOUSE_BUTTON_LEFT) mining_stop();
+        else if (button == GLFW_MOUSE_BUTTON_RIGHT) building_stop();
+        return;
+    }
+
+    if (action != GLFW_PRESS) {
+        return;
+    }
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (exclusive) {
+            if (control) {
+                // Control + Left-Click builds a block instantly, no repeat
+                on_build();
+            }
+            else {
+                mining_start();
+            }
+        }
+        else {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        }
+    }
+    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+        if (exclusive) {
+            if (control) {
+                on_light();
+            }
+            else {
+                building_start();
+            }
+        }
+    }
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
+        if (exclusive) {
+            on_middle_click();
+        }
+    }
+}
+
+
+void on_file_drop(GLFWwindow *window, int count, const char **paths) {
+    for (int i = 0; i < count; ++i) {
+        const char *path = paths[i];
+
+        printf("dropped file %s\n", path);
+
+        char *base = basename((char *)path);
+        char *ext = strrchr(base, '.');
+        if (!ext) ext = "";
+
+        if (strcmp(base, "font.png") == 0) {
+            load_font_texture(path);
+        } else if (strcmp(base, "sky.png") == 0) {
+            load_sky_texture(path);
+        } else if (strcmp(base, "sign.png") == 0) {
+            load_sign_texture(path);
+        } else if (strcmp(base, "texture.png") == 0) {
+            load_main_texture(paths[i]);
+        } else if (strcmp(base, "terrain.png") == 0 || strcmp(ext, ".png") == 0) {
+            load_block_texture(paths[i]);
+        } else if (strcmp(ext, ".zip") == 0) {
+            load_zipped_textures(paths[i]);
+        } else {
+            printf("unknown file type (%s) dropped: %s\n", ext, path);
+        }
+#ifdef __EMSCRIPTEN__
+        // Emscripten copies the contents of the dropped file into the
+        // in-browser filesystem. Delete after usage to free up memory.
+        unlink(path);
+#endif
+    }
+}
+
+
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE void touch_next_item(void) {
+    on_key(g->window, CRAFT_KEY_ITEM_NEXT, 0, GLFW_PRESS, 0);
+}
+EMSCRIPTEN_KEEPALIVE void touch_prev_item(void) {
+    on_key(g->window, CRAFT_KEY_ITEM_PREV, 0, GLFW_PRESS, 0);
+}
+EMSCRIPTEN_KEEPALIVE void touch_scroll_items(int steps) {
+    if (!inventory_item_count) {
+        return;
+    }
+    g->item_index = ((g->item_index + steps) % inventory_item_count + inventory_item_count) % inventory_item_count;
+}
+#endif
+
+void create_window() {
+    g->window = glfwCreateWindow(
+        WINDOW_WIDTH, WINDOW_HEIGHT, "CashCraft", NULL, NULL);
+
+    init_fullscreen_monitor_dimensions(g->window);
+
+    if (FULLSCREEN) {
+        fullscreen_toggle();
+    }
+}
+
+void handle_mouse_input() {
+    bool exclusive =
+#ifdef __EMSCRIPTEN__
+        touch_active ||
+#endif
+        glfwGetInputMode(g->window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
+    static double px = 0;
+    static double py = 0;
+    State *s = &g->players->state;
+    if (is_gamepad_connected() || (exclusive && (px || py))) {
+        double mx, my;
+        if (touch_active) {
+            mx = touch_clientX;
+            my = touch_clientY;
+        } else if (is_gamepad_connected()) {
+            joystick_apply_look(&mx, &my, px, py);
+        } else {
+            glfwGetCursorPos(g->window, &mx, &my);
+        }
+
+        if (g->just_clicked) {
+            // If the user had pressed or released a mouse button immediately before, ignore
+            // the first mouse movement -- workaround bug(?) in Firefox, where clicking caused
+            // player to look down and rotate. TODO: investigate further, is it Firefox's issue?
+            px = mx;
+            py = my;
+            g->just_clicked = false;
+            return;
+        }
+        float m = 0.0025;
+        s->rx += (mx - px) * m;
+        if (INVERT_MOUSE) {
+            s->ry += (my - py) * m;
+        }
+        else {
+            s->ry -= (my - py) * m;
+        }
+        if (s->rx < 0) {
+            s->rx += RADIANS(360);
+        }
+        if (s->rx >= RADIANS(360)){
+            s->rx -= RADIANS(360);
+        }
+        s->ry = MAX(s->ry, -RADIANS(90));
+        s->ry = MIN(s->ry, RADIANS(90));
+        px = mx;
+        py = my;
+    }
+    else {
+        if (touch_active) {
+            px = touch_clientX;
+            py = touch_clientY;
+        } else {
+            glfwGetCursorPos(g->window, &px, &py);
+        }
+    }
+}
+
+void handle_movement(double dt) {
+    static float dy = 0;
+#ifdef __EMSCRIPTEN__
+    static float step_distance = 0;
+    static double last_grounded = 0;
+    static SwimAudio swim_audio;
+    State old = g->players->state;
+    bool grounded = false;
+#endif
+    State *s = &g->players->state;
+    double sz = 0;
+    double sx = 0;
+    if (!g->typing) {
+        float m = dt * 1.0;
+
+        g->ortho = glfwGetKey(g->window, CRAFT_KEY_ORTHO) ? 64 : 0;
+        g->fov = glfwGetKey(g->window, CRAFT_KEY_ZOOM) ? 15 : 65;
+        if (glfwGetKey(g->window, CRAFT_KEY_FORWARD) || touch_forward) sz--;
+        if (glfwGetKey(g->window, CRAFT_KEY_BACKWARD)) sz++;
+        if (glfwGetKey(g->window, CRAFT_KEY_LEFT)) sx--;
+        if (glfwGetKey(g->window, CRAFT_KEY_RIGHT)) sx++;
+        sx += touch_move_x;
+        sz += touch_move_z;
+        if (glfwGetKey(g->window, GLFW_KEY_LEFT)) s->rx -= m;
+        if (glfwGetKey(g->window, GLFW_KEY_RIGHT)) s->rx += m;
+        if (glfwGetKey(g->window, GLFW_KEY_UP)) s->ry += m;
+        if (glfwGetKey(g->window, GLFW_KEY_DOWN)) s->ry -= m;
+
+        joystick_apply_move(&sx, &sz);
+    }
+
+    float vx, vy = 0, vz;
+    get_motion_vector(g->flying, sz, sx, s->rx, s->ry, &vx, &vy, &vz);
+
+    bool swimming = !g->flying && player_in_water(s);
+    bool jumping = false;
+    bool crouching = false;
+    bool sprinting = false;
+    if (!g->typing) {
+        jumping = glfwGetKey(g->window, CRAFT_KEY_JUMP) != GLFW_RELEASE || touch_jump;
+        crouching = g->crouching;
+        sprinting = glfwGetKey(g->window, CRAFT_KEY_SPRINT) != GLFW_RELEASE;
+
+        joystick_apply_buttons(&jumping, &crouching);
+
+        if (jumping) {
+            if (g->flying) {
+                vy++;
+            }
+            else if (!swimming && dy == 0) {
+                dy = 8;
+            }
+        }
+        if (crouching) {
+            if (g->flying) {
+                bool exclusive = glfwGetInputMode(g->window, GLFW_CURSOR)
+                    == GLFW_CURSOR_DISABLED;
+                if (exclusive) {
+                    vy--;
+                }
+            }
+        }
+    }
+    float speed = g->flying ? 20 : swimming ? 3 : 5;
+    if (sprinting && !swimming) speed *= 2;
+    if (crouching && !g->flying && !swimming) speed /= 2;
+    int estimate = roundf(sqrtf(
+        powf(vx * speed, 2) +
+        powf(vy * speed + ABS(dy) * 2, 2) +
+        powf(vz * speed, 2)) * dt * 8);
+    int step = MAX(8, estimate);
+    float ut = dt / step;
+    vx = vx * ut * speed;
+    vy = vy * ut * speed;
+    vz = vz * ut * speed;
+    for (int i = 0; i < step; i++) {
+        float old_step_x = s->x, old_step_y = s->y, old_step_z = s->z;
+        if (g->flying) {
+            dy = 0;
+        }
+        else if (player_in_water(s)) {
+            dy = swim_velocity(dy, ut, jumping, crouching);
+        }
+        else {
+            dy -= ut * 25;
+            dy = MAX(dy, -250);
+        }
+        s->x += vx;
+        s->y += vy + dy * ut;
+        s->z += vz;
+#ifdef __EMSCRIPTEN__
+        if (g->mode == MODE_ONLINE) {
+            bool ready = true;
+            for (int dx = -1; dx <= 1 && ready; dx += 2) {
+                for (int dz = -1; dz <= 1; dz += 2) {
+                    Chunk *chunk = find_chunk(chunked(s->x + dx * 0.25f),
+                        chunked(s->z + dz * 0.25f));
+                    if (!chunk || !chunk_is_ready(chunk)) {
+                        ready = false;
+                        break;
+                    }
+                }
+            }
+            if (!ready) {
+                s->x = old_step_x;
+                s->y = old_step_y;
+                s->z = old_step_z;
+                dy = 0;
+                continue;
+            }
+        }
+#else
+        (void)old_step_x;
+        (void)old_step_y;
+        (void)old_step_z;
+#endif
+        if (g->noclip && (g->mode != MODE_ONLINE || g->admin_tools)) continue;
+        if (collide(2, &s->x, &s->y, &s->z)) {
+#ifdef __EMSCRIPTEN__
+            if (dy < 0) grounded = true;
+#endif
+            dy = 0;
+        }
+    }
+    if (s->y < WORLD_MIN_Y) {
+        s->y = highest_block(s->x, s->z) + 2;
+    }
+    if (g->mode == MODE_OFFLINE) {
+        int x = roundf(s->x), z = roundf(s->z);
+        bool hot = get_block(x, roundf(s->y), z) == Item_LAVA ||
+            get_block(x, roundf(s->y - 1.0f), z) == Item_LAVA ||
+            get_block(x, roundf(s->y - 1.5f), z) == Item_LAVA;
+        g->lava_exposure = hot ? g->lava_exposure + dt : 0;
+        if (g->lava_exposure >= .4) {
+            g->lava_exposure = 0;
+            g->lives -= s->y < DEEP_BEDROCK_Y + .5f ? PLAYER_LIVES : 5;
+            if (g->lives <= 0) {
+                mining_stop();
+                building_stop();
+                Inventory_reset(&g->inventory);
+                sync_inventory_items();
+                s->x = WORLD_SPAWN_X; s->y = 0; s->z = 0;
+                force_chunks(g->players);
+                s->y = highest_block(s->x, s->z) + 2;
+                g->lives = PLAYER_LIVES;
+                add_message("Lava burned you. You respawned without your mined blocks.");
+            }
+        }
+    }
+#ifdef __EMSCRIPTEN__
+    double audio_now = glfwGetTime();
+    if (g->zombies_active && audio_now >= g->next_zombie_sound) {
+        const float range = 14.0f;
+        float distance = animals_nearest_distance(s->x, s->y, s->z, range);
+        g->next_zombie_sound = audio_now + 0.5;
+        if (distance < range) {
+            g->next_zombie_sound = audio_now + 3.5 + 2.0 * distance / range;
+            EM_ASM_ARGS({
+                if (Module.playGameSound) Module.playGameSound('zombie-groan', $0);
+            }, 1.0 - distance / range);
+        }
+    }
+    bool submerged = !g->flying && water_at_player(s, 0);
+    bool wet = submerged || (!g->flying && water_at_player(s, -1));
+    float horizontal = hypotf(s->x - old.x, s->z - old.z);
+    float stroke_distance = (sx || sz || jumping || crouching) ? hypotf(horizontal, s->y - old.y) : 0;
+    SwimSound effect = swim_sound(&swim_audio, wet, submerged, stroke_distance, dt);
+    if (effect != SWIM_SILENT) {
+        EM_ASM({ if (Module.playGameSound) Module.playGameSound($0 ? 'dive' : 'swim'); }, effect == SWIM_DIVE);
+    }
+    if (grounded && !wet) last_grounded = glfwGetTime();
+    if (!wet && !g->flying && (grounded || (dy < 0 && glfwGetTime() - last_grounded < 0.25))) {
+        step_distance += horizontal;
+        if (step_distance >= 2.0f) {
+            step_distance = 0;
+            EM_ASM(if (Module.playGameSound) Module.playGameSound('step'););
+        }
+    } else {
+        step_distance = 0;
+    }
+#endif
+}
+
+void handle_compressed_multiblock_update(char *buffer, int len,
+        int sx, int sy, int sz, int ex, int ey, int ez) {
+    unsigned short raw[32768];
+    mz_ulong raw_len = sizeof(raw) * sizeof(raw[0]);
+
+    int status = uncompress((mz_uint8 *)raw, &raw_len, (const unsigned char *)buffer, len);
+    if (status != Z_OK) {
+        printf("error decompressing %d-byte multiblock update: %d\n", len, status);
+        return;
+    }
+
+    printf("decompressed multiblock update to %lu bytes\n", raw_len);
+    int x = sx;
+    int y = sy;
+    int z = sz;
+    int block_count = 0;
+    for (int i = 0; i < raw_len / sizeof(raw[0]); ++i) {
+        int p = 0;
+        int q = 0;
+        int w = raw[i];
+
+        _set_block(p, q, x, y, z, w, false);
+
+        if (w != 0) ++block_count;
+
+        ++z;
+        if (z > ez) {
+            z = sz;
+            ++x;
+        }
+        if (x > ex) {
+            x = sx;
+            ++y;
+        }
+        if (y > ey) {
+            if (i != raw_len / sizeof(raw[0]) - 1) {
+                printf("prematurely reached end of multiblock compressed stream: i=%d but end=%lu",
+                        i, raw_len / sizeof(raw[0]) - 1);
+                break;
+            }
+        }
+    }
+    printf("set %d blocks\n", block_count);
+}
+
+void parse_buffer(char *buffer, int len) {
+    static bool multiblock_pending = false;
+    static int sx, sy, sz, ex, ey, ez;
+    if (multiblock_pending) {
+        multiblock_pending = false;
+        printf("received multiblock update %d bytes\n", len);
+        handle_compressed_multiblock_update(buffer, len, sx, sy, sz, ex, ey, ez);
+        return;
+    }
+
+    Player *me = g->players;
+    State *s = &g->players->state;
+    char *key;
+    char *line = tokenize(buffer, "\n", &key);
+    while (line) {
+        int pid;
+        int value;
+#ifdef __EMSCRIPTEN__
+        if (strncmp(line, "CG,", 3) == 0) {
+            EM_ASM({
+                const packet = UTF8ToString($0);
+                if (Module.updateChallengeWorldView) Module.updateChallengeWorldView(packet);
+                if (!/^map(?:,|-off$)/.test(packet)) {
+                    parent.postMessage({ type: 'netcraft-challenge', packet }, location.origin);
+                }
+            }, line + 3);
+        }
+#endif
+        if (sscanf(line, "ZN,%d", &value) == 1 && (value == 0 || value == 1)) {
+            g->zombies_active = value;
+        }
+        if (sscanf(line, "HP,%d", &value) == 1 && value >= 0 && value <= PLAYER_LIVES) {
+#ifdef __EMSCRIPTEN__
+            if (value < g->lives) {
+                EM_ASM(if (Module.playGameSound) Module.playGameSound('zombie-hurt'););
+            }
+#endif
+            g->lives = value;
+        }
+#ifdef __EMSCRIPTEN__
+        if (strcmp(line, "ZH") == 0) {
+            EM_ASM(if (Module.playGameSound) Module.playGameSound('zombie-hit'););
+        }
+#endif
+        if (strcmp(line, "ZD") == 0) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM(if (Module.playGameSound) Module.playGameSound('zombie-respawn'););
+#endif
+            mining_stop();
+            building_stop();
+            pending_placement.active = false;
+            Inventory_reset(&g->inventory);
+            sync_inventory_items();
+            s->x = WORLD_SPAWN_X; s->y = 0; s->z = 0; s->rx = 0; s->ry = 0;
+            force_chunks(me);
+            s->y = highest_block(s->x, s->z) + 2;
+        }
+        unsigned int animal_id;
+        float ax, ay, az;
+        int heading, pacified = 0, species = 0;
+        char animal_name[ANIMAL_NAME_LENGTH + 1] = {0};
+        if (line[0] == 'M' && sscanf(line, "M,%u,%f,%f,%f,%d,%15[^,],%d,%d",
+            &animal_id, &ax, &ay, &az, &heading, animal_name, &pacified, &species) >= 5) {
+            animals_update(animal_id, ax, ay, az, heading, animal_name, pacified != 0, species);
+        }
+        if (line[0] == 'M' && sscanf(line, "MD,%u", &animal_id) == 1) {
+            animals_remove(animal_id);
+        }
+        if (!strcmp(line, "WA,0") || !strcmp(line, "WA,1")) {
+            set_admin_tools(line[3] == '1');
+        }
+        if (!strcmp(line, "AF,0") || !strcmp(line, "AF,1")) {
+            g->flying = line[3] == '1';
+        }
+#ifdef __EMSCRIPTEN__
+        if (!strncmp(line, "WC,", 3) && strlen(line + 3) == 64 &&
+            strspn(line + 3, "0123456789abcdef") == 64) {
+            EM_ASM_ARGS({
+                if (parent !== window) parent.postMessage({
+                    type: 'netcraft-wallet-challenge', nonce: UTF8ToString($0)
+                }, '*');
+            }, line + 3);
+        }
+#endif
+        float ux, uy, uz, urx, ury;
+        if (line[0] == 'U' && sscanf(line, "U,%d,%f,%f,%f,%f,%f",
+            &pid, &ux, &uy, &uz, &urx, &ury) == 6)
+        {
+            me->id = pid;
+#ifdef __EMSCRIPTEN__
+            if (!preserve_position) {
+#endif
+            s->x = ux; s->y = uy; s->z = uz; s->rx = urx; s->ry = ury;
+            force_chunks(me);
+            if (uy == 0) {
+                s->y = highest_block(s->x, s->z) + 2;
+            }
+#ifdef __EMSCRIPTEN__
+            }
+#endif
+        }
+        int bp, bq, bx, by, bz, bw;
+        int mined_item;
+        if (line[0] == 'I' && sscanf(line, "I,%d", &mined_item) == 1) {
+            Inventory_collect(&g->inventory, mined_item);
+            sync_inventory_items();
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                if (Module.playBlockSound) Module.playBlockSound(0);
+                parent.postMessage({ type: 'netcraft-block-mined', block: $0 }, '*');
+            }, mined_item);
+#endif
+        }
+        int green, blue, red;
+        if (sscanf(line, "OP,%d,%d,%d", &green, &blue, &red) == 3 &&
+            green >= 0 && green < 10 && blue >= 0 && blue < 10 && red >= 0 && red < 10) {
+            g->ore_progress[0] = green;
+            g->ore_progress[1] = blue;
+            g->ore_progress[2] = red;
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({ type: 'netcraft-ore-progress', counts: [$0, $1, $2] }, '*');
+            }, green, blue, red);
+#endif
+        }
+        char mined_reward_address[121];
+#ifdef __EMSCRIPTEN__
+        int payment_offset = 0;
+        char requester[25];
+        if (sscanf(line, "PR,%24[^,],%n", requester, &payment_offset) == 1 && payment_offset > 0) {
+            const char *link = line + payment_offset;
+            EM_ASM_ARGS({
+                parent.postMessage({
+                    type: 'netcraft-payment-request',
+                    name: UTF8ToString($0),
+                    id: UTF8ToString($1)
+                }, '*');
+            }, requester, link);
+        }
+#endif
+        char recipient_name[25], recipient_address[121];
+        if (sscanf(line, "WR,%24[^,],%120[^\n]", recipient_name, recipient_address) == 2) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({
+                    type: 'netcraft-wallet-send',
+                    name: UTF8ToString($0),
+                    address: UTF8ToString($1)
+                }, '*');
+            }, recipient_name, recipient_address);
+#else
+            add_message("Open the browser wallet to send tokens.");
+#endif
+        }
+        int guest_blocks, guest_unlocked;
+        if (line[0] == 'G' && sscanf(line, "G,%d,%d", &guest_blocks, &guest_unlocked) == 2 &&
+            guest_blocks >= 0 && guest_blocks < 10 && (guest_unlocked == 0 || guest_unlocked == 1)) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({ type: 'netcraft-mining-progress', blocks: $0, unlocked: !!$1 }, '*');
+            }, guest_blocks, guest_unlocked);
+#endif
+        }
+        int mina_rewards;
+        if (sscanf(line, "ME,%d", &mina_rewards) == 1 && mina_rewards >= 0) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({ type: 'netcraft-mina-earned', rewards: $0 }, '*');
+            }, mina_rewards);
+#endif
+        }
+        if (line[0] == 'Q' && sscanf(line, "Q,%120[^\n]", mined_reward_address) == 1) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({
+                    type: 'netcraft-mina-reward',
+                    address: UTF8ToString($0)
+                }, '*');
+            }, mined_reward_address);
+#endif
+        }
+        if (line[0] == 'F' && sscanf(line, "F,%120[^\n]", mined_reward_address) == 1) {
+#ifdef __EMSCRIPTEN__
+            EM_ASM_ARGS({
+                parent.postMessage({
+                    type: 'netcraft-mina-reward-failed',
+                    address: UTF8ToString($0)
+                }, '*');
+            }, mined_reward_address);
+#endif
+        }
+        int jx, jy, jz, item, accepted;
+        if (line[0] == 'J' && sscanf(line, "J,%d,%d,%d,%d,%d", &jx, &jy, &jz, &item, &accepted) == 5 &&
+            pending_placement.active && pending_placement.x == jx &&
+            pending_placement.y == jy && pending_placement.z == jz &&
+            pending_placement.item == item && (accepted == 0 || accepted == 1)) {
+            if (!accepted) {
+                Inventory_collect(&g->inventory, item);
+                sync_inventory_items();
+            }
+            pending_placement.active = false;
+#ifdef __EMSCRIPTEN__
+            if (accepted) EM_ASM(if (Module.playBlockSound) Module.playBlockSound(1););
+#endif
+        }
+        if (line[0] == 'F' && sscanf(line, "FL,%d,%d,%d,%d,%d,%d",
+            &bp, &bq, &bx, &by, &bz, &bw) == 6 &&
+            by > WORLD_MIN_Y && by < 0 &&
+            (bw == 0 || bw == Item_WATER || bw == -Item_WATER ||
+             bw == Item_LAVA || bw == -Item_LAVA))
+        {
+            Chunk *chunk = find_chunk(bp, bq);
+            if (chunk && map_set(&chunk->map, bx, by, bz, bw)) dirty_chunk(chunk);
+        }
+        if (line[0] == 'B' && sscanf(line, "B,%d,%d,%d,%d,%d,%d",
+            &bp, &bq, &bx, &by, &bz, &bw) == 6)
+        {
+            bool noclip = g->noclip && (g->mode != MODE_ONLINE || g->admin_tools);
+            Chunk *chunk = find_chunk(bp, bq);
+            bool newly_solid = !noclip && chunk && bw > 0 && is_obstacle(bw) &&
+                !is_obstacle(map_get(&chunk->map, bx, by, bz));
+            _set_block(bp, bq, bx, by, bz, bw, false);
+            if (newly_solid && player_intersects_block(2, s->x, s->y, s->z, bx, by, bz)) {
+                s->y = highest_block(s->x, s->z) + 2;
+            }
+        }
+        if (line[0] == 'b' && sscanf(line, "b,%d,%d,%d,%d,%d,%d",
+            &sx, &sy, &sz, &ex, &ey, &ez) == 6) {
+            printf("multi-block update pending: (%d,%d,%d)-(%d,%d,%d)\n",
+                    sx, sy, sz, ex, ey, ez);
+            multiblock_pending = true;
+        }
+        if (line[0] == 'L' && sscanf(line, "L,%d,%d,%d,%d,%d,%d",
+            &bp, &bq, &bx, &by, &bz, &bw) == 6)
+        {
+            set_light(bp, bq, bx, by, bz, bw);
+        }
+        float px, py, pz, prx, pry;
+        if (line[0] == 'P' && sscanf(line, "P,%d,%f,%f,%f,%f,%f",
+            &pid, &px, &py, &pz, &prx, &pry) == 6)
+        {
+            Player *player = find_player(pid);
+            if (!player && g->player_count < MAX_PLAYERS) {
+                player = g->players + g->player_count;
+                g->player_count++;
+                memset(player, 0, sizeof(*player));
+                player->id = pid;
+                snprintf(player->name, MAX_NAME_LENGTH, "player%d", pid);
+                update_player(player, px, py, pz, prx, pry, false);
+                update_player(player, px, py, pz, prx, pry, true);
+                player->state1 = player->state2;
+            }
+            else if (player) {
+                update_player(player, px, py, pz, prx, pry, true);
+            }
+        }
+        if (line[0] == 'D' && sscanf(line, "D,%d", &pid) == 1) {
+            delete_player(pid);
+        }
+        int kp, kq, kk;
+        if (line[0] == 'K' && sscanf(line, "K,%d,%d,%d", &kp, &kq, &kk) == 3) {
+            db_set_key(kp, kq, kk);
+        }
+        if (line[0] == 'R' && sscanf(line, "R,%d,%d", &kp, &kq) == 2) {
+            Chunk *chunk = find_chunk(kp, kq);
+            if (chunk) {
+                dirty_chunk(chunk);
+            }
+        }
+#ifdef __EMSCRIPTEN__
+        if (line[0] == 'C' && sscanf(line, "C,%d,%d", &kp, &kq) == 2) {
+            Chunk *chunk = find_chunk(kp, kq);
+            if (chunk && chunk->sync_pending) {
+                chunk->sync_pending = 0;
+                dirty_chunk(chunk);
+            }
+        }
+#endif
+        double elapsed;
+        int day_length;
+        if (line[0] == 'E' && sscanf(line, "E,%lf,%d", &elapsed, &day_length) == 2) {
+            glfwSetTime(fmod(elapsed, day_length));
+            g->day_length = day_length;
+            g->time_changed = true;
+        }
+        int gamemode;
+        if (line[0] == 'm' && sscanf(line, "m,%d", &gamemode) == 1) {
+            switch (gamemode) {
+                case 0: set_survival_gamemode(); break;
+                case 1: set_creative_gamemode(); break;
+                default: break;
+            }
+        }
+        if (line[0] == 'T' && line[1] == ',') {
+            char *text = line + 2;
+            add_message(text);
+        }
+        int chat_offset = 0;
+        if (sscanf(line, "CH,%d,%n", &pid, &chat_offset) == 1 && chat_offset > 0) {
+            Player *speaker = find_player(pid);
+            const char *message = line + chat_offset;
+            size_t length = strlen(message);
+            if (speaker && length > 0 && length <= MAX_CHAT_LENGTH &&
+                printable_chat(message)) {
+                memcpy(speaker->chat, message, length + 1);
+                speaker->chat_time = glfwGetTime();
+                char entry[MAX_NAME_LENGTH + MAX_CHAT_LENGTH + 3];
+                snprintf(entry, sizeof(entry), "%s> %s", speaker->name, message);
+                add_message(entry);
+            }
+        }
+        char name[MAX_NAME_LENGTH];
+        if (line[0] == 'N' && sscanf(line, "N,%d,%" MAX_NAME_LENGTH_FORMAT "s", &pid, name) == 2) {
+            Player *player = find_player(pid);
+            if (player) {
+                strncpy(player->name, name, MAX_NAME_LENGTH);
+            }
+        }
+        if (line[0] == 'u' && sscanf(line, "u,%" MAX_NAME_LENGTH_FORMAT "s", name) == 1) {
+            printf("We are %s\n", name);
+            Player *me = g->players;
+            if (me) {
+                strncpy(me->name, name, MAX_NAME_LENGTH);
+            }
+        }
+        int face;
+        char text[MAX_SIGN_LENGTH] = {0};
+        if (line[0] == 'S' && sscanf(line, "S,%d,%d,%d,%d,%d,%d,%" MAX_SIGN_LENGTH_FORMAT "[^\n]",
+            &bp, &bq, &bx, &by, &bz, &face, text) >= 6)
+        {
+            int rotation = 0;
+            if (face >= 4) {
+                // 4-7 encodes 90 degree rotation multiple on top face
+                rotation = face - 4;
+                face = 4;
+                if (rotation > 3) rotation = 3;
+            }
+            _set_sign(bp, bq, bx, by, bz, face, rotation, text, 0);
+        }
+#ifdef __EMSCRIPTEN__
+        char url[256] = {0};
+        if (line[0] == 't' && sscanf(line, "t,%255[^\n]", url) == 1) {
+            printf("server provided texture url: %s\n", url);
+            if (strcmp(url, "-") == 0 || strlen(url) == 0) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdollar-in-identifier-extension" // EM_ASM JavaScript
+                EM_ASM_ARGS({
+                    // Special case '-' or empty string connects back to ourselves
+                    // TODO: refactor with similar code in src/client.c
+                    var protocol = document.location.protocol + String.fromCharCode(47) + String.fromCharCode(47); // to avoid //
+                    var path = '/textures.zip';
+                    var url = protocol + document.location.host + path;
+
+                    function writeString(p, s, n) {
+                        if (s.length + 1 > n) {
+                            console.error("url is too long, ignoring: " + s);
+                            return;
+                        }
+
+                        for (var i = 0; i < s.length; ++i) {
+                            Module.HEAP8[p++] = s.charCodeAt(i);
+                        }
+                        Module.HEAP8[p++] = 0;
+                    }
+                    writeString($0, url, 256);
+                }, url);
+                printf("replaced url with: %s\n", url);
+            }
+            emscripten_async_wget(url, "/tmp/downloaded-textures.zip", load_zipped_textures, fail_load_texture);
+        }
+#pragma clang diagnostic pop
+#endif
+
+        line = tokenize(NULL, "\n", &key);
+    }
+}
+
+void reset_model() {
+    g->last_commit = glfwGetTime();
+    g->last_update = glfwGetTime();
+    g->previous_iter_timestamp = glfwGetTime();
+    memset(&g->fps, 0, sizeof(g->fps));
+    memset(g->chunks, 0, sizeof(Chunk) * MAX_CHUNKS);
+    g->chunk_count = 0;
+    memset(g->players, 0, sizeof(Player) * MAX_PLAYERS);
+    g->player_count = 0;
+    g->observe1 = 0;
+    g->observe2 = 0;
+    g->flying = false;
+    set_admin_tools(false);
+    g->item_index = 0;
+    Inventory_reset(&g->inventory);
+    sync_inventory_items();
+    pending_placement.active = false;
+    g->ortho_zoom = 32;
+    memset(g->typing_buffer, 0, sizeof(char) * MAX_TEXT_LENGTH);
+    g->typing = false;
+    g->just_clicked = false;
+    memset(g->messages, 0, sizeof(char) * MAX_MESSAGES * MAX_TEXT_LENGTH);
+    memset(g->message_times, 0, sizeof(g->message_times));
+    memset(g->ore_progress, 0, sizeof(g->ore_progress));
+    g->lives = PLAYER_LIVES;
+    g->lava_exposure = 0;
+    g->zombies_active = false;
+#ifdef __EMSCRIPTEN__
+    g->next_zombie_sound = 0;
+#endif
+    g->message_index = 0;
+    g->message_view_index = 0;
+    g->day_length = DAY_LENGTH;
+    glfwSetTime(g->day_length / 3.0);
+    g->time_changed = true;
+    g->show_info_text = SHOW_INFO_TEXT;
+    g->show_ui = true;
+    g->show_vr = false;
+    if (g->show_vr) init_vr(g->window);
+    g->take_screenshot = false;
+    g->noclip = false;
+    g->crouching = false;
+}
+
+void one_iter(void);
+void main_init(void *);
+void main_shutdown(void);
+
+static Attrib block_attrib = {0};
+static Attrib line_attrib = {0};
+static Attrib pickaxe_attrib = {0};
+static Attrib text_attrib = {0};
+static Attrib sky_attrib = {0};
+static GLuint sky_buffer;
+
+
+int main(int argc, char **argv) {
+    // INITIALIZATION //
+#ifndef NO_CRAFT_AUTH
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+#endif
+    srand(time(NULL));
+    rand();
+
+    // WINDOW INITIALIZATION //
+    if (!glfwInit()) {
+#ifdef __EMSCRIPTEN__
+        EM_ASM(Module.reportGameError('Could not initialize the game window. Check WebGL support and reload.'););
+#endif
+        return -1;
+    }
+    create_window();
+    if (!g->window) {
+#ifdef __EMSCRIPTEN__
+        EM_ASM(Module.reportGameError('Could not create the game window. Check WebGL support and reload.'););
+#endif
+        glfwTerminate();
+        return -1;
+    }
+
+    glfwMakeContextCurrent(g->window);
+#ifndef __EMSCRIPTEN__
+    glfwSetInputMode(g->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+#endif
+    glfwSetDropCallback(g->window, on_file_drop);
+    glfwSetKeyCallback(g->window, on_key);
+    glfwSetCharCallback(g->window, on_char);
+    glfwSetMouseButtonCallback(g->window, on_mouse_button);
+    glfwSetScrollCallback(g->window, on_scroll);
+    init_joystick_callbacks();
+    init_touch_callbacks(g->window);
+    init_accel_callbacks();
+    init_blocks();
+
+#ifdef __EMSCRIPTEN__
+    EM_ASM(
+        var is_typing = Module.cwrap('is_typing');
+        window.addEventListener("keydown", function(event) {
+            if (event.metaKey || event.ctrlKey) return;
+            // CRAFT_KEY_SIGN, CRAFT_KEY_COMMAND, CRAFT_KEY_CHAT
+            if (event.key === "`" || event.key === "/" || event.key === "t") return;
+            if (!is_typing()) event.preventDefault();
+        });
+    );
+#endif
+
+    if (glewInit() != GLEW_OK) {
+#ifdef __EMSCRIPTEN__
+        EM_ASM(Module.reportGameError('Could not initialize graphics. Check WebGL support and reload.'););
+#endif
+        return -1;
+    }
+
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+#ifndef __EMSCRIPTEN__ // TODO: remove, what is replacement? glLogicOp not in >=GLES2: https://github.com/kripken/emscripten/issues/1416
+    glLogicOp(GL_INVERT);
+#endif
+    glClearColor(0, 0, 0, 1);
+
+    // LOAD TEXTURES //
+    load_main_texture("textures/texture.png");
+    load_font_texture("textures/font.png");
+    load_sky_texture("textures/sky.png");
+    load_sign_texture("textures/sign.png");
+
+    // LOAD SHADERS //
+    GLuint program;
+
+    program = load_program(
+        "shaders/block_vertex.glsl", "shaders/block_fragment.glsl");
+    block_attrib.program = program;
+    block_attrib.position = glGetAttribLocation(program, "position");
+    block_attrib.uv = glGetAttribLocation(program, "uv");
+    block_attrib.normal = glGetAttribLocation(program, "normal");
+    block_attrib.matrix = glGetUniformLocation(program, "matrix");
+    block_attrib.sampler = glGetUniformLocation(program, "sampler");
+    block_attrib.extra1 = glGetUniformLocation(program, "sky_sampler");
+    block_attrib.extra2 = glGetUniformLocation(program, "daylight");
+    block_attrib.extra3 = glGetUniformLocation(program, "fog_distance");
+    block_attrib.extra4 = glGetUniformLocation(program, "ortho");
+    block_attrib.extra5 = glGetUniformLocation(program, "flow_time");
+    block_attrib.cloud_offset = glGetUniformLocation(program, "cloud_offset");
+    block_attrib.camera = glGetUniformLocation(program, "camera");
+    block_attrib.timer = glGetUniformLocation(program, "timer");
+
+    program = load_program(
+        "shaders/line_vertex.glsl", "shaders/line_fragment.glsl");
+    line_attrib.program = program;
+    line_attrib.position = glGetAttribLocation(program, "position");
+    line_attrib.matrix = glGetUniformLocation(program, "matrix");
+
+    program = load_program(
+        "shaders/pickaxe_vertex.glsl", "shaders/pickaxe_fragment.glsl");
+    pickaxe_attrib.program = program;
+    pickaxe_attrib.position = glGetAttribLocation(program, "position");
+    pickaxe_attrib.extra1 = glGetAttribLocation(program, "color");
+    pickaxe_attrib.matrix = glGetUniformLocation(program, "matrix");
+    pickaxe_attrib.extra2 = glGetUniformLocation(program, "origin");
+    pickaxe_attrib.extra3 = glGetUniformLocation(program, "size");
+    pickaxe_attrib.extra4 = glGetUniformLocation(program, "angle");
+
+    program = load_program(
+        "shaders/text_vertex.glsl", "shaders/text_fragment.glsl");
+    text_attrib.program = program;
+    text_attrib.position = glGetAttribLocation(program, "position");
+    text_attrib.uv = glGetAttribLocation(program, "uv");
+    text_attrib.matrix = glGetUniformLocation(program, "matrix");
+    text_attrib.sampler = glGetUniformLocation(program, "sampler");
+    text_attrib.extra1 = glGetUniformLocation(program, "is_sign");
+    text_attrib.extra2 = glGetUniformLocation(program, "opacity");
+
+    program = load_program(
+        "shaders/sky_vertex.glsl", "shaders/sky_fragment.glsl");
+    sky_attrib.program = program;
+    sky_attrib.position = glGetAttribLocation(program, "position");
+    sky_attrib.uv = glGetAttribLocation(program, "uv");
+    sky_attrib.normal = -1; // unused
+    sky_attrib.matrix = glGetUniformLocation(program, "matrix");
+    sky_attrib.sampler = glGetUniformLocation(program, "sampler");
+    sky_attrib.timer = glGetUniformLocation(program, "timer");
+
+    // CHECK COMMAND LINE ARGUMENTS //
+    if (argc > 1) {
+        g->mode = MODE_ONLINE;
+        strncpy(g->server_addr, argv[1], MAX_ADDR_LENGTH);
+        g->server_port = (argc >= 3 && strcmp(argv[2], "-") != 0 && strlen(argv[2]) != 0) ? atoi(argv[2]) : DEFAULT_PORT;
+        set_db_path();
+
+#ifdef __EMSCRIPTEN__
+        if (argc == 4) {
+            snprintf(reward_address, sizeof(reward_address), "%s", argv[3]);
+        }
+#endif
+        if (argc > 4) {
+            set_access_token(argv[3], argv[4]);
+        }
+    }
+    else {
+        g->mode = MODE_OFFLINE;
+        snprintf(g->db_path, MAX_PATH_LENGTH, "%s", DB_PATH);
+    }
+#ifdef __EMSCRIPTEN__
+    EM_ASM(Module.applyPendingRewardAddress(););
+#endif
+
+    g->create_radius = CREATE_CHUNK_RADIUS;
+    g->render_radius = RENDER_CHUNK_RADIUS;
+    g->delete_radius = DELETE_CHUNK_RADIUS;
+    g->sign_radius = RENDER_SIGN_RADIUS;
+#ifdef __EMSCRIPTEN__
+    g->create_radius = 4;
+    g->render_radius = 4;
+    g->delete_radius = 6;
+    if (EM_ASM_INT(return window.matchMedia('(pointer: coarse)').matches;)) {
+        g->create_radius = 3;
+        g->render_radius = 3;
+        g->delete_radius = 5;
+    }
+#endif
+
+#ifndef __EMSCRIPTEN__
+    // INITIALIZE WORKER THREADS
+    for (int i = 0; i < WORKERS; i++) {
+        Worker *worker = g->workers + i;
+        worker->index = i;
+        worker->state = WORKER_IDLE;
+        mtx_init(&worker->mtx, mtx_plain);
+        cnd_init(&worker->cnd);
+        thrd_create(&worker->thrd, worker_run, worker);
+    }
+#endif
+
+    // OUTER LOOP //
+    g->running = true;
+    g->shutdown = false;
+    g->initialized = false;
+#ifdef __EMSCRIPTEN__
+    emscripten_push_main_loop_blocker(main_init, NULL); // run before main loop
+    emscripten_set_main_loop(one_iter, 0, 1);
+    //main_shutdown(); // called in one_iter() if g->shutdown
+#else
+    while (g->running) {
+        main_init(NULL);
+        g->shutdown = false;
+        while (1) {
+            one_iter();
+            if (g->shutdown) break;
+        }
+        main_shutdown();
+    }
+#endif
+
+    glfwTerminate();
+#ifndef NO_CRAFT_AUTH
+    curl_global_cleanup();
+#endif
+    return 0;
+}
+
+void main_inited(void);
+
+void client_opened(int fd, void *userData) {
+#ifdef __EMSCRIPTEN__
+    if (!client_is_socket(fd) || !connecting) return;
+    connecting = false;
+    online_ready = true;
+    preserve_position = has_connected;
+    has_connected = true;
+    reconnect_delay = 1;
+    for (int i = 0; i < g->chunk_count; ++i) {
+        g->chunks[i].needs_resync = 1;
+        g->chunks[i].sync_pending = 0;
+    }
+    pending_chunk_request_count = 0;
+    EM_ASM(Module.setConnectionStatus("", 'Connected to game server'););
+#endif
+    add_message("Connected to server");
+    client_start();
+    client_version(1);
+    login();
+#ifdef __EMSCRIPTEN__
+    if (guest_id[0]) {
+        char message[68];
+        snprintf(message, sizeof(message), "G,%s\n", guest_id);
+        client_send(message);
+    }
+    if (reward_address[0]) {
+        char message[160];
+        snprintf(message, sizeof(message), "W,%s\n", reward_address);
+        client_send(message);
+    }
+#endif
+#ifdef __EMSCRIPTEN__
+    State *s = &g->players->state;
+    client_position(s->x, s->y, s->z, s->rx, s->ry, false);
+#else
+    main_inited();
+#endif
+}
+
+#ifdef __EMSCRIPTEN__
+void client_connection_failed(void) {
+    if (!connecting && !online_ready) return;
+    connecting = false;
+    online_ready = false;
+    g->flying = false;
+    set_admin_tools(false);
+    for (int i = 0; i < g->chunk_count; ++i) {
+        g->chunks[i].sync_pending = 0;
+        g->chunks[i].needs_resync = 1;
+    }
+    Inventory_reset(&g->inventory);
+    sync_inventory_items();
+    pending_placement.active = false;
+    animals_clear();
+    client_stop();
+    client_disable();
+    while (g->player_count > 1) {
+        del_buffer(g->players[--g->player_count].buffer);
+    }
+    g->players[0].chat[0] = '\0';
+    g->observe1 = g->observe2 = 0;
+    reconnect_at = emscripten_get_now() + reconnect_delay * 1000.0;
+    reconnect_delay = MIN(reconnect_delay * 2, 30);
+    EM_ASM(Module.setConnectionStatus('Disconnected. Reconnecting automatically; block edits are paused.', 'Disconnected from game server'););
+}
+#endif
+
+void client_closed(int fd, void *userData) {
+#ifdef __EMSCRIPTEN__
+    if (!client_is_socket(fd)) return;
+    client_connection_failed();
+#else
+    add_message("Client closed the connection");
+    g->flying = false;
+    set_admin_tools(false);
+    client_disable();
+#endif
+}
+
+void client_socket_error(int fd, int err, const char *msg, void *userData) {
+    char buf[256];
+    snprintf(buf, sizeof(buf), "WebSocket error occurred: %d %s", err, msg);
+    add_message(buf);
+#ifdef __EMSCRIPTEN__
+    if (!client_is_socket(fd)) return;
+    client_connection_failed();
+#else
+    client_disable();
+#endif
+}
+
+void main_init(void *unused) {
+    // DATABASE INITIALIZATION //
+    if (g->mode == MODE_OFFLINE || USE_CACHE) {
+        db_enable();
+        if (db_init(g->db_path)) {
+            fprintf(stderr, "fatal error: db_init failed!\n");
+            exit(-1);
+        }
+        if (g->mode == MODE_ONLINE) {
+            // TODO: support proper caching of signs (handle deletions)
+            db_delete_all_signs();
+        }
+    }
+
+    // LOCAL VARIABLES //
+    reset_model();
+    sky_buffer = gen_sky_buffer();
+
+    // CLIENT INITIALIZATION //
+    if (g->mode == MODE_ONLINE) {
+#ifdef __EMSCRIPTEN__
+        online_ready = false;
+        connecting = false;
+        has_connected = false;
+        preserve_position = false;
+        reconnect_delay = 1;
+        reconnect_at = 0;
+        main_inited();
+#else
+        client_enable();
+#endif
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Connecting to server %s:%d...", g->server_addr, g->server_port);
+        add_message(msg);
+#ifdef __EMSCRIPTEN__
+        emscripten_set_socket_error_callback("error", client_socket_error);
+        emscripten_set_socket_open_callback("open", client_opened);
+        emscripten_set_socket_message_callback((void *)parse_buffer, client_message);
+        emscripten_set_socket_close_callback("close", client_closed);
+#else
+        client_connect(g->server_addr, g->server_port);
+        client_opened(-1, NULL);
+#endif
+    } else {
+        main_inited();
+    }
+}
+
+void main_inited() {
+    // LOCAL VARIABLES //
+    reset_model();
+
+    Player *me = g->players;
+    State *s = &g->players->state;
+    me->id = 0;
+    me->name[0] = '\0';
+    me->buffer = 0;
+    g->player_count = 1;
+
+    // LOAD STATE FROM DATABASE //
+    int loaded = db_load_state(&s->x, &s->y, &s->z, &s->rx, &s->ry);
+    if (!loaded) s->x = WORLD_SPAWN_X;
+    force_chunks(me);
+    if (!loaded) {
+        s->y = highest_block(s->x, s->z) + 2;
+    }
+
+    // BEGIN MAIN LOOP //
+    g->previous_iter_timestamp = glfwGetTime();
+    g->initialized = true;
+}
+
+void main_shutdown() {
+    // SHUTDOWN //
+    State *s = &g->players->state;
+
+    db_save_state(s->x, s->y, s->z, s->rx, s->ry);
+    db_close();
+    db_disable();
+#ifdef __EMSCRIPTEN__
+    connecting = false;
+    online_ready = false;
+#endif
+    client_stop();
+    client_disable();
+    del_buffer(sky_buffer);
+    if (crosshair_buffer) {
+        del_buffer(crosshair_buffer);
+        crosshair_buffer = 0;
+    }
+    for (int i = 0; i < 3; i++) {
+        if (pickaxe_buffers[i]) {
+            del_buffer(pickaxe_buffers[i]);
+            pickaxe_buffers[i] = 0;
+        }
+    }
+    for (int i = 0; i < 2; i++) {
+        if (heart_buffers[i]) {
+            del_buffer(heart_buffers[i]);
+            heart_buffers[i] = 0;
+        }
+    }
+    for (int i = 0; i < NUM_INVENTORY_VISIBLE; i++) {
+        if (item_count_buffers[i].buffer) {
+            del_buffer(item_count_buffers[i].buffer);
+            item_count_buffers[i].buffer = 0;
+        }
+    }
+    for (int i = 0; i < 256; i++) {
+        if (item_buffers[i]) {
+            del_buffer(item_buffers[i]);
+            item_buffers[i] = 0;
+        }
+    }
+    animals_shutdown();
+    delete_all_chunks();
+    delete_all_players();
+}
+
+void render_scene(void);
+void one_iter() {
+    Player *me = g->players;
+    State *s = &g->players->state;
+
+#ifdef __EMSCRIPTEN__
+    static bool game_frame_presented = false;
+    if (g->mode == MODE_ONLINE) {
+        double now_ms = emscripten_get_now();
+        if (connecting && now_ms - connect_started > 15000) {
+            client_connection_failed();
+        }
+        if (!online_ready && !connecting && now_ms >= reconnect_at) {
+            connecting = true;
+            connect_started = now_ms;
+            client_enable();
+            EM_ASM(Module.setConnectionStatus('Connecting to game server...', 'Connecting to game server'););
+            client_connect(g->server_addr, g->server_port);
+        }
+    }
+#endif
+    glfwSwapInterval(VSYNC);
+
+    // FRAME RATE //
+    if (g->time_changed) {
+        g->time_changed = false;
+        g->last_commit = glfwGetTime();
+        g->last_update = glfwGetTime();
+        memset(&g->fps, 0, sizeof(g->fps));
+    }
+    update_fps(&g->fps);
+    double now = glfwGetTime();
+    double dt = now - g->previous_iter_timestamp;
+    dt = MIN(dt, 0.2);
+    dt = MAX(dt, 0.0);
+    g->previous_iter_timestamp = now;
+
+    // HANDLE MOUSE INPUT //
+    handle_mouse_input();
+
+    mining_tick();
+    building_tick();
+
+    handle_gamepad_input();
+
+    // HANDLE MOVEMENT //
+    handle_movement(dt);
+
+#ifndef __EMSCRIPTEN__ // emscripten uses the client_message callback instead
+    // HANDLE DATA FROM SERVER //
+    char *buffer = client_recv();
+    if (buffer) {
+        parse_buffer(buffer, strlen(buffer));
+        free(buffer);
+    }
+#endif
+    // FLUSH DATABASE //
+    if (now - g->last_commit > COMMIT_INTERVAL) {
+        g->last_commit = now;
+        db_commit();
+    }
+
+    // SEND POSITION TO SERVER //
+    static State last_sent_position;
+    static bool has_sent_position = false;
+    if (now - g->last_update > 0.1
+#ifdef __EMSCRIPTEN__
+        && (g->mode != MODE_ONLINE || online_ready)
+#endif
+    ) {
+        g->last_update = now;
+        if (!has_sent_position || s->x != last_sent_position.x ||
+            s->y != last_sent_position.y || s->z != last_sent_position.z ||
+            s->rx != last_sent_position.rx || s->ry != last_sent_position.ry) {
+            client_position(s->x, s->y, s->z, s->rx, s->ry, g->flying);
+            last_sent_position = *s;
+            has_sent_position = true;
+        }
+    }
+
+    // PREPARE TO RENDER //
+    if (g->player_count != 0) {
+        g->observe1 = g->observe1 % g->player_count;
+        g->observe2 = g->observe2 % g->player_count;
+    }
+    delete_chunks();
+    if (g->observe1 || g->observe2) {
+        me->buffer = update_player_buffer(me->buffer, s->x, s->y, s->z, s->rx, s->ry);
+    }
+    for (int i = 1; i < g->player_count; i++) {
+        interpolate_player(g->players + i);
+    }
+
+    // WINDOW SIZE AND SCALE //
+    g->scale = get_scale_factor(g->window);
+    glfwGetFramebufferSize(g->window, &g->width, &g->height);
+
+    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    if (g->show_vr) {
+        vr_render();
+    } else {
+        glViewport(0, 0, g->width, g->height);
+        render_scene();
+    }
+
+    if (g->take_screenshot) {
+        g->take_screenshot = false;
+        screenshot(g->width, g->height);
+    }
+
+    // SWAP AND POLL //
+    glfwSwapBuffers(g->window);
+#ifdef __EMSCRIPTEN__
+    if (g->initialized && !game_frame_presented) {
+        game_frame_presented = true;
+        EM_ASM(Module.setGameReady(););
+    }
+#endif
+    glfwPollEvents();
+    if (glfwWindowShouldClose(g->window)) {
+        g->running = false;
+        g->shutdown = true;
+    }
+    if (g->mode_changed) {
+        g->mode_changed = false;
+        g->shutdown = true;
+    }
+
+#ifdef __EMSCRIPTEN__
+    if (g->shutdown) {
+        g->shutdown = false;
+        main_shutdown();
+        emscripten_cancel_main_loop();
+        emscripten_push_main_loop_blocker(main_init, NULL);
+        emscripten_set_main_loop(one_iter, 0, 1);
+	handle_movement(dt);
+    }
+#endif
+}
+
+void translate_camera_x_offset(float h) {
+    Player *me = g->players;
+
+    me->state.x += h;
+}
+
+void render_scene() {
+    Player *player = g->players + g->observe1;
+    Player *me = g->players;
+    State *s = &g->players->state;
+
+    // RENDER 3-D SCENE //
+    render_sky(&sky_attrib, player, sky_buffer);
+    int face_count;
+    float ts = 12 * g->scale;
+    if (g->initialized) {
+        glClear(GL_DEPTH_BUFFER_BIT);
+        face_count = render_chunks(&block_attrib, player);
+        render_signs(&text_attrib, player);
+        render_sign(&text_attrib, player);
+        render_players(&block_attrib, &text_attrib, player);
+        if (SHOW_WIREFRAME && g->show_ui) {
+            render_wireframe(&line_attrib, player);
+        }
+
+        if (is_mining()) {
+            render_cover(&block_attrib, player);
+        }
+
+        // RENDER HUD //
+        glClear(GL_DEPTH_BUFFER_BIT);
+        if (g->show_ui) {
+            begin_hud_sprites(&pickaxe_attrib);
+            render_pickaxe(&pickaxe_attrib);
+            render_lives(&pickaxe_attrib);
+            end_hud_sprites(&pickaxe_attrib);
+        }
+        if (SHOW_CROSSHAIRS && g->show_ui) {
+            render_crosshairs(&line_attrib);
+        }
+        if (SHOW_ITEM && g->show_ui) {
+            render_item(&block_attrib);
+            render_item_counts(&text_attrib);
+        }
+        if (g->show_ui) {
+            const int ores[] = {Item_MINA_ORE, Item_LAPIS_LAZULI_ORE, Item_REDSTONE_ORE};
+            float unit = fminf(g->scale, fminf(g->width / 390.0f, g->height / 250.0f));
+            float base = 12.0f * g->scale + fminf(20.0f * g->scale, g->width / 16.0f);
+            float matrix[16];
+            set_matrix_item(matrix, g->width, g->height, g->scale);
+            for (int i = 0; i < 12; i++) matrix[i] *= unit / g->scale;
+            matrix[13] = -1.0f + 2.0f * (base + 56.0f * unit) / g->height;
+            glUseProgram(block_attrib.program);
+            glUniform3f(block_attrib.camera, 0, 0, 5);
+            glUniform1i(block_attrib.sampler, 0);
+            glUniform1i(block_attrib.extra1, 2);
+            glUniform1f(block_attrib.extra2, 1);
+            glUniform1f(block_attrib.extra3, 100000);
+            glUniform1i(block_attrib.extra4, 0);
+            glUniform1f(block_attrib.timer, time_of_day());
+            for (int i = 0; i < 3; i++) {
+                int ore = ores[i];
+                if (!item_buffers[ore]) {
+                    item_buffers[ore] = gen_cube_buffer(0, 0, 0, 0.5, ore);
+                }
+                matrix[12] = (i - 1) * 174.0f * unit / g->width;
+                glUniformMatrix4fv(block_attrib.matrix, 1, GL_FALSE, matrix);
+                draw_cube(&block_attrib, item_buffers[ore]);
+            }
+            glDisable(GL_DEPTH_TEST);
+            for (int i = 0; i < 3; i++) {
+                char count[8];
+                snprintf(count, sizeof(count), "%d/10", g->ore_progress[i]);
+                render_text(&text_attrib, ALIGN_CENTER,
+                    g->width * .5f + (i - 1) * 87.0f * unit,
+                    base + 19.0f * unit, 14.0f * unit, count);
+            }
+            glEnable(GL_DEPTH_TEST);
+        }
+    } else {
+        face_count = 0;
+    }
+
+    // RENDER TEXT //
+    char text_buffer[1024];
+    float tx = ts / 2;
+    float ty = g->height - ts;
+    if (g->show_info_text && g->show_ui && g->initialized) {
+        static char *build_info_string =
+           "CashCraft"
+#ifdef BUILD_NUM
+           " build #" BUILD_NUM
+#endif
+#ifdef BUILD_WASM
+           " wasm"
+#endif
+           " "
+#ifdef BUILD_COMMIT
+           BUILD_COMMIT " "
+#endif
+#ifdef BUILD_BRANCH
+           BUILD_BRANCH " "
+#endif
+           __DATE__;
+        render_text(&text_attrib, ALIGN_LEFT, tx, ty, ts, build_info_string);
+        ty -= ts * 2;
+
+        int hour = time_of_day() * 24;
+        char am_pm = hour < 12 ? 'a' : 'p';
+        hour = hour % 12;
+        hour = hour ? hour : 12;
+
+        // Targeted block information
+        char block_info[256] = {0};
+        if (target_w) snprintf(block_info, 256,
+                "{%d, %d, %d, %d} #%d%s%.d %s",
+                target_x, target_y, target_z, target_face, target_w,
+                has_block_data(target_w) ? ":" : "",
+                has_block_data(target_w) ? get_block_data(target_w) : 0,
+                block_names[target_w]);
+
+        snprintf(
+            text_buffer, 1024,
+            "(%d, %d) (%.2f, %.2f, %.2f) [%d, %d, %d] %d%cm %dfps %s",
+            chunked(s->x), chunked(s->z), s->x, s->y, s->z,
+            g->player_count, g->chunk_count,
+            face_count * 2, hour, am_pm, g->fps.fps,
+            block_info);
+        render_text(&text_attrib, ALIGN_LEFT, tx, ty, ts, text_buffer);
+        ty -= ts * 2;
+    }
+    if (SHOW_CHAT_TEXT && g->show_ui) {
+        if (g->initialized) render_chat_bubbles(&pickaxe_attrib, &text_attrib, player);
+        // The console is hidden unless the player opens it with '/' or chat.
+        for (int i = 0; g->typing && i < MAX_VISIBLE_MESSAGES; i++) {
+            int index = (g->message_view_index + i) % MAX_MESSAGES;
+            if (strlen(g->messages[index])) {
+                double age = glfwGetTime() - g->message_times[index];
+                float opacity = g->typing ? 1.0f : (float)fmax(0.0, fmin(1.0, 6.0 - age));
+                if (opacity <= 0.0f) continue;
+                render_text_opacity(&text_attrib, ALIGN_LEFT, tx, ty, ts,
+                    g->messages[index], opacity);
+                ty -= ts * 2;
+            }
+        }
+    }
+    if (g->typing) {
+        snprintf(text_buffer, 1024, "> %s", g->typing_buffer);
+        render_text(&text_attrib, ALIGN_LEFT, tx, ty, ts, text_buffer);
+        //ty -= ts * 2; // unused
+    }
+    if (SHOW_PLAYER_NAMES && g->show_ui) {
+        if (player != me) {
+            render_text(&text_attrib, ALIGN_CENTER,
+                g->width / 2, ts, ts, player->name);
+        }
+        Player *other = player_crosshair(player);
+        if (other) {
+            render_text(&text_attrib, ALIGN_CENTER,
+                g->width / 2, g->height / 2 - ts - 24, ts,
+                other->name);
+        }
+    }
+
+    // RENDER PICTURE IN PICTURE //
+    if (g->observe2) {
+        player = g->players + g->observe2;
+
+        int pw = 256 * g->scale;
+        int ph = 256 * g->scale;
+        int offset = 32 * g->scale;
+        int pad = 3 * g->scale;
+        int sw = pw + pad * 2;
+        int sh = ph + pad * 2;
+
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(g->width - sw - offset + pad, offset - pad, sw, sh);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDisable(GL_SCISSOR_TEST);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glViewport(g->width - pw - offset, offset, pw, ph);
+
+        g->width = pw;
+        g->height = ph;
+        g->ortho = 0;
+        g->fov = 65;
+
+        render_sky(&sky_attrib, player, sky_buffer);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        render_chunks(&block_attrib, player);
+        render_signs(&text_attrib, player);
+        render_players(&block_attrib, &text_attrib, player);
+        glClear(GL_DEPTH_BUFFER_BIT);
+	if (SHOW_PLAYER_NAMES) {
+	    if (player != me) {
+		printf("%s/n", "TODO: render player text");
+//		render_text(&text_attrib, ALIGN_CENTER,
+//		    g->width / 2, ts, ts, player->name,
+//		    g->width, g->height);
+	    }
+        }
+
+    }
+}
