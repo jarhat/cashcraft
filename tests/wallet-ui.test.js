@@ -256,6 +256,77 @@ test('partial and empty links do not create a request notification', () => {
   assert.equal(emptyCategory('notifications-dialog').open, undefined);
 });
 
+test('shared payment notes are displayed as text and omitted when absent', () => {
+  const category = 'a'.repeat(64);
+  const request = `?addr=bitcoincash%3Aztest&category=${category}&amount=42`;
+  const withNote = sharedLinkFixture(`${request}&note=%3Chello%3E`);
+  assert.equal(withNote('shared-link-note').textContent, '<hello>');
+  assert.equal(withNote('shared-link-note-row').hidden, false);
+  assert.equal(sharedLinkFixture(request)('shared-link-note-row').hidden, true);
+});
+
+test('payment QR includes the optional note and discards stale results', async () => {
+  const nodes = new Map();
+  const element = (id) => {
+    if (!nodes.has(id)) nodes.set(id, {
+      value: '', hidden: false, textContent: '', listeners: {},
+      classList: { add() {}, remove() {}, contains() { return false; } },
+      addEventListener(type, handler) { this.listeners[type] = handler; },
+      getContext() { return { drawImage() {} }; },
+    });
+    return nodes.get(id);
+  };
+  element('receive-category').value = 'a'.repeat(64);
+  element('receive-amount').value = '42';
+  element('receive-note').value = 'Lunch & coffee';
+  let release;
+  let options;
+  let content;
+  const start = source.indexOf("$('generate-payment').addEventListener('click', async () => {");
+  const end = source.indexOf('\nlet originalPaymentQr = null;', start);
+  const context = {
+    $: element, walletReady: true, mainnet: false, network: 'chipnet', paymentGeneration: 0,
+    window: { location: { href: 'https://example.com/?old=1' } }, URL,
+    document: { createElement: () => ({
+      width: 512, height: 512,
+      getContext: () => ({ fillRect() {}, drawImage() {} }),
+    }) },
+    QRCode: { toCanvas: (_canvas, value, opts) => new Promise((resolve) => {
+      content = value;
+      options = opts;
+      release = resolve;
+    }) },
+    loadWalletDependencies: async () => {}, validateRecipient: (address) => address,
+    showGameReceiveQr: false, resetShortLink() {}, openTokenQr() {},
+    fetchCauldronSpot: async () => { throw new Error('offline'); },
+    logger: { warn() {} }, translate: (text) => text,
+    report(error) { throw error; },
+  };
+  runInNewContext(source.slice(start, end), context);
+  const pending = element('generate-payment').listeners.click();
+  while (!release) await Promise.resolve();
+  release();
+  await pending;
+  assert.equal(new URL(content).searchParams.get('note'), 'Lunch & coffee');
+  assert.equal(element('payment-note').textContent, 'Lunch & coffee');
+  assert.equal(options.errorCorrectionLevel, 'H');
+  assert.equal(options.color.dark, '#07111b');
+  assert.equal(options.color.light, '#ffffff');
+  const listenerStart = source.indexOf("$('receive-note').addEventListener('input', () => {");
+  const listenerEnd = source.indexOf('\n\nfor (const id', listenerStart);
+  runInNewContext(source.slice(listenerStart, listenerEnd), context);
+  release = null;
+  const stale = element('generate-payment').listeners.click();
+  while (!release) await Promise.resolve();
+  const releaseStale = release;
+  release = null;
+  element('receive-note').value = 'Changed';
+  element('receive-note').listeners.input();
+  releaseStale();
+  await stale;
+  assert.equal(element('payment-note').textContent, 'Lunch & coffee');
+});
+
 test('notification can be dismissed outside and reopened with its request intact', () => {
   class Element {
     constructor() { this.listeners = {}; }

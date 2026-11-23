@@ -1,3 +1,13 @@
+export function scrollEffects(nav, hero, firstPanel, lastPanel) {
+  const height = Math.max(nav.bottom - nav.top, 1);
+  const overlap = Math.max(0, Math.min(1,
+    (nav.bottom - firstPanel.top) / height,
+    (lastPanel.bottom - nav.top) / height,
+  ));
+  const cutoff = Math.max(0, nav.bottom - hero.top);
+  return { opacity: 1 - overlap, cutoff, fadeEnd: cutoff ? cutoff + 28 : 0 };
+}
+
 export function updateScrollEffects(topbar) {
   const height = topbar.getBoundingClientRect().height;
   document.documentElement.style.setProperty('--topbar-height', `${Math.ceil(height)}px`);

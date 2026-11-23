@@ -93,6 +93,7 @@ test('one-time links use fixed expiry and replace the displayed QR, while stale 
   const end = source.indexOf("\nfor (const id of ['receive-address'", start);
   const context = {
     $, URL, translate: (text) => text, navigator: {}, setTimeout,
+    paymentGeneration: 0,
     document: { createElement: () => ({}) },
     createShortLink: (body) => { calls.push(body); return linkPromise; },
     QRCode: { toCanvas: async (_canvas, url) => { calls.push(url); } },

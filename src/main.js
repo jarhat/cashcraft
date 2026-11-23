@@ -44,12 +44,12 @@ if (!['mainnet', 'chipnet'].includes(network)) {
 }
 
 function fillFromUrl(params = new URLSearchParams(window.location.search), note = '', showPreview = true) {
+  const sharedNote = (typeof note === 'string' ? note.trim() : '') || params.get('note')?.trim() || '';
   const sharedLink = {
     address: params.get('addr'),
     category: params.get('category'),
     amount: params.get('amount'),
   };
-
   const fields = [
     ['addr', 'recipient'],
     ['category', 'category'],
@@ -78,8 +78,8 @@ function fillFromUrl(params = new URLSearchParams(window.location.search), note 
     $('shared-link-amount').textContent = `${sharedLink.amount} token base units`;
     $('shared-link-address').textContent = sharedLink.address;
     $('shared-link-category').textContent = sharedLink.category;
-    $('shared-link-note').textContent = note;
-    $('shared-link-note-row').hidden = !note;
+    $('shared-link-note').textContent = sharedNote;
+    $('shared-link-note-row').hidden = !sharedNote;
     $('shared-link-preview').classList.remove('hidden');
     $('notifications-empty').hidden = true;
     $('notification-indicator').hidden = false;
@@ -2740,6 +2740,7 @@ $('generate-payment').addEventListener('click', async () => {
     resetShortLink();
     const category = $('receive-category').value.trim().toLowerCase();
     const amount = $('receive-amount').value.trim();
+    const note = $('receive-note').value.trim();
     if (!/^[0-9a-f]{64}$/.test(category)) {
       $('payment-input-status').textContent = translate('Enter a token category ID with exactly 64 hexadecimal characters.');
       $('receive-category').focus();
@@ -2766,6 +2767,7 @@ $('generate-payment').addEventListener('click', async () => {
     paymentUrl.searchParams.set('addr', address);
     paymentUrl.searchParams.set('amount', amount);
     paymentUrl.searchParams.set('category', category);
+    if (note) paymentUrl.searchParams.set('note', note);
 
     $('payment-url').textContent = paymentUrl.toString();
 
@@ -2792,7 +2794,8 @@ $('generate-payment').addEventListener('click', async () => {
       generation !== paymentGeneration ||
       $('receive-address').value.trim() !== address ||
       $('receive-category').value.trim().toLowerCase() !== category ||
-      $('receive-amount').value.trim() !== amount
+      $('receive-amount').value.trim() !== amount ||
+      $('receive-note').value.trim() !== note
     ) return;
 
     const canvas = $('payment-qr');
@@ -2802,6 +2805,8 @@ $('generate-payment').addEventListener('click', async () => {
     canvas.getContext('2d').drawImage(qr, 0, 0);
     $('payment-amount').textContent = `${amount} token base units`;
     $('payment-category').textContent = category;
+    $('payment-note').textContent = note;
+    $('payment-note').hidden = !note;
     $('payment-token-icon').textContent = '◆';
     $('payment-logo-status').textContent = translate(mainnet ? 'Loading token logo…' : 'Token logo unavailable.');
     paymentPriceSnapshot = null;
@@ -2979,7 +2984,10 @@ $('copy-short-link').addEventListener('click', async () => {
   }
 });
 
-$('receive-note').addEventListener('input', resetShortLink);
+$('receive-note').addEventListener('input', () => {
+  paymentGeneration++;
+  resetShortLink();
+});
 
 for (const id of ['receive-address', 'receive-category', 'receive-amount']) {
   $(id).addEventListener('input', () => {
