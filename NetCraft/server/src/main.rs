@@ -54,7 +54,7 @@ const ATTACK_INTERVAL: u64 = 2;
 const ZOMBIE_SPEED: f64 = 1.3;
 const ZOMBIE_HEALTH: u8 = 3;
 const WILDLIFE_LIMIT: usize = 24;
-// Central sky park footprint from builder.py; lower terrain remains spawnable.
+// Plaza deck height in builder.py.
 const PARK_FLOOR: i32 = 180;
 type Blocks = HashMap<(i32, i32, i32), i32>;
 
@@ -443,8 +443,20 @@ fn move_animal(
     Ok(false)
 }
 
-fn is_sky_park(x: i32, y: i32, z: i32) -> bool {
-    (-28..=28).contains(&x) && (-25..=28).contains(&z) && y >= PARK_FLOOR
+fn plaza_spawn(db: &Connection) -> rusqlite::Result<Option<[f64; 5]>> {
+    // The builder lays grass and cement across the plaza. Try nearby tiles if
+    // the center has been mined or someone built over the landing spot.
+    for (x, z) in [(0, 0), (4, 0), (-4, 0), (0, 4), (0, -4)] {
+        let mut stmt = db.prepare_cached(
+            "SELECT y,w FROM block WHERE p=?1 AND q=?2 AND x=?3 AND z=?4
+             AND y BETWEEN ?5 AND ?5+2 AND w>0 ORDER BY y DESC LIMIT 1")?;
+        let top = stmt.query_row(params![chunked(x), chunked(z), x, z, PARK_FLOOR],
+            |r| Ok((r.get::<_, i32>(0)?, r.get::<_, i32>(1)?))).optional()?;
+        if matches!(top, Some((PARK_FLOOR, 1 | 6))) {
+            return Ok(Some([x.into(), (PARK_FLOOR + 2).into(), z.into(), 0.0, 0.0]));
+        }
+    }
+    Ok(None)
 }
 
 fn world_time() -> u64 {
@@ -463,6 +475,9 @@ fn spawn_position() -> [f64; 5] {
 }
 
 fn world_spawn_position(db: &Connection) -> rusqlite::Result<[f64; 5]> {
+    if let Some(spawn) = plaza_spawn(db)? {
+        return Ok(spawn);
+    }
     // This column crosses the dragon's back in both the old and new park layouts.
     let (x, z) = (-19, -3);
     let surface = db.query_row(
@@ -564,24 +579,25 @@ fn wildlife_species(biome: u32, choice: u32) -> Species {
 }
 
 fn spawn_wildlife(
-    state: &mut State, terrain: &mut Terrain, positions: &[[f64; 5]], updates: &mut String,
+    state: &mut State, terrain: &mut Terrain, positions: &[[f64; 5]], plaza: Option<[f64; 5]>, updates: &mut String,
 ) -> rusqlite::Result<()> {
     if positions.is_empty() || state.animal_tick % 4 != 0 ||
         state.animals.iter().filter(|a| a.wildlife.is_some()).count() >= WILDLIFE_LIMIT {
         return Ok(());
     }
     let tick = state.animal_tick / 4;
-    let player = positions[tick as usize % positions.len()];
+    let player = plaza.unwrap_or(positions[tick as usize % positions.len()]);
+    let (radius, spacing) = if plaza.is_some() { (10.0, 8.0) } else { (26.0, 52.0) };
     for attempt in 0..3 {
         let angle = ((tick * 7 + attempt * 11) % 32) as f64 * std::f64::consts::TAU / 32.0;
-        let x = (player[0] + 26.0 * angle.cos()).round() as i32;
-        let z = (player[2] + 26.0 * angle.sin()).round() as i32;
+        let x = (player[0] + radius * angle.cos()).round() as i32;
+        let z = (player[2] + radius * angle.sin()).round() as i32;
         if state.animals.iter().any(|a| a.wildlife.is_some() &&
-            (a.x - f64::from(x)).hypot(a.z - f64::from(z)) < 52.0) {
+            (a.x - f64::from(x)).hypot(a.z - f64::from(z)) < spacing) {
             continue;
         }
         let Some(y) = animal_ground(terrain, &state.db, x, z)? else { continue };
-        if (player[1] - f64::from(y) - 2.0).abs() > 12.0 || is_sky_park(x, y, z) {
+        if (player[1] - f64::from(y) - 2.0).abs() > 12.0 || (plaza.is_some() && y < PARK_FLOOR) {
             continue;
         }
         let hash = (x as u32).wrapping_mul(0x9e3779b1)
@@ -767,6 +783,15 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
 
     let active: HashSet<_> = state.animals.iter().filter(|a| a.wildlife.is_none())
         .map(|a| a.txid.as_str()).collect();
+    let plaza = plaza_spawn(&state.db)?;
+    // Don't repeatedly spawn and despawn the island herd while everyone is away.
+    if plaza.is_some_and(|p| !positions.iter().any(|pos|
+        (pos[0] - p[0]).hypot(pos[2] - p[2]) < 48.0)) {
+        if !updates.is_empty() {
+            broadcast(&state, None, &updates);
+        }
+        return Ok(());
+    }
     if !positions.is_empty() && active.len() < state.mempool.len() {
         let missing: Vec<_> = state
             .mempool
@@ -776,16 +801,17 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
             .cloned()
             .collect();
         for (index, txid) in missing.into_iter().enumerate() {
-            let p = positions[(tick as usize + index) % positions.len()];
+            let p = plaza.unwrap_or(positions[(tick as usize + index) % positions.len()]);
             let id = state.next_animal_id;
             let angle = ((tick * 7 + u64::from(id) * 13 + index as u64) % 32) as f64
                 * std::f64::consts::TAU
                 / 32.0;
-            let radius = 12.0 + 4.0 * (((id - 1) / 32) % 9) as f64;
+            let radius = if plaza.is_some() { 4.0 + (id % 9) as f64 }
+                else { 12.0 + 4.0 * (((id - 1) / 32) % 9) as f64 };
             let x = (p[0] + angle.cos() * radius).round() as i32;
             let z = (p[2] + angle.sin() * radius).round() as i32;
             if let Some(y) = animal_ground(&mut terrain, &state.db, x, z)? {
-                if is_sky_park(x, y, z) {
+                if plaza.is_some() && y < PARK_FLOOR {
                     continue;
                 }
                 state.next_animal_id = state.next_animal_id.wrapping_add(1).max(1);
@@ -803,8 +829,8 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
                 state.animals.push(animal);
             }
         }
-        spawn_wildlife(&mut state, &mut terrain, &positions, &mut updates)?;
     }
+    spawn_wildlife(&mut state, &mut terrain, &positions, plaza, &mut updates)?;
     if !updates.is_empty() {
         broadcast(&state, None, &updates);
     }
@@ -3399,35 +3425,29 @@ mod tests {
     }
 
     #[test]
-    fn animals_do_not_spawn_on_the_central_sky_park() {
+    fn players_transaction_animals_and_wildlife_spawn_on_the_plaza() {
         let (server, _, _) = setup();
         {
             let mut state = server.state.lock().unwrap();
             state.mempool.insert("a".repeat(64));
             for player in state.players.values_mut() {
-                player.position = [0.0, 182.0, 0.0, 0.0, 0.0];
+                player.position = [19.0, 242.0, -3.0, 0.0, 0.0];
             }
-            state.db.execute(
-                "INSERT INTO block (p,q,x,y,z,w) VALUES (-1,-1,-8,180,-8,6)", [],
-            ).unwrap();
-        }
-        update_animals_at(&server, 300).unwrap();
-        assert!(server.state.lock().unwrap().animals.is_empty());
-        {
-            let mut state = server.state.lock().unwrap();
-            for player in state.players.values_mut() {
-                player.position[0] = 37.0;
+            for x in -12..=12 {
+                for z in -12..=12 {
+                    state.db.execute("INSERT INTO block VALUES (?1,?2,?3,180,?4,6)",
+                        params![chunked(x), chunked(z), x, z]).unwrap();
+                }
             }
-            state.db.execute(
-                "INSERT INTO block (p,q,x,y,z,w) VALUES (1,-1,44,180,-10,6)", [],
-            ).unwrap();
+            assert_eq!(world_spawn_position(&state.db).unwrap(), [0.0,182.0,0.0,0.0,0.0]);
         }
-        update_animals_at(&server, 300).unwrap();
-        assert_eq!(server.state.lock().unwrap().animals.len(), 1);
-        assert!(is_sky_park(-28, 180, -25));
-        assert!(is_sky_park(28, 200, 28));
-        assert!(!is_sky_park(29, 180, 0));
-        assert!(!is_sky_park(0, 179, 0));
+        for _ in 0..4 {
+            update_animals_at(&server, 300).unwrap();
+        }
+        let state = server.state.lock().unwrap();
+        assert!(state.animals.iter().any(|a| a.wildlife.is_none()));
+        assert!(state.animals.iter().any(|a| a.wildlife.is_some()));
+        assert!(state.animals.iter().all(|a| a.y == 180.5 && a.x.abs() <= 12.0 && a.z.abs() <= 12.0));
     }
 
     #[test]

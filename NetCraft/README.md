@@ -279,8 +279,8 @@ restore it to animal form for the rest of the night. Health resets at dawn.
 Each player starts with 10 lives, shown
 as hearts at the bottom center of the screen, and can
 lose one every two seconds to zombie attacks. After the last life is lost, the
-player respawns at spawn with 10 lives. Animals do not spawn on the central sky
-park platform, though they can still spawn elsewhere. Movement and attacks are
+player respawns at spawn with 10 lives. When the sky island plaza is installed,
+wildlife and transaction animals spawn on it while players are nearby. Movement and attacks are
 shared by the server and follow terrain and block edits. Separate, sparse wildlife
 includes rainforest monkeys and tigers, desert elephants and giraffes, temperate
 deer, and taiga foxes. They never become zombies; only tigers attack nearby players.
@@ -590,8 +590,8 @@ Teleport to the specified chunk.
     /spawn
 
 Teleport back to the spawn point. On the Rust server, players join and
-respawn on the dragon's back when the sky park's dragon is present.
-Worlds without a usable landing spot there keep the ground spawn.
+respawn on the sky island plaza alongside the bots. If the plaza has no usable
+landing spot, the server tries the dragon's back, then the normal ground spawn.
 
 ### Screenshot
 
