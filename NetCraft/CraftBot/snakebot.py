@@ -56,6 +56,10 @@ class SnakeBot(CraftBot):
         self.kill_flag = False
         self.snakes = []
 
+    def patrol_step(self):
+        if not any(snake.is_alive() for snake in self.snakes):
+            super().patrol_step()
+
     @thread
     def snake(self, x,y, z, length, material, player=False):
         # Calculate a start location.  The first free space on above ground at (X,Z)
@@ -124,7 +128,8 @@ class SnakeBot(CraftBot):
                 if self.kill_flag:
                     break
         finally:
-            self.move_player(0,0,0)
+            if player and self.spawn is not None and not self.closed:
+                self.move_player(*self.spawn)
             for block in blocks:
                 self.remove_block(*block)
 

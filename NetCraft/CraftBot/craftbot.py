@@ -1,10 +1,12 @@
 import argparse
 import re
+import random
 import socket
 import threading
-from queue import Queue
+from queue import Empty, Queue
+from time import monotonic
 from world import World
-from math import floor
+from math import atan2, floor
 
 CHUNK_SIZE = 32
 
@@ -115,6 +117,8 @@ class Player(object):
         return repr(self)
 
 class CraftBot(object):
+    patrol = True
+
     def __init__(self, host='localhost', port=4080, nick=None):
         self.lock = threading.RLock()
         self.chunk_received = threading.Condition(self.lock)
@@ -143,6 +147,9 @@ class CraftBot(object):
         self.id = None
         self.handler_queue = Queue()
         self.loaded_chunks = set()
+        self.spawn = None
+        self.spawn_revision = 0
+        self.walk_random = random.Random(self.nick)
 
 
     def send(self, command):
@@ -162,6 +169,9 @@ class CraftBot(object):
         self.send('B,%d,%d,%d,0' % (x,y,z))
     def get_block(self,x,y,z):
         p,q = chunked(x),chunked(z)
+        return self.synced_chunk(p,q).get((x,y,z),0)
+
+    def synced_chunk(self, p, q):
         with self.chunk_received:
             if (p,q) not in self.world.cache or (p,q) not in self.loaded_chunks:
                 self.loaded_chunks.discard((p,q))
@@ -172,7 +182,7 @@ class CraftBot(object):
                     raise TimeoutError(f'No response for chunk {p},{q}')
                 if self.closed:
                     raise ConnectionError('Server disconnected')
-            return self.world.get_chunk(p,q).get((x,y,z),0)
+            return self.world.get_chunk(p,q)
     def add_sign(self, x,y,z, face, text):
         self.send('S,%d,%d,%d,%d,%s' % (x,y,z,face,text))
     def remove_sign(self, x,y,z, face):
@@ -242,7 +252,50 @@ class CraftBot(object):
             player = self.players.get(id, Player(id=id))            
             player.position = position
             self.players[id] = player
-        return self.on_you, (id,position)
+            self.spawn_revision += 1
+            self.spawn = None
+        return self.finish_spawn, (id, position, self.spawn_revision)
+
+    def finish_spawn(self, id, position, revision):
+        x, y, z, rx, ry = position
+        if y == 0:
+            cx, cz = round(x), round(z)
+            chunk = self.synced_chunk(chunked(cx), chunked(cz))
+            with self.lock:
+                y = max((by for (bx, by, bz), block in chunk.items()
+                         if bx == cx and bz == cz and self.world.dll.is_obstacle(block)),
+                        default=-28) + 2
+        with self.lock:
+            if revision != self.spawn_revision or self.closed:
+                return
+            self.move_player(x, y, z, rx, ry)
+            self.spawn = (x, y, z)
+        self.on_you(id, self.player.position)
+
+    def patrol_step(self):
+        spawn = self.spawn
+        if spawn is None:
+            return
+        x, y, z = map(round, self.player.position[:3])
+        if max(abs(x - spawn[0]), abs(z - spawn[2])) > 4:
+            return  # A command moved this worker away from its spawn patrol.
+        directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        self.walk_random.shuffle(directions)
+        for dx, dz in directions:
+            nx, nz = x + dx, z + dz
+            if max(abs(nx - spawn[0]), abs(nz - spawn[2])) > 4:
+                continue
+            chunk = self.synced_chunk(chunked(nx), chunked(nz))
+            solid = self.world.dll.is_obstacle
+            for ny in (y, y + 1, y - 1):
+                feet = chunk.get((nx, ny - 1, nz), 0)
+                head = chunk.get((nx, ny, nz), 0)
+                if (solid(chunk.get((nx, ny - 2, nz), 0)) and
+                        not solid(feet) and not solid(head) and 13 not in (feet, head)):
+                    with self.lock:
+                        if self.spawn is spawn and not self.closed:
+                            self.move_player(nx, ny, nz, atan2(dx, -dz), 0)
+                    return
 
     def handle_block(self, *args):
         p,q,x,y,z,type = map(int, args[1:])
@@ -302,13 +355,20 @@ class CraftBot(object):
 
     @thread
     def handler_loop(self):
-        while True:
-            event = self.handler_queue.get()
-            if event is None:
-                return
-            handler, args = event
+        next_step = monotonic() + 1
+        while not self.closed:
             try:
+                if self.patrol and monotonic() >= next_step:
+                    next_step = monotonic() + 1
+                    self.patrol_step()
+                timeout = max(0, next_step - monotonic()) if self.patrol else None
+                event = self.handler_queue.get(timeout=timeout)
+                if event is None:
+                    return
+                handler, args = event
                 handler(*args)
+            except Empty:
+                continue
             except Exception as e:
                 print("Exception in player handler:", e)
 

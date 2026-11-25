@@ -27,8 +27,17 @@ Use a reachable TCP address, not the browser's `/craftws` URL. The default
 Compose deployment does not publish port 4080 to the host; on its app
 network the server address is `netcraft 4080`.
 
-The humanoid stands guard on the ground near spawn, swinging at nearby zombies at night and
-idling during the day. Compose starts one guard and three workers of each
+All bots start at the player spawn, including the sky park when installed.
+SnakeBot, MakerBot and TerraformBot walk short patrols within four blocks of
+spawn while waiting for work; patrolling never edits blocks. The humanoid stays
+at spawn, swinging at zombies within reach at night and idling during the day.
+Rebuild **the worker containers**, not the browser client, to pick up bot changes:
+
+```sh
+docker compose up -d --build snakebot makerbot terraformbot humanoidbot
+```
+
+Compose starts one guard and three workers of each
 other type by default. Set `NETCRAFT_HUMANOIDBOT_COUNT`, `NETCRAFT_SNAKEBOT_COUNT`,
 `NETCRAFT_MAKERBOT_COUNT`, and `NETCRAFT_TERRAFORMBOT_COUNT` in the root `.env` to nonnegative integers;
 zero disables that type. Run `docker compose up -d --build` to apply the

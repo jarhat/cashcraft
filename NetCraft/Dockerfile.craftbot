@@ -2,8 +2,8 @@ FROM gcc:14-bookworm AS terrain
 WORKDIR /build
 COPY deps/noise/ deps/noise/
 COPY src/ src/
-RUN cc -shared -fPIC -O2 -I src -I deps/noise \
-    deps/noise/noise.c src/worldgen/*.c -lm -o terrain.so
+RUN cc -shared -fPIC -O2 -DGLFW_INCLUDE_NONE -I src -I deps/noise \
+    deps/noise/noise.c src/worldgen/*.c src/item.c src/gamemode.c -lm -o terrain.so
 
 FROM python:3.12-slim-bookworm
 WORKDIR /app

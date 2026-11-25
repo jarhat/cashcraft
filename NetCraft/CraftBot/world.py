@@ -1,4 +1,4 @@
-from ctypes import CDLL, CFUNCTYPE, c_int, c_void_p
+from ctypes import CDLL, CFUNCTYPE, c_bool, c_int, c_void_p
 from collections import OrderedDict
 from pathlib import Path
 import os
@@ -15,6 +15,9 @@ def load_generator():
         dll = build_generator()
     dll.create_world.argtypes = [c_int, c_int, WORLD_FUNC, c_void_p]
     dll.create_world.restype = None
+    dll.init_blocks()
+    dll.is_obstacle.argtypes = [c_int]
+    dll.is_obstacle.restype = c_bool
     return dll
 
 def build_generator():
@@ -23,7 +26,8 @@ def build_generator():
         library = Path(directory) / 'terrain.so'
         subprocess.run([
             os.environ.get('CC', 'cc'), '-shared', '-fPIC', '-O2',
-            '-I', root / 'src', '-I', root / 'deps/noise',
+            '-DGLFW_INCLUDE_NONE', '-I', root / 'src', '-I', root / 'deps/noise',
+            root / 'src/item.c', root / 'src/gamemode.c',
             root / 'deps/noise/noise.c', *sorted((root / 'src/worldgen').glob('*.c')),
             '-lm', '-o', library,
         ], check=True)

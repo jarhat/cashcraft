@@ -6,31 +6,19 @@ from craftbot import CraftBot, run_cli
 
 class HumanoidBot(CraftBot):
     """Stand guard: let zombies approach, then face them and swing."""
+    patrol = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.night = False
         self.next_swing = 0
 
-    def on_you(self, id, position):
-        x, y, z = map(round, position[:3])
-        if -28 <= x <= 28 and -25 <= z <= 28 and y >= 180:
-            # Zombies cannot spawn on the sky park. Guard the ground beside it.
-            x = 32
-        elif y > 1:
-            return
-        for height in range(253, 0, -1):
-            if self.get_block(x, height, z) not in (0, 16, 17, 18, 19, 20, 21, 22, 23):
-                self.move_player(x, height + 2, z)
-                return
-        raise ValueError(f'No ground for guard at {x},{z}')
-
     def handle_command(self, command):
         fields = command.rstrip('\r\n').split(',')
         if fields[0] == 'ZN':
             self.night = fields[1:] == ['1']
         elif fields[0] == 'M':
-            if (not self.night or not self.ready or len(fields) < 8
+            if (not self.night or self.spawn is None or len(fields) < 8
                     or fields[7] != '0' or (len(fields) > 8 and fields[8] != '0')):
                 return  # Daytime, pacified animal or wildlife.
             now = monotonic()
