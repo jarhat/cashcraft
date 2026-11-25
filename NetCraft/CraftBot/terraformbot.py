@@ -1,5 +1,4 @@
-from craftbot import CraftBot, PLANTS, MATERIALS, material
-from numpy import array,round as around
+from craftbot import CraftBot, PLANTS, MATERIALS, material, run_cli
 import math
 
 OFFSETS = [
@@ -17,7 +16,7 @@ CRAFT_USER = 'ryansturmer'
 
 # Take a material mapping and turn it all to integers
 def make_terrain(mapping):
-    return dict(map((lambda (x,y) : (material(x),material(y))), mapping.items()))
+    return {material(x): material(y) for x, y in mapping.items()}
 
 def dist(a,b):
     return math.sqrt((b[0]-a[0])**2 + (b[1]-a[1])**2)
@@ -88,7 +87,7 @@ class TerraformBot(CraftBot):
     def terraform_flood(self, x,y,z,radius,plants=False):
         self.clear_memo()
         if plants:
-            empty_blocks = set(PLANTS.keys() + [0])
+            empty_blocks = set(PLANTS) | {0}
         else:
             empty_blocks = set([0])
 
@@ -134,9 +133,9 @@ class TerraformBot(CraftBot):
                 if cmd == 'goto':
                     try:
                         x,z = map(int,args[1:])
-                    except Exception, e:
+                    except ValueError as e:
                         self.talk('goto command requires 2 numeric arguments')
-                        print e
+                        print(e)
                         return
                     x,y,z = self.find_ground(x,200,z)
                     self.talk('moving player to %d,%d' % (x,z))
@@ -144,7 +143,7 @@ class TerraformBot(CraftBot):
 
                     
     def on_sign(self, x,y,z,face,text):
-        print "SIGN: %s,%s,%s,%s,%s" % (x,y,z,face,text)
+        print("SIGN: %s,%s,%s,%s,%s" % (x,y,z,face,text))
         args = text.lower().split()
         cmd = args[0]
         block_type = self.get_block(x,y,z)
@@ -207,7 +206,5 @@ class TerraformBot(CraftBot):
         self.talk('is done.  Processed %s blocks.' % len(blocks))
 
 
-import sys
-
-bot = TerraformBot(host=sys.argv[1])
-bot.run()
+if __name__ == '__main__':
+    run_cli(TerraformBot)

@@ -52,6 +52,7 @@ const DAY_LENGTH: u64 = 600;
 const PLAYER_LIVES: u8 = 10;
 const ATTACK_INTERVAL: u64 = 2;
 const ZOMBIE_SPEED: f64 = 1.3;
+const ZOMBIE_HEALTH: u8 = 3;
 const WILDLIFE_LIMIT: usize = 24;
 // Central sky park footprint from builder.py; lower terrain remains spawnable.
 const PARK_FLOOR: i32 = 180;
@@ -149,7 +150,7 @@ struct Animal {
     y: f64,
     z: f64,
     heading: u8,
-    pacified: bool,
+    health: u8,
     wildlife: Option<(Species, i32, i32)>,
 }
 
@@ -171,7 +172,7 @@ impl Animal {
                 self.id, self.x, self.y, self.z, self.heading, species as u8);
         }
         format!(
-            "M,{},{:.2},{:.2},{:.2},{},{}...{},{}\n",
+            "M,{},{:.2},{:.2},{:.2},{},{}...{},{},0,{}\n",
             self.id,
             self.x,
             self.y,
@@ -179,7 +180,7 @@ impl Animal {
             self.heading,
             &self.txid[..6],
             &self.txid[58..],
-            u8::from(self.pacified)
+            u8::from(self.health == 0), self.health
         )
     }
 }
@@ -375,7 +376,7 @@ fn hit_animal(
     player.last_pickaxe = Some(now);
     let [x, y, z, rx, ry] = player.position;
     let Some(index) = state.animals.iter()
-        .position(|a| a.id == animal_id && a.wildlife.is_none() && !a.pacified) else {
+        .position(|a| a.id == animal_id && a.wildlife.is_none() && a.health > 0) else {
         return Ok(());
     };
     let animal = &state.animals[index];
@@ -405,7 +406,7 @@ fn hit_animal(
             }
         }
         if (px - ax).abs() <= 0.8 && (pz - az).abs() <= 0.8 && py >= ay && py <= ay + 2.1 {
-            state.animals[index].pacified = true;
+            state.animals[index].health -= 1;
             broadcast(&state, None, &state.animals[index].message());
             send(&state.players[&player_id], b"ZH\n".to_vec());
             return Ok(());
@@ -590,7 +591,7 @@ fn spawn_wildlife(
         state.next_animal_id = id.wrapping_add(1).max(1);
         let animal = Animal {
             id, txid: String::new(), x: f64::from(x), y: f64::from(y) + 0.5,
-            z: f64::from(z), heading: (id % 4) as u8, pacified: false,
+            z: f64::from(z), heading: (id % 4) as u8, health: ZOMBIE_HEALTH,
             wildlife: Some((species, x, z)),
         };
         updates.push_str(&animal.message());
@@ -612,8 +613,8 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
         if !night {
             let mut updates = String::new();
             for animal in &mut state.animals {
-                if animal.pacified {
-                    animal.pacified = false;
+                if animal.health != ZOMBIE_HEALTH {
+                    animal.health = ZOMBIE_HEALTH;
                     updates.push_str(&animal.message());
                 }
             }
@@ -653,7 +654,7 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
     for offset in 0..count.min(ANIMAL_MOVES_PER_TICK) {
         let animal = &mut animals[(start + offset) % count];
         let tiger = matches!(animal.wildlife, Some((Species::Tiger, _, _)));
-        let target = if tiger || (animal.wildlife.is_none() && night && !animal.pacified) {
+        let target = if tiger || (animal.wildlife.is_none() && night && animal.health > 0) {
             positions
                 .iter()
                 .filter(|p| !tiger || ((p[0] - animal.x).hypot(p[2] - animal.z) < 6.0 &&
@@ -726,7 +727,7 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
     {
         let attackers: Vec<_> = state.animals.iter()
             .filter(|a| matches!(a.wildlife, Some((Species::Tiger, _, _))) ||
-                (a.wildlife.is_none() && night && !a.pacified))
+                (a.wildlife.is_none() && night && a.health > 0))
             .map(|a| (a.x, a.y, a.z))
             .collect();
         let mut hit = Vec::new();
@@ -795,7 +796,7 @@ fn update_animals_at(server: &Server, seconds: u64) -> rusqlite::Result<()> {
                     y: f64::from(y) + 0.5,
                     z: f64::from(z),
                     heading: (id % 4) as u8,
-                    pacified: false,
+                    health: ZOMBIE_HEALTH,
                     wildlife: None,
                 };
                 updates.push_str(&animal.message());
@@ -3332,7 +3333,7 @@ mod tests {
                 y: 200.5,
                 z: 0.0,
                 heading: 0,
-                pacified: false,
+                health: ZOMBIE_HEALTH,
                 wildlife: None,
             });
         }
@@ -3340,7 +3341,7 @@ mod tests {
         let one = String::from_utf8(first.try_recv().unwrap()).unwrap();
         let two = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert_eq!(one, two);
-        assert!(one.contains("M,7,0.00,200.50,-0.60,0,012345...abcdef,0\n"));
+        assert!(one.contains("M,7,0.00,200.50,-0.60,0,012345...abcdef,0,0,3\n"));
         {
             let mut state = server.state.lock().unwrap();
             for player in state.players.values_mut() {
@@ -3394,7 +3395,7 @@ mod tests {
         let one = String::from_utf8(first.try_recv().unwrap()).unwrap();
         let two = String::from_utf8(second.try_recv().unwrap()).unwrap();
         assert_eq!(one, two);
-        assert_eq!(one, "M,1,-8.00,179.50,-8.00,1,aaaaaa...aaaaaa,0\n");
+        assert_eq!(one, "M,1,-8.00,179.50,-8.00,1,aaaaaa...aaaaaa,0,0,3\n");
     }
 
     #[test]
@@ -3491,7 +3492,7 @@ mod tests {
             state.players.get_mut(&2).unwrap().position = [20.0, 202.0, 0.0, 0.0, 0.0];
             let txid = "a".repeat(64);
             state.mempool.insert(txid.clone());
-            state.animals.push(Animal { id: 1, txid, x: 0.0, y: 200.5, z: -3.0, heading: 0, pacified: false, wildlife: None });
+            state.animals.push(Animal { id: 1, txid, x: 0.0, y: 200.5, z: -3.0, heading: 0, health: ZOMBIE_HEALTH, wildlife: None });
             state.db.execute("INSERT INTO block (p,q,x,y,z,w) VALUES (0,-1,0,202,-1,6)", []).unwrap();
             for z in -2..=1 {
                 state.db.execute(
@@ -3502,18 +3503,26 @@ mod tests {
         }
         let now = Instant::now();
         hit_animal(&server, 1, 1, 0, now).unwrap();
-        assert!(!server.state.lock().unwrap().animals[0].pacified);
+        assert_eq!(server.state.lock().unwrap().animals[0].health, ZOMBIE_HEALTH);
         {
             let state = server.state.lock().unwrap();
             state.db.execute("DELETE FROM block WHERE x=0 AND y=202 AND z=-1", []).unwrap();
         }
         hit_animal(&server, 1, 1, 150, now + Duration::from_secs(1)).unwrap();
-        assert!(!server.state.lock().unwrap().animals[0].pacified);
+        assert_eq!(server.state.lock().unwrap().animals[0].health, ZOMBIE_HEALTH);
         assert!(!first.try_iter().any(|m| m == b"ZH\n"));
         hit_animal(&server, 1, 1, 0, now + Duration::from_secs(2)).unwrap();
-        assert!(server.state.lock().unwrap().animals[0].pacified);
+        assert_eq!(server.state.lock().unwrap().animals[0].health, 2);
+        hit_animal(&server, 1, 1, 0, now + Duration::from_millis(2100)).unwrap();
+        assert_eq!(server.state.lock().unwrap().animals[0].health, 2);
+        hit_animal(&server, 1, 1, 0, now + Duration::from_secs(3)).unwrap();
+        assert_eq!(server.state.lock().unwrap().animals[0].health, 1);
+        hit_animal(&server, 1, 1, 0, now + Duration::from_secs(4)).unwrap();
+        assert_eq!(server.state.lock().unwrap().animals[0].health, 0);
         let messages = String::from_utf8(first.try_iter().flatten().collect()).unwrap();
-        assert!(messages.contains(",aaaaaa...aaaaaa,1\n"));
+        assert!(messages.contains(",aaaaaa...aaaaaa,0,0,2\n"));
+        assert!(messages.contains(",aaaaaa...aaaaaa,0,0,1\n"));
+        assert!(messages.contains(",aaaaaa...aaaaaa,1,0,0\n"));
         assert!(messages.contains("ZH\n"));
         assert!(!second.try_iter().any(|m| m == b"ZH\n"));
         {
@@ -3524,7 +3533,7 @@ mod tests {
         update_animals_at(&server, 0).unwrap();
         assert_eq!(server.state.lock().unwrap().players[&1].lives, 10);
         update_animals_at(&server, 150).unwrap();
-        assert!(!server.state.lock().unwrap().animals[0].pacified);
+        assert_eq!(server.state.lock().unwrap().animals[0].health, ZOMBIE_HEALTH);
         update_animals_at(&server, 510).unwrap();
         assert_eq!(server.state.lock().unwrap().players[&1].lives, 9);
     }
@@ -3557,7 +3566,7 @@ mod tests {
                 y: 200.5,
                 z: 0.0,
                 heading: 0,
-                pacified: false,
+                health: ZOMBIE_HEALTH,
                 wildlife: None,
             });
         }
@@ -3622,7 +3631,7 @@ mod tests {
             state.db.execute("INSERT INTO block (p,q,x,y,z,w) VALUES (0,0,0,200,0,6)", []).unwrap();
             state.animals.push(Animal {
                 id: 3, txid: String::new(), x: 0.0, y: 200.5, z: 0.0,
-                heading: 0, pacified: false, wildlife: Some((Species::Monkey, 0, 0)),
+                heading: 0, health: ZOMBIE_HEALTH, wildlife: Some((Species::Monkey, 0, 0)),
             });
         }
         update_animals_at(&server, 300).unwrap();
@@ -3760,7 +3769,7 @@ mod tests {
                     y: 200.5,
                     z: 0.0,
                     heading: 3,
-                    pacified: false,
+                    health: ZOMBIE_HEALTH,
                     wildlife: None,
                 });
             }
@@ -3804,7 +3813,7 @@ mod tests {
                 y: 200.5,
                 z: 0.0,
                 heading: 1,
-                pacified: false,
+                health: ZOMBIE_HEALTH,
                 wildlife: None,
             });
         }

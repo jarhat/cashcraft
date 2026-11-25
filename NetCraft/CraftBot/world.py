@@ -1,22 +1,35 @@
-# gcc -std=c99 -O3 -shared -o world \
-#   -I src -I deps/noise deps/noise/noise.c src/world.c
-
 from ctypes import CDLL, CFUNCTYPE, c_int, c_void_p
 from collections import OrderedDict
-
-try:
-    dll = CDLL('./world')
-except:
-    import os
-    os.system('gcc -std=c99 -O3 -shared -o world.dll -I src -I deps/noise deps/noise/noise.c src/world.c')
-    dll = CDLL('./world')
+from pathlib import Path
+import os
+import subprocess
+import tempfile
 
 WORLD_FUNC = CFUNCTYPE(None, c_int, c_int, c_int, c_int, c_void_p)
 
-def dll_seed(x):
-    dll.seed(x)
+def load_generator():
+    bundled = Path(__file__).with_name('terrain.so')
+    if bundled.is_file():
+        dll = CDLL(str(bundled))
+    else:
+        dll = build_generator()
+    dll.create_world.argtypes = [c_int, c_int, WORLD_FUNC, c_void_p]
+    dll.create_world.restype = None
+    return dll
 
-def dll_create_world(p, q):
+def build_generator():
+    root = Path(__file__).resolve().parents[1]
+    with tempfile.TemporaryDirectory(prefix='craftbot-') as directory:
+        library = Path(directory) / 'terrain.so'
+        subprocess.run([
+            os.environ.get('CC', 'cc'), '-shared', '-fPIC', '-O2',
+            '-I', root / 'src', '-I', root / 'deps/noise',
+            root / 'deps/noise/noise.c', *sorted((root / 'src/worldgen').glob('*.c')),
+            '-lm', '-o', library,
+        ], check=True)
+        return CDLL(str(library))
+
+def dll_create_world(dll, p, q):
     result = {}
     def world_func(x, y, z, w, arg):
         result[(x, y, z)] = w
@@ -25,13 +38,16 @@ def dll_create_world(p, q):
 
 class World(object):
     def __init__(self, seed=None, cache_size=512):
+        self.dll = None
         self.seed = seed
         self.cache = OrderedDict()
         self.cache_size = cache_size
     def create_chunk(self, p, q):
+        if self.dll is None:
+            self.dll = load_generator()
         if self.seed is not None:
-            dll_seed(self.seed)
-        return dll_create_world(p, q)
+            self.dll.seed(self.seed)
+        return dll_create_world(self.dll, p, q)
     def get_chunk(self, p, q):
         try:
             chunk = self.cache.pop((p, q))

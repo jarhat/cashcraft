@@ -5,8 +5,9 @@
 #include <stdbool.h>
 
 #define ANIMAL_NAME_LENGTH 15
+#define ZOMBIE_HEALTH 3
 
-void animals_update(unsigned int id, float x, float y, float z, int heading, const char *name, bool pacified, int species);
+void animals_update(unsigned int id, float x, float y, float z, int heading, const char *name, bool pacified, int species, int health);
 void animals_remove(unsigned int id);
 void animals_clear(void);
 void animals_shutdown(void);

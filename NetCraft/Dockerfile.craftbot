@@ -1,0 +1,13 @@
+FROM gcc:14-bookworm AS terrain
+WORKDIR /build
+COPY deps/noise/ deps/noise/
+COPY src/ src/
+RUN cc -shared -fPIC -O2 -I src -I deps/noise \
+    deps/noise/noise.c src/worldgen/*.c -lm -o terrain.so
+
+FROM python:3.12-slim-bookworm
+WORKDIR /app
+COPY --from=terrain /build/terrain.so .
+COPY CraftBot/*.py .
+USER 10001:10001
+ENTRYPOINT ["sh", "-c", "exec python -u \"$0.py\" netcraft 4080 --nick \"$(printf '%s_%.10s' \"$0\" \"$HOSTNAME\")\""]

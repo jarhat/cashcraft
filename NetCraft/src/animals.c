@@ -22,6 +22,7 @@ typedef struct {
     double updated;
     int heading;
     bool pacified;
+    int health;
     int species;
     char name[ANIMAL_NAME_LENGTH + 1];
 } Animal;
@@ -53,7 +54,7 @@ static size_t animal_index(unsigned int id) {
     return lo;
 }
 
-void animals_update(unsigned int id, float x, float y, float z, int heading, const char *name, bool pacified, int species) {
+void animals_update(unsigned int id, float x, float y, float z, int heading, const char *name, bool pacified, int species, int health) {
     if (!id || !isfinite(x) || !isfinite(y) || !isfinite(z) ||
         heading < 0 || heading > 3 || species < 0 || species >= SPECIES_COUNT) return;
     size_t i = animal_index(id);
@@ -75,6 +76,7 @@ void animals_update(unsigned int id, float x, float y, float z, int heading, con
     animals[i].to[0] = x; animals[i].to[1] = y; animals[i].to[2] = z;
     animals[i].heading = heading;
     animals[i].pacified = pacified;
+    animals[i].health = health;
     animals[i].species = species;
     if (species) {
         static const char *names[] = {"", "Tiger", "Monkey", "Elephant", "Giraffe", "Deer", "Fox"};
@@ -299,17 +301,29 @@ void animals_render_names(Attrib *attrib, float *view, float x, float y, float z
         float clip[4], anchor[4] = {pos[0], pos[1], pos[2], 1};
         mat_vec_multiply(clip, view, anchor);
         if (clip[3] <= 0 || fabsf(clip[0]) > clip[3] || fabsf(clip[1]) > clip[3]) continue;
-        if (faces + ANIMAL_NAME_LENGTH > capacity) {
+        char label[ANIMAL_NAME_LENGTH + ZOMBIE_HEALTH + 4];
+        strcpy(label, animals[i].name);
+        if (night && !species && !animals[i].pacified) {
+            char *bar = label + strlen(label);
+            *bar++ = ' ';
+            *bar++ = '[';
+            for (int hp = 0; hp < ZOMBIE_HEALTH; hp++) {
+                *bar++ = hp < animals[i].health ? '#' : '-';
+            }
+            *bar++ = ']';
+            *bar = '\0';
+        }
+        int length = strlen(label);
+        if (faces + length > capacity) {
             capacity = capacity ? capacity * 2 : 64;
             float *grown = realloc(data, capacity * 30 * sizeof(*data));
             if (!grown) break;
             data = grown;
         }
-        int length = strlen(animals[i].name);
         for (int j = 0; j < length; ++j) {
             float vertices[24];
             make_character(vertices, (j - (length - 1) * .5f) * glyph,
-                0, glyph / 2, glyph, animals[i].name[j]);
+                0, glyph / 2, glyph, label[j]);
             for (int v = 0; v < 6; ++v) {
                 const float *vertex = vertices + v * 4;
                 float *out = data + faces * 30 + v * 5;

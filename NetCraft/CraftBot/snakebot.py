@@ -1,4 +1,4 @@
-from craftbot import CraftBot, thread
+from craftbot import CraftBot, run_cli, thread
 import time, random
 from math import pi
 
@@ -30,7 +30,7 @@ class SnakeBot(CraftBot):
                 self.kill_snakes()
 
     def on_sign(self, x,y,z,face,text):
-        print "SIGN: %s,%s,%s,%s,%s" % (x,y,z,face,text)
+        print("SIGN: %s,%s,%s,%s,%s" % (x,y,z,face,text))
         try:
             args = text.lower().split()
             cmd = args[0]
@@ -41,8 +41,8 @@ class SnakeBot(CraftBot):
                 except:
                     length = 10
                 self.snakes.append(self.snake(x,y,z,length, 33, player=len(self.snakes)==0))
-        except Exception, e:
-            print e
+        except Exception as e:
+            print(e)
 
     def kill_snakes(self):
         self.kill_flag = True
@@ -129,11 +129,5 @@ class SnakeBot(CraftBot):
                 self.remove_block(*block)
 
 
-s = SnakeBot('michaelfogleman.com')
-#s = SnakeBot('localhost')
-
-try:
-    s.run()
-except:
-    s.kill_snakes()
-    raise
+if __name__ == '__main__':
+    run_cli(SnakeBot)

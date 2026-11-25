@@ -1,18 +1,12 @@
-import socket, threading, select
-from Queue import Queue, Empty
+import argparse
+import re
+import socket
+import threading
+from queue import Queue
 from world import World
 from math import floor
-import requests
-import json
 
 CHUNK_SIZE = 32
-CREDENTIALS = {'USERNAME':'USER', 'IDENTITY_TOKEN':'TOKEN'}
-
-try:
-    with open('settings.json') as fp:
-        CREDENTIALS = json.load(fp)
-except Exception, e:
-    print ('Loading settings.json failed: %s' % e)
 
 MATERIALS = {   0: 'EMPTY', 
                 1: 'GRASS', 
@@ -102,8 +96,7 @@ def material(x):
 
 def thread(f):
     def run(*k, **kw):
-        t = threading.Thread(target=f, args=k, kwargs=kw)
-        t.setDaemon(True)
+        t = threading.Thread(target=f, args=k, kwargs=kw, daemon=True)
         t.start()
         return t
     return run
@@ -122,13 +115,19 @@ class Player(object):
         return repr(self)
 
 class CraftBot(object):
-    def __init__(self, host='localhost', port=4080):
+    def __init__(self, host='localhost', port=4080, nick=None):
         self.lock = threading.RLock()
+        self.chunk_received = threading.Condition(self.lock)
+        self.closed = False
+        self.write_lock = threading.Lock()
         self.host = host
         self.port = port
-        self.input_buffer = ''
+        self.nick = nick or type(self).__name__
+        if not re.fullmatch(r'[A-Za-z0-9_]{1,24}', self.nick):
+            raise ValueError('Nickname must be 1-24 ASCII letters, digits or underscores')
         self.handlers = {
             'T' : self.handle_talk,
+            'CH': self.handle_chat,
             'K' : self.handle_key,
             'B' : self.handle_block,
             'C' : self.handle_chunk,
@@ -142,93 +141,78 @@ class CraftBot(object):
         self.players = {}
         self.world = World()
         self.id = None
-        self.queue = Queue()
         self.handler_queue = Queue()
-        self.chunk_keys = {}
+        self.loaded_chunks = set()
 
+
+    def send(self, command):
+        if '\n' in command or '\r' in command:
+            raise ValueError('Expected a single protocol line')
+        with self.write_lock:
+            self.socket.sendall((command + '\n').encode('utf-8'))
 
     # Commands the player can do
     def talk(self, text):
-        self.queue.put('T,%s\n' % text)
+        self.send('T,%s' % text)
     def add_block(self, x,y,z, type, check=True):
         existing_block = self.get_block(x,y,z)
         if not check or not existing_block:
-            self.queue.put('B,%d,%d,%d,%d\n' % (x,y,z,type))
+            self.send('B,%d,%d,%d,%d' % (x,y,z,type))
     def remove_block(self, x,y,z):
-        self.queue.put('B,%d,%d,%d,%d\n' % (x,y,z,0))   
+        self.send('B,%d,%d,%d,0' % (x,y,z))
     def get_block(self,x,y,z):
         p,q = chunked(x),chunked(z)
-        if (p,q) not in self.world.cache:
-            self.request_chunk(p,q)
-            '''
-            self.request_chunk(p-1,q)
-            self.request_chunk(p+1,q)
-            self.request_chunk(p,q-1)
-            self.request_chunk(p,q+1)
-            self.request_chunk(p+1,q-1)
-            self.request_chunk(p+1,q+1)
-            self.request_chunk(p-1,q+1)
-            self.request_chunk(p-1,q-1)
-            '''
-            while (p,q) not in self.chunk_keys:
-                pass
-        return self.world.get_chunk(p,q).get((x,y,z),0)
+        with self.chunk_received:
+            if (p,q) not in self.world.cache or (p,q) not in self.loaded_chunks:
+                self.loaded_chunks.discard((p,q))
+                self.request_chunk(p,q)
+                if not self.chunk_received.wait_for(
+                    lambda: (p,q) in self.loaded_chunks or self.closed, timeout=30
+                ):
+                    raise TimeoutError(f'No response for chunk {p},{q}')
+                if self.closed:
+                    raise ConnectionError('Server disconnected')
+            return self.world.get_chunk(p,q).get((x,y,z),0)
     def add_sign(self, x,y,z, face, text):
-        self.queue.put('S,%d,%d,%d,%d,%s\n' % (x,y,z,face,text))
+        self.send('S,%d,%d,%d,%d,%s' % (x,y,z,face,text))
     def remove_sign(self, x,y,z, face):
         self.add_sign(x,y,z,face,'')
     def move_player(self, x=None,y=None,z=None, rx=None, ry=None):
-        x = x or self.player.position[0]
-        y = y or self.player.position[1]
-        z = z or self.player.position[2]
-        rx = rx or self.player.position[3]
-        ry = ry or self.player.position[4]
-        self.queue.put('P,%d,%d,%d,%d,%d\n' % (x,y,z,rx,ry))
+        position = tuple(old if new is None else new for old, new in
+                         zip(self.player.position, (x,y,z,rx,ry)))
+        self.send('P,%f,%f,%f,%f,%f' % position)
+        self.player.position = position
     def get_player(self, nick):
-        for player in self.players.items():
+        for player in self.players.values():
             if player.id == nick or player.nick == nick:
                 return player
-            return self.players[nickname]
     def request_chunk(self, p,q):
-        print "requesting chunk"
-        key = self.chunk_keys.get((p,q),0)
-        self.queue.put('C,%d,%d,%d\n' % (p,q,key))
+        self.send('C,%d,%d,0' % (p,q))
 
     @property
     def ready(self):
         return self.player != None
 
-    def authenticate(self, username, identity_token):
-        url = 'https://craft.michaelfogleman.com/api/1/identity'
-        payload = {
-            'username': username,
-            'identity_token': identity_token,
-        }
-        response = requests.post(url, data=payload)
-        if response.status_code == 200 and response.text.isalnum():
-            access_token = response.text
-            self.queue.put('A,%s,%s\n' % (username, access_token))
-        else:
-            raise Exception('Failed to authenticate.')
     @property
     def player(self):
         return self.players.get(self.id, None)
 
-    def connect(self):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((self.host, self.port))
-        self.socket.setblocking(0)
-
     def handle_command(self, command):
-        args = command.strip().split(',')
+        args = command.rstrip('\r\n').split(',')
         if args:
             cmd = args[0]
-            handler = self.handlers.get(cmd, self.handle_unhandled)
+            handler = self.handlers.get(cmd)
+            if handler is None:
+                return
             callback, args = handler(*args)
             self.handler_queue.put((callback,args))
 
     def handle_talk(self, *args):
-        return self.on_talk, (args[1],)
+        return self.on_talk, (','.join(args[1:]),)
+
+    def handle_chat(self, *args):
+        sender = self.players.get(int(args[1]))
+        return self.on_talk, (f"{sender.nick if sender else args[1]}> {','.join(args[2:])}",)
 
     def handle_position(self, *args):
         id = int(args[1])
@@ -250,40 +234,44 @@ class CraftBot(object):
 
     def handle_you(self, *args):
         id = int(args[1])
-        position = map(float, args[2:])
+        position = tuple(map(float, args[2:]))
         with self.lock:
+            if self.id is None:
+                print(f'Joined {self.host}:{self.port} as player {id}', flush=True)
             self.id = id
             player = self.players.get(id, Player(id=id))            
             player.position = position
+            self.players[id] = player
         return self.on_you, (id,position)
 
     def handle_block(self, *args):
         p,q,x,y,z,type = map(int, args[1:])
-        chunk = self.world.get_chunk(p,q)
-        chunk[x,y,z] = type
+        with self.lock:
+            if (p,q) not in self.world.cache:
+                self.loaded_chunks.discard((p,q))
+            self.world.get_chunk(p,q)[x,y,z] = type
         return self.on_block, (x,y,z,type)
 
     def handle_sign(self, *args):
         p,q,x,y,z,face = map(int, args[1:7])
-        text = args[7]
+        text = ','.join(args[7:])
         return self.on_sign, (x,y,z,face,text)
 
     def handle_key(self, *args):
         p,q,key = map(int, args[1:])
-        self.chunk_keys[(p,q)] = key
         return self.on_key, (p,q,key)
 
     def handle_chunk(self, *args):
         p,q = map(int, args[1:])
-        self.chunk_keys[(p,q)] = 0
+        with self.chunk_received:
+            self.loaded_chunks.add((p,q))
+            self.chunk_received.notify_all()
         return self.on_chunk, (p,q)
 
     def handle_disconnect(self, *args):
-        return self.on_disconnect, (int(args[1]),)
-
-    def handle_unhandled(self, *args):
-        print "Unhandled command: %s" % (str(args),)
-        return self.on_unhandled, []
+        id = int(args[1])
+        self.players.pop(id, None)
+        return self.on_disconnect, (id,)
 
     def handle_redraw(self, *args):
         p,q = map(int, args[1:])
@@ -315,43 +303,44 @@ class CraftBot(object):
     @thread
     def handler_loop(self):
         while True:
+            event = self.handler_queue.get()
+            if event is None:
+                return
+            handler, args = event
             try:
-                handler, args = self.handler_queue.get(False)
                 handler(*args)
-            except Empty:
-                pass
-            except Exception, e:
-                print "Exception in player handler: ", e
+            except Exception as e:
+                print("Exception in player handler:", e)
 
     def run(self):
-        self.connect()
-        self.authenticate(CREDENTIALS['USERNAME'], CREDENTIALS['IDENTITY_TOKEN'])
-        self.handler_loop()
-        while True:
-            readers, writers, errorers = select.select([self.socket], [self.socket], [self.socket], 60)
-            # Deal with errors first
-            for socket in errorers:
-                # Deal with total existence failure
-                pass
+        with socket.create_connection((self.host, self.port)) as self.socket:
+            self.send('V,1')
+            self.talk('/nick ' + self.nick)
+            self.handler_loop()
+            try:
+                with self.socket.makefile('r', encoding='utf-8') as reader:
+                    for line in reader:
+                        self.handle_command(line)
+                if not self.ready:
+                    raise ConnectionError('Server closed the connection before sending spawn')
+            finally:
+                with self.chunk_received:
+                    self.closed = True
+                    self.chunk_received.notify_all()
+                self.handler_queue.put(None)
 
-            # Inbound: Data coming from server
-            for socket in readers:
-                data = self.input_buffer + socket.recv(4096)
-                lines = data.split('\n')
-                if not lines[-1].endswith('\n'):
-                    self.input_buffer = lines.pop(-1)
-                for line in lines:
-                    #print '<- %s' % line
-                    self.handle_command(line)
-                    
-            # Outbound: Commands going to server
-            for socket in writers:
-                try:
-                    command = self.queue.get(False)
-                    #print '-> %s' % command,
-                    socket.send(command)
-                    self.queue.task_done()
-                except Empty:
-                    pass
-                except Exception, e:
-                    print e
+
+def run_cli(bot_type):
+    parser = argparse.ArgumentParser(description=f'Start {bot_type.__name__} on a NetCraft TCP server')
+    parser.add_argument('host', nargs='?', default='localhost')
+    parser.add_argument('port', nargs='?', type=int, default=4080)
+    parser.add_argument('--nick', default=bot_type.__name__)
+    args = parser.parse_args()
+    if not 1 <= args.port <= 65535:
+        parser.error('port must be between 1 and 65535')
+    try:
+        bot_type(args.host, args.port, args.nick).run()
+    except (OSError, ValueError) as e:
+        parser.exit(1, f'{bot_type.__name__}: {e}\n')
+    except KeyboardInterrupt:
+        pass

@@ -1,5 +1,5 @@
-from craftbot import CraftBot
-from numpy import array,round as around
+from craftbot import CraftBot, run_cli
+from geometry import line
 
 OFFSETS = [
     (-0.5, -0.5, -0.5),
@@ -39,24 +39,6 @@ def sphere(cx, cy, cz, r, fill=False, fx=False, fy=False, fz=False):
                 if inside and outside:
                     result.add((x, y, z))
     return result
-
-def line(a,b):
-    a = array(a).astype(float)
-    b = array(b).astype(float)
-    d = b-a
-    N = int(max(abs(d)))
-    s = d/N
-    print "a: ", a
-    print "b: ", b
-    print "d: ", d
-    print "N: ", N
-    print "s: ", s
-    rnd = lambda r : tuple(around(r).astype(int))
-    retval = [rnd(a)]
-    for i in range(N):
-        a = a+s
-        retval.append(rnd(a))
-    return retval
 
 def polyline(points, closed=False):
     if len(points) <2:
@@ -107,7 +89,7 @@ class MakerBot(CraftBot):
             n = [x for x in neighbors(*point, xz=xz,yz=yz,xy=xy) if (x not in fill_blocks) and (self.get_block(*x) == type)]
             stack.extend(n)
 
-        print "flooding %d blocks" % len(fill_blocks)
+        print("flooding %d blocks" % len(fill_blocks))
         return fill_blocks
 
     def on_talk(self, text):
@@ -120,9 +102,9 @@ class MakerBot(CraftBot):
                 if cmd == 'goto':
                     try:
                         x,z = map(int,args[1:])
-                    except Exception, e:
+                    except ValueError as e:
                         self.talk('goto command requires 2 numeric arguments')
-                        print e
+                        print(e)
                         return
                     x,y,z = self.find_ground(x,200,z)
                     self.talk('moving player to %d,%d' % (x,z))
@@ -130,7 +112,7 @@ class MakerBot(CraftBot):
 
                     
     def on_sign(self, x,y,z,face,text):
-        print "SIGN: %s,%s,%s,%s,%s" % (x,y,z,face,text)
+        print("SIGN: %s,%s,%s,%s,%s" % (x,y,z,face,text))
         args = text.lower().split()
         cmd = args[0]
         block_type = self.get_block(x,y,z)
@@ -171,7 +153,7 @@ class MakerBot(CraftBot):
                 return
             do_column(self, x,y,z, height)
         elif cmd == '-column':
-            print 'removing column'
+            print('removing column')
             blocks_to_remove = []
             while True:
                 block_type = self.get_block(x,y,z)
@@ -180,7 +162,7 @@ class MakerBot(CraftBot):
                 else:
                     blocks_to_remove.append((x,y,z))
                 y += 1
-            print len(blocks_to_remove)
+            print(len(blocks_to_remove))
             for block in blocks_to_remove:
                 self.remove_block(*block)
         elif cmd == 'goto':
@@ -201,7 +183,7 @@ class MakerBot(CraftBot):
                 self.remove_block(*b)
 
         elif cmd == 'fill':
-            print "filling up!"
+            print("filling up!")
             self.remove_sign(x,y,z,face)
             block_type = self.get_block(x,y,z)
             blocks = self.flood(x,y,z,block_type)
@@ -304,7 +286,5 @@ class MakerBot(CraftBot):
                 return x,y,z
 
 
-import sys
-
-bot = MakerBot(host=sys.argv[1])
-bot.run()
+if __name__ == '__main__':
+    run_cli(MakerBot)

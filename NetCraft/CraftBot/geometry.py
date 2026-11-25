@@ -39,17 +39,12 @@ def sphere(cx, cy, cz, r, fill=False, fx=False, fy=False, fz=False):
     return result
 
 def line(a,b):
-    a = array(a).astype(float)
-    b = array(b).astype(float)
-    d = b-a
-    N = int(max(abs(d)))
-    s = d/N
-    rnd = lambda r : tuple(around(r).astype(int))
-    retval = [rnd(a)]
-    for i in range(N):
-        a = a+s
-        retval.append(rnd(a))
-    return retval
+    delta = [end - start for start, end in zip(a, b)]
+    steps = int(max(map(abs, delta)))
+    if not steps:
+        return [tuple(map(round, a))]
+    return [tuple(round(start + d * i / steps) for start, d in zip(a, delta))
+            for i in range(steps + 1)]
 
 def polyline(points, closed=False):
     if len(points) <2:

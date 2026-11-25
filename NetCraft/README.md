@@ -273,8 +273,10 @@ The server simulates sheep-like animals for mempool transactions near active
 players. At night they become upright zombies that pursue and attack nearby
 players, climbing and descending one-block steps; at daybreak they become
 passive animals again. Aim and use the mining
-button or left click to hit a nearby zombie with the pickaxe and restore it to
-animal form for the rest of the night. Each player starts with 10 lives, shown
+button or left click to hit a nearby zombie with the pickaxe. The three-segment
+bar beside its name shows remaining health. Three hits, shared across attackers,
+restore it to animal form for the rest of the night. Health resets at dawn.
+Each player starts with 10 lives, shown
 as hearts at the bottom center of the screen, and can
 lose one every two seconds to zombie attacks. After the last life is lost, the
 player respawns at spawn with 10 lives. Animals do not spawn on the central sky

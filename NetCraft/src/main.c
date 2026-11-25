@@ -4163,11 +4163,11 @@ void parse_buffer(char *buffer, int len) {
         }
         unsigned int animal_id;
         float ax, ay, az;
-        int heading, pacified = 0, species = 0;
+        int heading, pacified = 0, species = 0, health = ZOMBIE_HEALTH;
         char animal_name[ANIMAL_NAME_LENGTH + 1] = {0};
-        if (line[0] == 'M' && sscanf(line, "M,%u,%f,%f,%f,%d,%15[^,],%d,%d",
-            &animal_id, &ax, &ay, &az, &heading, animal_name, &pacified, &species) >= 5) {
-            animals_update(animal_id, ax, ay, az, heading, animal_name, pacified != 0, species);
+        if (line[0] == 'M' && sscanf(line, "M,%u,%f,%f,%f,%d,%15[^,],%d,%d,%d",
+            &animal_id, &ax, &ay, &az, &heading, animal_name, &pacified, &species, &health) >= 5) {
+            animals_update(animal_id, ax, ay, az, heading, animal_name, pacified != 0, species, health);
         }
         if (line[0] == 'M' && sscanf(line, "MD,%u", &animal_id) == 1) {
             animals_remove(animal_id);
